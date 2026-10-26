@@ -430,6 +430,11 @@ class SessionSupervisor:
         async with lane.lock:
             return await self._answer(lane, answers)
 
+    @property
+    def lanes(self) -> list[str]:
+        """Agent ids with a lane in this session (``default`` and ``task-<id>``)."""
+        return list(self._lanes)
+
     def pending_approvals(self, lane_id: str = DEFAULT_LANE) -> list[dict[str, Any]]:
         """Approval sheets waiting for an answer (re-sent to the phone when it reconnects)."""
         lane = self._lanes.get(lane_id)

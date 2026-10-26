@@ -1,0 +1,27 @@
+# Fly.io deployment for the Rivet brain. Set secrets with `fly secrets set`, never here:
+#   fly secrets set PERPLEXITY_API_KEY=... HORIZON_API_KEY=... RIVET_DEVICE_TOKEN=...
+# Create the volume once: fly volumes create rivet_data --size 1 --region den
+app = "rivet-brain"
+primary_region = "den"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[[mounts]]
+  source = "rivet_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # The phone holds a WebSocket and approval timers run server-side: keep exactly one machine up.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
