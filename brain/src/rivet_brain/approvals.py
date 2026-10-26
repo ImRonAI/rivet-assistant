@@ -194,12 +194,15 @@ class ToolPolicy:
             reading it taints the turn, which suspends remembered approvals until the next turn.
         scope_arg: Input field a remembered approval is keyed on (e.g. ``to``), so approving texts to one
             contact never covers another.
+        assess: Optional ``(tool_input) -> (tier, summary)`` for tools whose risk depends on their input (the
+            app operator's tap is a commit point or not by its label); it replaces ``tier`` and ``summary``.
     """
 
     tier: Tier
     summary: str = ""
     untrusted_output: bool = False
     scope_arg: str | None = None
+    assess: Callable[[Any], tuple[Tier, str]] | None = None
 
 
 INTERNAL_POLICIES: dict[str, ToolPolicy] = {
@@ -366,10 +369,13 @@ class RivetApprovals(InterventionHandler):
         if policy.scope_arg is not None:
             value = tool_input.get(policy.scope_arg) if isinstance(tool_input, Mapping) else None
             scope = f"{policy.scope_arg}={value}"
+        tier, summary = policy.tier, policy.summary or tool
+        if policy.assess is not None:
+            tier, summary = policy.assess(tool_input)
         return Assessment(
             tool,
-            policy.tier,
-            policy.summary or tool,
+            tier,
+            summary,
             scope=scope,
             untrusted_output=policy.untrusted_output,
             preview=preview,

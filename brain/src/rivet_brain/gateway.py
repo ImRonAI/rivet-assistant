@@ -32,6 +32,7 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from strands.storage import LocalFileStorage, Storage
 
+from . import device_tools
 from .approvals import RivetApprovals
 from .config import BrainSettings
 from .device import DeviceBridge
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 DEVICE_TOKEN_ENV = "RIVET_DEVICE_TOKEN"
 MIN_TOKEN_LENGTH = 24
 BUFFER_LIMIT = 1000
+TURN_MEMORY = 256
 _SESSION_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
@@ -58,6 +60,7 @@ class _Session:
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self.send_lock = asyncio.Lock()
         self.tasks: set[asyncio.Task[Any]] = set()
+        self.turn_ids: deque[str] = deque(maxlen=TURN_MEMORY)
         self.supervisor = supervisor_factory(self)
         self.failed: str | None = None
         self.started = self.spawn(self._start())
@@ -109,6 +112,11 @@ class _Session:
         if kind == "turn" and isinstance(message.get("text"), str) and message["text"].strip():
             turn_id = message.get("turn_id")
             self.emit({"type": "turn.accepted", "turn_id": turn_id})
+            # The phone re-sends turns it never saw accepted; the supervisor also refuses its latest turn id.
+            if turn_id is not None:
+                if turn_id in self.turn_ids:
+                    return
+                self.turn_ids.append(turn_id)
             self.spawn(self._guard(self.supervisor.send(message["text"], turn_id=turn_id), turn_id))
         elif kind == "approval.response" and isinstance(message.get("answers"), dict):
             lane = str(message.get("lane") or "default")
@@ -301,7 +309,11 @@ def main() -> None:
     logging.basicConfig(
         level=os.environ.get("RIVET_LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
-    app = create_app(BrainSettings.from_env())
+    app = create_app(
+        BrainSettings.from_env(),
+        tools_for=device_tools.tools_for,
+        approvals=RivetApprovals(device_tools.POLICIES),
+    )
     uvicorn.run(
         app,
         host=os.environ.get("RIVET_HOST", "0.0.0.0"),

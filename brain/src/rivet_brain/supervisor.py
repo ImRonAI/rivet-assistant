@@ -404,6 +404,7 @@ class SessionSupervisor:
         runs as a new turn.
         """
         lane = self._lane(DEFAULT_LANE, self._tools)
+        caller_id = turn_id is not None
         turn_id = turn_id or uuid.uuid4().hex
         async with lane.lock:
             lane.restarts.clear()
@@ -412,6 +413,10 @@ class SessionSupervisor:
             except _GiveUp as error:
                 return self._failed(lane, turn_id, str(error), 0)
             status = self._status(gen.agent)
+            if caller_id and status.get("turn_id") == turn_id:
+                # A re-sent copy of the turn this lane already ran (or recovered after a crash).
+                logger.info("turn_id=<%s> | duplicate turn ignored", turn_id)
+                return TurnOutcome(turn_id, "completed", stop_reason="duplicate", lane=lane.agent_id)
             if status.get("status") == "awaiting_approval":
                 await self._answer(lane, {}, default={"approved": False, "reason": "superseded by a new message"})
             elif status.get("status") == "running":

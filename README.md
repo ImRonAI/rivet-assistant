@@ -26,11 +26,11 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
 | Phase | What | State |
 |---|---|---|
 | 0 | Perplexity contract probe (`brain/scripts/probe_perplexity.py`) | **Done**: real streams recorded in `brain/tests/fixtures/perplexity`, replayed by `test_recorded_streams.py` |
-| 1 | Brain: model, approvals, supervisor, gateway, chaos suite | **Built, tested (130 tests), and verified live** against Perplexity and the Telnyx MCP server (read-only) |
-| 2 | Android shell: WebView robot, gateway client, approvals UI | Next |
-| 3 | Device tools: SMS, notification replies, contacts, calendar, email, tasks | Brain-side bridge built (`device.py`); tools next |
-| 4 | App operator (Accessibility) | Planned |
-| 5 | Calls: screening, Telnyx AI Assistant answering | Planned; buying a number needs explicit go-ahead |
+| 1 | Brain: model, approvals, supervisor, gateway, chaos suite | **Built, tested, verified live** against Perplexity and the Telnyx MCP server (read-only) |
+| 2 | Android app: robot WebView, gateway client, chat, voice, approvals, activity, settings | **Built**: APK, JVM tests and lint green; needs an on-device pass (no emulator here) |
+| 3 | Device tools: SMS, replies in any messaging app, contacts, calendar, calls, reminders, email drafts | **Built** on both sides; phone tools verified live through the brain with a scripted phone |
+| 4 | App operator (Accessibility): read screen, tap/type/scroll, Stop overlay, approval at commit points | **Built**; needs an on-device pass |
+| 5 | Calls: screening (logs callers), Telnyx AI Assistant answering | Screening built; AI answering needs a Telnyx number, which needs your explicit go-ahead to buy |
 
 ## How the brain works
 
@@ -57,7 +57,26 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
   breaker; crash recovery; pending approvals that survive restarts and time out to a denial; GoalLoop
   tasks that are never retried over an approval pause.
 - **Gateway** (`gateway.py`): one WebSocket per session, events buffered while the phone is away, device
-  tool calls routed to the phone by action id (the phone's ledger dedups them).
+  tool calls routed to the phone by action id (the phone's ledger dedups them), re-sent turns ignored.
+- **Phone tools** (`device_tools.py`): the 18 tools the Android app runs, with their approval policies:
+  reads run (messages, notifications, calendar and screens taint the turn), texts, replies and calls ask
+  (rememberable per recipient), calendar writes ask, and the app operator asks when a tap's label reads
+  like a commit point (send, pay, delete, confirm). The phone refuses a tap whose label changed.
+
+## The Android app (`android/`)
+
+Kotlin + Compose, minSdk 29, targetSdk 36. See [`android/README.md`](android/README.md) for building,
+installing and the on-device checklist.
+
+- **Robot**: the original `Rivet_the_Robot.html`, bundled with offline fonts and a small bridge
+  (`android/robot/bridge.js`) so the app drives its moves, trace HUD, email and text cards, and lip sync
+  from text-to-speech. Served from app assets only (no network, no file access).
+- **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
+  reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
+- **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that
+  need the phone unlocked, and biometrics or the device credential for high-risk tiers.
+- **Device tools**: `ActionLedger` records every action by the brain's tool use id, so a re-sent call returns
+  its stored result and one interrupted by the app dying is reported as uncertain, never repeated.
 
 ## Run it
 
