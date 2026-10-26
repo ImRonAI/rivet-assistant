@@ -35,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 TELNYX_PREFIX = "telnyx"
 REQUIRED_TELNYX_TOOLS = ("telnyx_search", "telnyx_get_schema", "telnyx_execute", "telnyx_tags")
-# A foreground ``await_telnyx_resource`` poll inside execute is bounded at 120 s on the server.
-TELNYX_EXECUTE_TIMEOUT = timedelta(seconds=150)
 MEMORY_STORE_NAME = "rivet"
 
 RIVET_INSTRUCTIONS = """\
@@ -222,6 +220,17 @@ def build_agent(
     return Generation(storage.generation, agent, session_manager, storage, telnyx, retry, bridge, timeouts)
 
 
+def apply_system_prompt(agent: Agent, telnyx: MCPClient | None) -> None:
+    """Write Rivet's full system prompt; a snapshot restore overwrites it, so call this after every restore.
+
+    The SDK drops the MCP server's handshake instructions, so they are appended here.
+    """
+    context = []
+    if telnyx is not None and telnyx.server_instructions:
+        context.append(f"# Telnyx server instructions\n{telnyx.server_instructions.strip()}")
+    agent.system_prompt = build_system_prompt(RIVET_INSTRUCTIONS, context)
+
+
 def _finish(
     agent: Agent, telnyx: MCPClient | None, settings: BrainSettings, *, require_telnyx: bool
 ) -> dict[str, float]:
@@ -235,17 +244,8 @@ def _finish(
     timeouts: dict[str, float] = {}
     for name, tool in agent.tool_registry.registry.items():
         if isinstance(tool, MCPAgentTool):
-            tool.timeout = (
-                TELNYX_EXECUTE_TIMEOUT
-                if name == "telnyx_execute"
-                else timedelta(seconds=settings.watchdog.tool_default)
-            )
-            timeouts[name] = tool.timeout.total_seconds()
-
-    # The SDK drops the server's handshake instructions, and a session restore overwrites the system
-    # prompt, so the full prompt is written after construction on every generation.
-    context = []
-    if telnyx is not None and telnyx.server_instructions:
-        context.append(f"# Telnyx server instructions\n{telnyx.server_instructions.strip()}")
-    agent.system_prompt = build_system_prompt(RIVET_INSTRUCTIONS, context)
+            seconds = settings.watchdog.telnyx_execute if name == "telnyx_execute" else settings.watchdog.tool_default
+            tool.timeout = timedelta(seconds=seconds)
+            timeouts[name] = seconds
+    apply_system_prompt(agent, telnyx)
     return timeouts

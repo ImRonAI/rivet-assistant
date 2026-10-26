@@ -84,25 +84,47 @@ def _require_bearer(app: Any, state: FakeTelnyx) -> Any:
     return guarded
 
 
+class FakeTelnyxServer:
+    """The fake server on a fixed local port; ``stop()`` and ``start()`` simulate a dropped connection."""
+
+    def __init__(self, token: str = "horizon-test-key") -> None:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            self.port = probe.getsockname()[1]
+        self.state = FakeTelnyx(url=f"http://127.0.0.1:{self.port}/mcp", token=token)
+        self._server: uvicorn.Server | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> FakeTelnyx:
+        """Serve on the port (a fresh MCP app, so no session survives a restart)."""
+        app = _require_bearer(_server(self.state).streamable_http_app(), self.state)
+        self._server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="warning"))
+        self._thread = threading.Thread(target=self._server.run, daemon=True)
+        self._thread.start()
+        deadline = time.monotonic() + 10
+        while not self._server.started:
+            if time.monotonic() > deadline:
+                raise RuntimeError("fake Telnyx MCP server did not start")
+            time.sleep(0.02)
+        return self.state
+
+    def stop(self) -> None:
+        """Shut the server down and close its connections."""
+        if self._server is None or self._thread is None:
+            return
+        self._server.should_exit = True
+        self._server.force_exit = True
+        self._thread.join(timeout=10)
+        self._server = self._thread = None
+
+
 @contextmanager
 def serve_fake_telnyx(token: str = "horizon-test-key") -> Iterator[FakeTelnyx]:
     """Run the fake server on a free local port for the duration of the block."""
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    state = FakeTelnyx(url=f"http://127.0.0.1:{port}/mcp", token=token)
-    app = _require_bearer(_server(state).streamable_http_app(), state)
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 10
-    while not server.started:
-        if time.monotonic() > deadline:
-            raise RuntimeError("fake Telnyx MCP server did not start")
-        time.sleep(0.02)
+    server = FakeTelnyxServer(token)
+    state = server.start()
     try:
         yield state
     finally:
         state.release.set()
-        server.should_exit = True
-        thread.join(timeout=10)
+        server.stop()

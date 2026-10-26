@@ -38,9 +38,13 @@ class WatchdogSettings:
     idle: float = 120.0
     model_total: float = 600.0
     tool_default: float = 120.0
+    telnyx_execute: float = 150.0  # covers a foreground await_telnyx_resource poll, bounded at 120 s server-side
     soft_grace: float = 15.0
     hard_grace: float = 15.0
     build: float = 120.0
+    cleanup: float = 15.0
+    drain: float = 10.0
+    poll: float = 0.25
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,8 @@ class BrainSettings:
     retry_attempts: int = 6
     retry_initial_delay: int = 4
     retry_max_delay: int = 60
+    restart_backoff: float = 2.0
+    approval_timeout: float = 600.0
     turn_limits: dict[str, int] = field(default_factory=lambda: {"turns": 40, "total_tokens": 2_000_000})
     watchdog: WatchdogSettings = field(default_factory=WatchdogSettings)
 
@@ -87,6 +93,8 @@ class BrainSettings:
             retry_attempts=_env_int("RIVET_RETRY_ATTEMPTS", 6),
             retry_initial_delay=_env_int("RIVET_RETRY_INITIAL_DELAY", 4),
             retry_max_delay=_env_int("RIVET_RETRY_MAX_DELAY", 60),
+            restart_backoff=_env_float("RIVET_RESTART_BACKOFF", 2.0),
+            approval_timeout=_env_float("RIVET_APPROVAL_TIMEOUT", 600.0),
             watchdog=WatchdogSettings(
                 first_chunk=_env_float("RIVET_T_FIRST", 90.0),
                 idle=_env_float("RIVET_T_IDLE", 120.0),
@@ -94,6 +102,7 @@ class BrainSettings:
                 tool_default=_env_float("RIVET_T_TOOL", 120.0),
                 soft_grace=_env_float("RIVET_G_SOFT", 15.0),
                 hard_grace=_env_float("RIVET_G_HARD", 15.0),
+                telnyx_execute=_env_float("RIVET_T_TELNYX_EXECUTE", 150.0),
                 build=_env_float("RIVET_T_BUILD", 120.0),
             ),
         )
