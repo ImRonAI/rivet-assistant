@@ -1,0 +1,7 @@
+{
+  "model": "openai/gpt-5.6-sol",
+  "input": "Say hello in five words.",
+  "stream": true,
+  "store": false,
+  "max_steps": 8
+}

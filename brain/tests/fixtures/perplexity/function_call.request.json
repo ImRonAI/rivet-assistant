@@ -1,0 +1,25 @@
+{
+  "model": "openai/gpt-5.6-sol",
+  "input": "Find Ada's phone number with the tool.",
+  "stream": true,
+  "store": false,
+  "max_steps": 8,
+  "tools": [
+    {
+      "type": "function",
+      "name": "lookup_contact",
+      "description": "Look up a contact's phone number.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    }
+  ]
+}

@@ -25,8 +25,8 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
 
 | Phase | What | State |
 |---|---|---|
-| 0 | Perplexity contract probe (`brain/scripts/probe_perplexity.py`) | Script ready; needs `PERPLEXITY_API_KEY` |
-| 1 | Brain: model, approvals, supervisor, gateway, chaos suite | **Built and tested** (120 tests) |
+| 0 | Perplexity contract probe (`brain/scripts/probe_perplexity.py`) | **Done**: real streams recorded in `brain/tests/fixtures/perplexity`, replayed by `test_recorded_streams.py` |
+| 1 | Brain: model, approvals, supervisor, gateway, chaos suite | **Built, tested (130 tests), and verified live** against Perplexity and the Telnyx MCP server (read-only) |
 | 2 | Android shell: WebView robot, gateway client, approvals UI | Next |
 | 3 | Device tools: SMS, notification replies, contacts, calendar, email, tasks | Brain-side bridge built (`device.py`); tools next |
 | 4 | App operator (Accessibility) | Planned |

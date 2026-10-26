@@ -1,0 +1,12 @@
+{
+  "model": "openai/gpt-5.6-sol",
+  "input": "Find a picture of a red fox.",
+  "stream": true,
+  "store": false,
+  "max_steps": 8,
+  "tools": [
+    {
+      "type": "image_search"
+    }
+  ]
+}

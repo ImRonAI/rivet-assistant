@@ -1,0 +1,14 @@
+{
+  "model": "openai/gpt-5.6-sol",
+  "input": "hi",
+  "stream": true,
+  "store": false,
+  "max_steps": 8,
+  "tools": [
+    {
+      "type": "function",
+      "name": "bad name with spaces",
+      "parameters": {}
+    }
+  ]
+}

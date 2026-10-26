@@ -58,7 +58,7 @@ def test_live_function_call_round_trip(tmp_path: Path) -> None:
     agent = Agent(model=main, tools=[lookup_contact], callback_handler=None)
     result = agent("Use lookup_contact to find Ada's number, then tell me the number.")
     assert seen and seen[0]["name"].lower().startswith("ada")
-    assert "8015550100" in str(result).replace("-", "").replace(" ", "")
+    assert "8015550100" in "".join(ch for ch in str(result) if ch.isdigit())
 
 
 @needs_perplexity
