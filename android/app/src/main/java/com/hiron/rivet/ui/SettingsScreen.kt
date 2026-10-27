@@ -49,6 +49,7 @@ import com.hiron.rivet.R
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.core.isE164
 import com.hiron.rivet.device.CallForwarding
 import com.hiron.rivet.device.CarrierStyle
 import com.hiron.rivet.device.ForwardMode
@@ -185,6 +186,7 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
     var mode by remember { mutableStateOf(s.answeringMode) }
     var style by remember { mutableStateOf(s.carrierStyle) }
     var forwardedTo by remember(refresh) { mutableStateOf(s.forwardedTo) }
+    var own by remember(refresh) { mutableStateOf(s.ownNumber) }
     var error by remember { mutableStateOf<String?>(null) }
     val detected = remember { CallForwarding.detect(context) }
     val effective = style ?: detected
@@ -216,6 +218,11 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
         if (number.isBlank()) {
             Keycap("Ask Rivet to set up an answering number", { runtime.send("Set up call answering so you can answer my calls.") })
         }
+        RecessedField(
+            own, { own = it; s.ownNumber = it.trim() }, label = "Your own number, for Take over", placeholder = "+18015550100",
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+        )
+        if (own.isNotBlank() && !isE164(own.trim())) Text("Use the +1… form, like +18015550100.", style = Type.body, color = p.amb)
         Text("ANSWER", style = Type.labelSm, color = p.ink2)
         Segmented(
             listOf(ForwardMode.Unanswered to "Unanswered calls", ForwardMode.Always to "Every call"),

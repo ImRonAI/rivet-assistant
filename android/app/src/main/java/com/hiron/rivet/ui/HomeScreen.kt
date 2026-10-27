@@ -122,6 +122,11 @@ fun HomeScreen(
         AnimatedVisibility(state.approvals.isNotEmpty()) {
             ApprovalBanner(state.approvals.size, onReviewApprovals)
         }
+        AnimatedVisibility(state.liveCall != null) {
+            state.liveCall?.let { call ->
+                LiveCallCard(call, onTakeOver = { runtime.takeOverCall(call.callId) }, onDismiss = runtime::dismissLiveCall)
+            }
+        }
         if (talking) {
             TranscriptSheet(state, expanded || keyboard, { expanded = it }, Modifier.weight((1f - stageShare).coerceAtLeast(0.01f)))
         } else {

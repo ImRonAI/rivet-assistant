@@ -206,6 +206,31 @@ class AppFlowTest {
         val answer = next("approval.response")
         assertTrue(answer.getJSONObject("answers").getJSONObject("rivet-approval:a1").getBoolean("approved"))
 
+        // A call Rivet is answering: the lines come in live, the user takes it over, then Rivet's summary.
+        runtime.settings.ownNumber = "+18015550100"
+        val started = System.currentTimeMillis() / 1000.0 - 42
+        brain(
+            socket,
+            """{"type":"call.live","call_id":"c-1","from":"+18015550123","verified":true,"started_at":$started,"status":"answering",
+               "lines":[{"speaker":"rivet","text":"Hi, this is Rivet, Tim's assistant. How can I help?"},
+               {"speaker":"caller","text":"Hi, it's Dana from Wasatch Dental, confirming Friday at 9."}],"snapshot":true}""",
+        )
+        until { compose.onAllNodesWithTextCount("confirming Friday at 9") > 0 }
+        shot("04b-live-call")
+        compose.onNodeWithText("Take over").performClick()
+        val takeOver = next("call.take_over")
+        assertEquals("c-1", takeOver.getString("call_id"))
+        assertEquals("+18015550100", takeOver.getString("to"))
+        brain(
+            socket,
+            """{"type":"call.ended","call_id":"c-1","from":"+18015550123","caller_name":"Dana from Wasatch Dental","started_at":$started,
+               "ended_at":${started + 95},"duration":95,"summary":"Dana confirmed Friday at 9 for the cleaning.","outcome":"message_taken",
+               "taken_over":true}""",
+        )
+        until { compose.onAllNodesWithTextCount("Dismiss") > 0 }
+        shot("04c-call-ended")
+        compose.onNodeWithText("Dismiss").performClick()
+
         // A call message arrives.
         brain(
             socket,
