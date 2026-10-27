@@ -63,6 +63,18 @@ ANSWERING_GREETING = (
 )
 
 
+FOLLOW_UP_GOAL = """\
+A caller just left the user a message on Rivet's answering line. Read the newest entry with `call_messages`. \
+Work out the useful next step for the user, such as texting the caller back, holding time on the calendar or \
+setting a reminder, and do it; anything you send or change asks the user first. Tell the user in one or two lines \
+who called, what they want and what you did. If it is spam or needs nothing, say so and do nothing else."""
+"""Goal of the task each message starts. The caller's words stay out of it: the task reads them with
+``call_messages``, which marks the turn untrusted, so every outward action needs a fresh approval."""
+
+FOLLOW_UP_ATTEMPTS = 2
+FOLLOW_UP_TIMEOUT = 900.0
+
+
 def call_token(device_token: str, session_id: str) -> str:
     """The secret path segment of a session's call webhooks."""
     digest = hmac.new(device_token.encode(), f"rivet-calls:{session_id}".encode(), hashlib.sha256)

@@ -39,7 +39,16 @@ from strands.storage import LocalFileStorage, Storage
 
 from . import calls, device_tools
 from .approvals import RivetApprovals
-from .calls import CallInbox, CallLine, call_token, caller_of, clean_message
+from .calls import (
+    FOLLOW_UP_ATTEMPTS,
+    FOLLOW_UP_GOAL,
+    FOLLOW_UP_TIMEOUT,
+    CallInbox,
+    CallLine,
+    call_token,
+    caller_of,
+    clean_message,
+)
 from .config import BrainSettings
 from .device import DeviceBridge
 from .factory import build_agent
@@ -149,6 +158,20 @@ class _Session:
         else:
             self.emit({"type": "error", "error": f"unsupported message: {kind!r}"})
 
+    def follow_up_call(self, received_at: float) -> None:
+        """Start a background task that works out what to do about a message Rivet took on a call."""
+        task_id = f"call-{int(received_at * 1000)}"
+        self.spawn(self._follow_up(task_id))
+
+    async def _follow_up(self, task_id: str) -> None:
+        await self.started
+        if self.failed is not None:
+            return
+        task = self.supervisor.run_task(
+            FOLLOW_UP_GOAL, task_id=task_id, max_attempts=FOLLOW_UP_ATTEMPTS, timeout=FOLLOW_UP_TIMEOUT
+        )
+        await self._guard(task, task_id)
+
     async def close(self) -> None:
         for task in list(self.tasks):
             if task is not self.writer:
@@ -247,6 +270,7 @@ def create_app(
     approvals: RivetApprovals | None = None,
     device_token: str | None = None,
     call_inbox: CallInbox | None = None,
+    follow_up_calls: bool = True,
 ) -> Starlette:
     """The gateway ASGI app.
 
@@ -258,6 +282,7 @@ def create_app(
         approvals: Approval policy shared by every session (device tool policies go here).
         device_token: The phone's bearer token; defaults to ``$RIVET_DEVICE_TOKEN``. Required.
         call_inbox: Where answered calls and messages are kept; defaults to ``calls/`` beside the sessions.
+        follow_up_calls: Start a task for each message a caller leaves, to propose the next step.
     """
     token = device_token or os.environ.get(DEVICE_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_LENGTH:
@@ -323,6 +348,8 @@ def create_app(
             return JSONResponse({"dynamic_variables": {}})
         record = inbox.add(session_id, clean_message(body))
         session.emit({"type": "call.message", **{k: v for k, v in record.items() if k != "kind"}})
+        if follow_up_calls:
+            session.follow_up_call(record["at"])
         return JSONResponse({"result": "Message saved and delivered."})
 
     @asynccontextmanager
@@ -373,6 +400,7 @@ def main() -> None:
         tools_for=tools_for,
         approvals=RivetApprovals({**device_tools.POLICIES, **calls.POLICIES}),
         call_inbox=inbox,
+        follow_up_calls=os.environ.get("RIVET_CALL_FOLLOW_UP", "1") != "0",
     )
     uvicorn.run(
         app,

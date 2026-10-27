@@ -76,7 +76,10 @@ to a Telnyx number where a Telnyx AI Assistant answers as Rivet and takes a mess
 2. Turn it on in Rivet › Settings › Call answering. That dials `**004*` / `**21*` (most carriers) or `*71` /
    `*72` (Verizon); turning off dials `##002#` / `*73`.
 3. When the assistant picks up, the phone shows "Rivet is answering a call from …"; the message the caller
-   leaves arrives as a notification and in `call_messages`, so you can ask Rivet to text them back.
+   leaves arrives as a notification and in `call_messages`.
+4. Rivet then follows up on its own: a background task reads the message, checks what it needs (contacts,
+   calendar) and proposes the next step, such as a text back, a calendar hold or a reminder. Every send or
+   change waits for your approval, flagged as prompted by outside content. `RIVET_CALL_FOLLOW_UP=0` turns this off.
 
 The assistant reaches the brain at `RIVET_PUBLIC_URL/v1/calls/{session}/{token}/start|message`, where the
 token is an HMAC of the session id under the device token.
