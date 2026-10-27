@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextInput
 import com.hiron.rivet.MainActivity
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.rivet
+import com.hiron.rivet.testing.FakeAndroidKeyStore
 import com.hiron.rivet.ui.COMPOSER_TAG
 import com.hiron.rivet.ui.STAGE_TAG
 import com.hiron.rivet.ui.TAB_TAG_PREFIX
@@ -144,10 +145,16 @@ class AppFlowTest {
         val runtime = compose.activity.rivet
         runtime.settings.gatewayUrl = server.url("/").toString()
         runtime.settings.sessionId = "flow-test"
+        // The token is sealed with the Android keystore, as on a phone; no baked-in build config is needed.
+        FakeAndroidKeyStore.install()
+        runtime.settings.deviceToken = "flow-test-device-token"
+        assertEquals("flow-test-device-token", runtime.settings.deviceToken)
         runtime.connect()
         val socket = sockets.poll(10, TimeUnit.SECONDS)!!
         assertEquals("resume", next("resume").getString("type"))
         until { runtime.state.value.connection == Connection.Online }
+        // Without a baked-in config the app opened on Settings; back to Rivet now that it is connected.
+        compose.onNodeWithTag(TAB_TAG_PREFIX + "rivet").performClick()
         shot("02-home-online")
 
         // Chat: type, send, stream a reply.

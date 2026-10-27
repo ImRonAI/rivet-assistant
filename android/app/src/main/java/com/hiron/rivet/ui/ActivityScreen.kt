@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.hiron.rivet.core.LogEntry
 import com.hiron.rivet.core.RivetRuntime
@@ -42,7 +43,6 @@ import org.json.JSONObject
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 
 /**
  * What Rivet did and what it has scheduled: today's counters, pending reminders, then the activity log as a
@@ -120,6 +120,7 @@ private fun dayOf(at: Long): Long = Calendar.getInstance().apply {
 @Composable
 private fun DayHeader(day: Long) {
     val p = LocalPalette.current
+    val locale = LocalConfiguration.current.locales[0]
     val today = dayOf(System.currentTimeMillis())
     val name = when (day) {
         today -> "Today"
@@ -128,9 +129,9 @@ private fun DayHeader(day: Long) {
     }
     val date = android.text.format.DateFormat.format("d MMM", Date(day)).toString()
     Row(Modifier.fillMaxWidth().background(p.bg).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(name.uppercase(Locale.getDefault()), style = Type.labelMd, color = p.ink)
+        Text(name.uppercase(locale), style = Type.labelMd, color = p.ink)
         Spacer(Modifier.size(8.dp))
-        Text(date.uppercase(Locale.getDefault()), style = Type.labelMd, color = p.ink2)
+        Text(date.uppercase(locale), style = Type.labelMd, color = p.ink2)
         Spacer(Modifier.size(10.dp))
         Box(Modifier.weight(1f).height(1.dp).background(p.rule))
     }

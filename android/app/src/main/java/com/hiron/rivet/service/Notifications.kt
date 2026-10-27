@@ -14,6 +14,8 @@ import com.hiron.rivet.MainActivity
 import com.hiron.rivet.R
 import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.CallText
+import com.hiron.rivet.core.LiveCall
+import com.hiron.rivet.core.LiveCallStatus
 import com.hiron.rivet.core.ServerEvent
 
 /** Rivet's notification channels and the notifications it posts. */
@@ -28,7 +30,11 @@ object Notifications {
     private const val ACTION_BASE = 5000
     private const val REMINDER_BASE = 9000
     private const val CALL_ANSWERING_ID = 14000
+    private const val CALL_LIVE_ID = 14001
     private const val CALL_MESSAGE_BASE = 10000
+    private const val CALL_SUMMARY_BASE = 15000
+    private const val CALL_LIVE_TIMEOUT = 35 * 60_000L
+    private const val TRANSFERRING = "Transferring the call to you…"
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -126,6 +132,53 @@ object Notifications {
         )
     }
 
+    /**
+     * The ongoing notification while Rivet is on a call: the latest lines and, while it is answering, "Take over"
+     * (which needs the phone unlocked). It replaces the "answering" one and stays quiet, since that one alerted.
+     */
+    fun callLive(context: Context, call: LiveCall, notice: String? = null) {
+        if (call.status == LiveCallStatus.Ended) return
+        NotificationManagerCompat.from(context).cancel(CALL_ANSWERING_ID)
+        val answering = call.status == LiveCallStatus.Answering
+        val status = notice ?: if (answering) null else TRANSFERRING
+        val recent = call.lines.takeLast(4).map(CallText::line)
+        val body = (recent + listOfNotNull(status)).joinToString("\n").ifBlank { "Listening…" }
+        val builder = NotificationCompat.Builder(context, CALLS)
+            .setSmallIcon(R.drawable.ic_rivet)
+            .setContentTitle("Rivet is answering ${call.caller}")
+            .setContentText(status ?: recent.lastOrNull() ?: "Listening…")
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setWhen(call.startedAt)
+            .setUsesChronometer(true)
+            .setTimeoutAfter(CALL_LIVE_TIMEOUT)
+            .setContentIntent(openApp(context))
+        if (answering) builder.addAction(takeOver(context, call.callId))
+        post(context, CALL_LIVE_ID, builder)
+    }
+
+    /** Replaces the live notification with the call's summary. */
+    fun callEnded(context: Context, call: LiveCall) {
+        val manager = NotificationManagerCompat.from(context)
+        manager.cancel(CALL_LIVE_ID)
+        manager.cancel(CALL_ANSWERING_ID)
+        post(
+            context, CALL_SUMMARY_BASE + call.callId.hashCode().mod(1000),
+            NotificationCompat.Builder(context, CALLS)
+                .setSmallIcon(R.drawable.ic_rivet)
+                .setContentTitle((if (call.takenOver) "You took over the call from " else "Call from ") + call.caller)
+                .setContentText(call.summary.ifBlank { "Rivet has no summary of this call." })
+                .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.summary(call)))
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setSilent(true)
+                .setContentIntent(openApp(context))
+                .setAutoCancel(true),
+        )
+    }
+
     fun action(context: Context, title: String, text: String, intent: Intent) {
         val id = ACTION_BASE + (title + text).hashCode().mod(4000)
         post(
@@ -149,6 +202,18 @@ object Notifications {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Action.Builder(0, if (approved) "Approve" else "Deny", pending)
+            .setAuthenticationRequired(true)
+            .build()
+    }
+
+    private fun takeOver(context: Context, callId: String): NotificationCompat.Action {
+        val intent = Intent(context, TakeOverReceiver::class.java)
+            .setAction(TakeOverReceiver.TAKE_OVER)
+            .putExtra(TakeOverReceiver.CALL_ID, callId)
+        val pending = PendingIntent.getBroadcast(
+            context, callId.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Action.Builder(0, "Take over", pending)
             .setAuthenticationRequired(true)
             .build()
     }

@@ -68,6 +68,54 @@ class ProtocolTest {
     }
 
     @Test
+    fun parsesLiveCallEventsAsTheGatewaySendsThem() {
+        // Shapes from brain/src/rivet_brain/live_calls.py (LiveCall.live_event, _ended) and LiveCalls.take_over.
+        val live = Protocol.parse(
+            """{"type":"call.live","call_id":"c-0123456789ab","from":"+18015550100","verified":true,"started_at":1761500000.5,
+               "status":"answering","lines":[{"speaker":"rivet","text":"Hi, you've reached Tim."},{"speaker":"caller","text":""},
+               {"speaker":"caller","text":"It's Ada."}],"snapshot":false}""",
+        )
+        assertEquals(
+            ServerEvent.CallLive(
+                "c-0123456789ab", "+18015550100", true, 1761500000.5, "answering",
+                listOf(CallLineText("rivet", "Hi, you've reached Tim."), CallLineText("caller", "It's Ada.")), false,
+            ),
+            live,
+        )
+        assertEquals(
+            ServerEvent.CallTakeOverFailed("c-0123456789ab", "That call has already ended."),
+            Protocol.parse("""{"type":"call.take_over.failed","call_id":"c-0123456789ab","error":"That call has already ended."}"""),
+        )
+        val ended = Protocol.parse(
+            """{"type":"call.ended","call_id":"c-0123456789ab","from":"+18015550100","caller_name":"Ada",
+               "started_at":1761500000.5,"ended_at":1761500125.5,"duration":125,"summary":"Ada wants lunch on Friday.",
+               "outcome":"message_taken","taken_over":true}""",
+        )
+        assertEquals(
+            ServerEvent.CallEnded(
+                "c-0123456789ab", "+18015550100", "Ada", 1761500000.5, 1761500125.5, 125, "Ada wants lunch on Friday.",
+                "message_taken", true,
+            ),
+            ended,
+        )
+        val unseen = Protocol.parse(
+            """{"type":"call.ended","call_id":"","from":"","caller_name":"","started_at":null,"ended_at":1761500125.5,
+               "duration":null,"summary":"","outcome":"unknown","taken_over":false}""",
+        ) as ServerEvent.CallEnded
+        assertEquals(null, unseen.startedAt)
+        assertEquals(null, unseen.durationSeconds)
+    }
+
+    @Test
+    fun buildsTakeOverTheGatewayAccepts() {
+        val body = JSONObject(Protocol.takeOver("c-0123456789ab", "+18015550199"))
+        assertEquals("call.take_over", body.getString("type"))
+        assertEquals("c-0123456789ab", body.getString("call_id"))
+        assertEquals("+18015550199", body.getString("to"))
+        assertFalse(JSONObject(Protocol.takeOver("c-0123456789ab", null)).has("to"))
+    }
+
+    @Test
     fun buildsApprovalResponseTheSupervisorAccepts() {
         val body = JSONObject(
             Protocol.approvalResponse("default", mapOf("a" to Protocol.Answer(true, 30), "b" to Protocol.Answer(false))),

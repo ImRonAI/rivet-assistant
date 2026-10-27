@@ -59,6 +59,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -77,7 +78,6 @@ import com.hiron.rivet.core.RivetState
 import kotlinx.coroutines.delay
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 
 /** One-tap requests on the dock, the widget and the launcher shortcuts: the things people ask Rivet for most. */
 enum class Quick(val label: String, val tag: String, val prompt: String) {
@@ -168,6 +168,7 @@ private fun BoxScope.StageGreeting(visible: Boolean, state: RivetState) {
 @Composable
 private fun Greeting(state: RivetState) {
     val p = LocalPalette.current
+    val locale = LocalConfiguration.current.locales[0]
     val context = LocalContext.current
     val now by produceState(System.currentTimeMillis()) {
         while (true) {
@@ -187,13 +188,13 @@ private fun Greeting(state: RivetState) {
     Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             buildAnnotatedString {
-                append(words.uppercase(Locale.getDefault()))
+                append(words.uppercase(locale))
                 withStyle(SpanStyle(color = p.accent)) { append(".") }
             },
             style = Type.greeting, color = p.ink,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${date.uppercase(Locale.getDefault())} · ${time.uppercase(Locale.getDefault())}", style = Type.labelMd, color = p.ink)
+            Text("${date.uppercase(locale)} · ${time.uppercase(locale)}", style = Type.labelMd, color = p.ink)
             Spacer(Modifier.size(10.dp))
             Box(Modifier.size(width = 18.dp, height = 1.dp).background(p.ink2))
             Spacer(Modifier.size(10.dp))

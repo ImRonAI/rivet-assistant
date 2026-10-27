@@ -86,6 +86,20 @@ class ApprovalActionReceiver : BroadcastReceiver() {
     }
 }
 
+/** "Take over" from the live call notification (Android requires the phone to be unlocked first). */
+class TakeOverReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != TAKE_OVER) return
+        val callId = intent.getStringExtra(CALL_ID) ?: return
+        context.rivet.takeOverCall(callId)
+    }
+
+    companion object {
+        const val TAKE_OVER = "com.hiron.rivet.TAKE_OVER"
+        const val CALL_ID = "call_id"
+    }
+}
+
 /** Reconnects after a reboot when the user turned on "Connect automatically". */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
