@@ -16,8 +16,11 @@
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- The assistant overlay listens with SpeechRecognizer, which requires it of the calling app. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!-- Rivet opens and lists the user's launcher apps by name. -->
     <queries>
@@ -31,6 +34,9 @@
         </intent>
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
@@ -58,7 +64,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Makes Rivet selectable as the digital assistant (long-press Home/Power). -->
+            <!-- Makes Rivet selectable as the digital assistant (long-press Home/Power) on phones that do not run
+                 voice interaction services, such as low-RAM devices; there it opens the full app listening. -->
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -135,6 +142,40 @@
             <intent-filter>
                 <action android:name="android.telecom.CallScreeningService" />
             </intent-filter>
+        </service>
+
+        <!-- The digital assistant: long-press Home/Power opens Rivet's overlay over the current app. -->
+        <service
+            android:name=".voice.RivetVoiceService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_VOICE_INTERACTION">
+            <intent-filter>
+                <action android:name="android.service.voice.VoiceInteractionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.voice_interaction"
+                android:resource="@xml/rivet_voice_interaction" />
+        </service>
+
+        <service
+            android:name=".voice.RivetSessionService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VOICE_INTERACTION" />
+
+        <!-- Other apps bind recognizers without a permission of their own to hold, so this one cannot ask for one. -->
+        <service
+            android:name=".voice.RivetRecognitionService"
+            android:exported="true"
+            android:label="@string/app_name"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/rivet_recognition" />
         </service>
 
         <receiver
