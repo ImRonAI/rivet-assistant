@@ -5,7 +5,6 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -153,13 +152,27 @@ private fun ApprovalCard(
                 style = MaterialTheme.typography.bodySmall, color = p.ink2,
             )
         }
-        if (a.preview.isNotBlank()) {
+        val fields = remember(a.preview) { ApprovalPreview.fields(a.preview) }
+        if (fields != null) {
+            // Everything the action will do, wrapped and readable: never cut off sideways.
+            Spacer(Modifier.size(8.dp))
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(8.dp)).background(p.bg)
+                    .verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                fields.forEach { (label, value) ->
+                    Text(label.uppercase(), style = Label.copy(fontSize = 10.sp), color = p.ink2)
+                    Text(value, style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                }
+            }
+        } else if (a.preview.isNotBlank()) {
             Spacer(Modifier.size(8.dp))
             Text(
                 a.preview,
                 fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = p.ink,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp).clip(RoundedCornerShape(8.dp)).background(p.bg)
-                    .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(10.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(8.dp)).background(p.bg)
+                    .verticalScroll(rememberScrollState()).padding(10.dp),
             )
         }
         if (a.untrustedTurn) {

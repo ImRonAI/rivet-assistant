@@ -1,7 +1,9 @@
 package com.hiron.rivet.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SelectableChipColors
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -96,4 +98,16 @@ fun RivetTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalPalette provides p) {
         MaterialTheme(colorScheme = scheme, typography = type, content = content)
     }
+}
+
+/** Selected chips in Rivet orange instead of Material's default lavender. */
+@Composable
+fun rivetChip(): SelectableChipColors {
+    val p = LocalPalette.current
+    return FilterChipDefaults.filterChipColors(
+        containerColor = p.card,
+        labelColor = p.ink,
+        selectedContainerColor = p.accent,
+        selectedLabelColor = Color.White,
+    )
 }

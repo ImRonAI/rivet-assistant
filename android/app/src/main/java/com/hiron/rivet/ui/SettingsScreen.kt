@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -78,13 +79,49 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
         onPauseOrDispose { }
     }
     val hasToken = remember(refresh, token) { s.deviceToken.isNotBlank() }
+    // A ready-to-use build hides the connection details; they open only when something needs changing.
+    var advanced by remember { mutableStateOf(!s.gateway().complete) }
 
     Column(Modifier.fillMaxSize().background(p.bg).imePadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("SETTINGS", style = Label, color = p.accent)
-        Text("Connect Rivet", style = MaterialTheme.typography.headlineSmall, color = p.ink)
+        Text("Rivet", style = MaterialTheme.typography.headlineSmall, color = p.ink)
         Spacer(Modifier.size(12.dp))
 
-        Section("Brain") {
+        Section("Connection") {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(10.dp).clip(RoundedCornerShape(50)).background(
+                        when (state.connection) {
+                            Connection.Online -> p.ok
+                            Connection.Connecting -> p.amb
+                            Connection.Offline -> p.rec
+                        },
+                    ),
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    when (state.connection) {
+                        Connection.Online -> "Connected to Rivet"
+                        Connection.Connecting -> "Connecting to Rivet…"
+                        Connection.Offline -> state.lastError ?: "Not connected"
+                    },
+                    style = MaterialTheme.typography.titleMedium, color = p.ink, modifier = Modifier.weight(1f),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (state.connection == Connection.Offline) {
+                    Button(
+                        onClick = { RivetService.start(context) },
+                        colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
+                    ) { Text("Connect") }
+                } else {
+                    OutlinedButton(onClick = { RivetService.stop(context) }) { Text("Disconnect") }
+                }
+                TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide details" else "Connection details") }
+            }
+        }
+
+        if (advanced) Section("Connection details") {
             OutlinedTextField(url, { url = it }, label = { Text("Brain URL") }, placeholder = { Text("https://rivet-brain.fly.dev") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
             OutlinedTextField(token, { token = it }, label = { Text(if (hasToken) "Device token (saved, encrypted)" else "Device token") },
@@ -103,16 +140,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
                 ) { Text(if (state.connection == Connection.Offline) "Save & connect" else "Save & reconnect") }
-                if (state.connection != Connection.Offline) OutlinedButton(onClick = { RivetService.stop(context) }) { Text("Disconnect") }
             }
-            Text(
-                when (state.connection) {
-                    Connection.Online -> "Connected."
-                    Connection.Connecting -> "Connecting…"
-                    Connection.Offline -> state.lastError ?: "Not connected."
-                },
-                style = MaterialTheme.typography.bodySmall, color = if (state.connection == Connection.Online) p.ok else p.ink2,
-            )
         }
 
         Section("Behaviour") {
@@ -179,14 +207,14 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
     }
     Text("ANSWER", style = Label, color = p.ink2)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(mode == ForwardMode.Unanswered, { mode = ForwardMode.Unanswered }, label = { Text("Calls I don't pick up") })
-        FilterChip(mode == ForwardMode.Always, { mode = ForwardMode.Always }, label = { Text("All calls") })
+        FilterChip(mode == ForwardMode.Unanswered, { mode = ForwardMode.Unanswered }, label = { Text("Calls I don't pick up") }, colors = rivetChip())
+        FilterChip(mode == ForwardMode.Always, { mode = ForwardMode.Always }, label = { Text("All calls") }, colors = rivetChip())
     }
     Text("CARRIER CODES", style = Label, color = p.ink2)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(style == null, { style = null; s.carrierStyle = null }, label = { Text("Auto (${carrierLabel(detected)})") })
-        FilterChip(style == CarrierStyle.Gsm, { style = CarrierStyle.Gsm; s.carrierStyle = style }, label = { Text("Standard") })
-        FilterChip(style == CarrierStyle.Verizon, { style = CarrierStyle.Verizon; s.carrierStyle = style }, label = { Text("Verizon") })
+        FilterChip(style == null, { style = null; s.carrierStyle = null }, label = { Text("Auto (${carrierLabel(detected)})") }, colors = rivetChip())
+        FilterChip(style == CarrierStyle.Gsm, { style = CarrierStyle.Gsm; s.carrierStyle = style }, label = { Text("Standard") }, colors = rivetChip())
+        FilterChip(style == CarrierStyle.Verizon, { style = CarrierStyle.Verizon; s.carrierStyle = style }, label = { Text("Verizon") }, colors = rivetChip())
     }
     Text(
         when {

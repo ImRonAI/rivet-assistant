@@ -146,6 +146,7 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
 }
 
 const val CHAT_TAG = "chat"
+const val COMPOSER_TAG = "composer"
 
 @Composable
 internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier) {
@@ -217,6 +218,7 @@ private fun Composer(busy: Boolean, onSend: (String, Boolean) -> Unit, onListen:
             FilterChip(
                 selected = asTask, onClick = { asTask = !asTask },
                 label = { Text("Background task", style = MaterialTheme.typography.labelMedium) },
+                colors = rivetChip(),
             )
             Spacer(Modifier.weight(1f))
             if (busy) Text("WORKING", style = Label, color = p.cy, fontWeight = FontWeight.Medium)
@@ -224,7 +226,7 @@ private fun Composer(busy: Boolean, onSend: (String, Boolean) -> Unit, onListen:
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = text, onValueChange = { text = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag(COMPOSER_TAG),
                 placeholder = { Text(if (asTask) "Describe the goal…" else "Message Rivet") },
                 maxLines = 5,
                 shape = RoundedCornerShape(22.dp),

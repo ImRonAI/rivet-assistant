@@ -14,8 +14,8 @@ android {
         applicationId = "com.hiron.rivet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.2"
+        versionCode = 3
+        versionName = "0.1.3"
         // Ready-to-use defaults from rivet.local.properties (never committed); all stay editable in Settings.
         val local = Properties().apply {
             rootProject.file("rivet.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
@@ -47,6 +47,13 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Real rendering for the screen tests' screenshots.
+            it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            it.systemProperty("rivet.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
+            // RIVET_LIVE=1 also runs LiveBrainTest against the deployed brain this build is configured for.
+            it.systemProperty("rivet.live", System.getenv("RIVET_LIVE") ?: "0")
+        }
     }
     lint {
         abortOnError = true
@@ -68,6 +75,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
