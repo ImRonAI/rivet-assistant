@@ -46,3 +46,6 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Call answering (brain needs `RIVET_PUBLIC_URL`): "Set up call answering" ends with the number saved in
       Settings › Call answering; **Turn on** shows the carrier's confirmation; a call you let ring goes to
       Rivet, which takes a message; the phone shows "Rivet is answering…" and then the message; **Turn off** restores normal ringing.
+- [ ] Live call (after setting up call answering again, and with your own number in Settings): the ongoing
+      notification shows what the caller and Rivet say; **Take over** (after unlocking) rings your phone and
+      connects you to the caller; when the call ends, the summary replaces the notification and appears in Activity.

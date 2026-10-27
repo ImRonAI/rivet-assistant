@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.hiron.rivet.device.ActionLedger
 import com.hiron.rivet.device.DeviceTools
+import com.hiron.rivet.device.ForwardMode
 import com.hiron.rivet.device.ReminderStore
 import com.hiron.rivet.device.ReminderStoreFile
 import com.hiron.rivet.device.Reminders
@@ -130,6 +131,26 @@ class RivetRuntime(private val app: Context) {
         answer(lane, mapOf(id to Protocol.Answer(approved)))
     }
 
+    /**
+     * Asks the brain to transfer the call Rivet is answering to the user's own number ([Settings.ownNumber]); the
+     * tap is the approval. Returns false, with the reason in [RivetState.lastError], when it can't be sent.
+     */
+    fun takeOverCall(callId: String): Boolean {
+        val forwardsAllCalls = settings.answeringMode == ForwardMode.Always && settings.forwardedTo.isNotBlank()
+        val refusal = RivetStore.takeOverRefusal(state.value, callId, settings.ownNumber, forwardsAllCalls)
+        if (refusal != null) {
+            update { RivetStore.note(it.copy(lastError = refusal), now(), "call", refusal) }
+            state.value.liveCall?.let { Notifications.callLive(app, it, notice = refusal) }
+            return false
+        }
+        gateway.send(Protocol.takeOver(callId, settings.ownNumber))
+        note("call", "Taking over the call; your phone will ring")
+        return true
+    }
+
+    /** Clears a finished call from [RivetState.liveCall]. */
+    fun dismissLiveCall() = update { RivetStore.dismissCall(it) }
+
     fun listening(on: Boolean) = update { it.copy(activity = if (on) Activity.Listening else Activity.Idle) }
 
     fun stopSpeaking() = speaker.stop()
@@ -156,6 +177,21 @@ class RivetRuntime(private val app: Context) {
             else -> Unit
         }
         update { RivetStore.reduce(it, event, now()) }
+        // These render the reduced call (with every line so far), so they follow the update.
+        val call = state.value.liveCall?.takeIf { it.callId == callIdOf(event) } ?: return
+        when (event) {
+            is ServerEvent.CallLive -> Notifications.callLive(app, call)
+            is ServerEvent.CallTakeOverFailed -> Notifications.callLive(app, call, notice = event.error)
+            is ServerEvent.CallEnded -> Notifications.callEnded(app, call)
+            else -> Unit
+        }
+    }
+
+    private fun callIdOf(event: ServerEvent): String? = when (event) {
+        is ServerEvent.CallLive -> event.callId
+        is ServerEvent.CallTakeOverFailed -> event.callId
+        is ServerEvent.CallEnded -> event.callId
+        else -> null
     }
 
     private fun onConnection(connection: Connection) {

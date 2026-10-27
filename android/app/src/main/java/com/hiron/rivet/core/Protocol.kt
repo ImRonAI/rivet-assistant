@@ -49,6 +49,29 @@ sealed interface ServerEvent {
         val urgent: Boolean,
         val hungUpEarly: Boolean,
     ) : ServerEvent
+
+    /** A call Rivet is on: its state and the transcript lines since the last one (all of them when [snapshot]). */
+    data class CallLive(
+        val callId: String,
+        val from: String,
+        val verified: Boolean,
+        val startedAt: Double?,
+        val status: String,
+        val lines: List<CallLineText>,
+        val snapshot: Boolean,
+    ) : ServerEvent
+    data class CallTakeOverFailed(val callId: String, val error: String) : ServerEvent
+    data class CallEnded(
+        val callId: String,
+        val from: String,
+        val callerName: String,
+        val startedAt: Double?,
+        val endedAt: Double?,
+        val durationSeconds: Int?,
+        val summary: String,
+        val outcome: String,
+        val takenOver: Boolean,
+    ) : ServerEvent
     data object SessionReady : ServerEvent
     data object Pong : ServerEvent
     data class Error(val message: String) : ServerEvent
@@ -93,6 +116,18 @@ object Protocol {
                 o.optString("caller_name"), o.optString("callback_number"), o.optString("message"),
                 o.optBoolean("urgent", false), o.optBoolean("hung_up_early", false),
             )
+            "call.live" -> ServerEvent.CallLive(
+                o.optString("call_id"), o.optString("from"), o.optBoolean("verified", false), o.optDoubleOrNull("started_at"),
+                o.optString("status", "answering"), callLines(o.optJSONArray("lines")), o.optBoolean("snapshot", false),
+            )
+            "call.take_over.failed" -> ServerEvent.CallTakeOverFailed(
+                o.optString("call_id"), o.optStringOrNull("error") ?: "Rivet couldn't transfer the call",
+            )
+            "call.ended" -> ServerEvent.CallEnded(
+                o.optString("call_id"), o.optString("from"), o.optString("caller_name"), o.optDoubleOrNull("started_at"),
+                o.optDoubleOrNull("ended_at"), o.optDoubleOrNull("duration")?.toInt(), o.optString("summary"),
+                o.optStringOrNull("outcome") ?: "unknown", o.optBoolean("taken_over", false),
+            )
             "session.ready" -> ServerEvent.SessionReady
             "pong" -> ServerEvent.Pong
             "error" -> ServerEvent.Error(o.optString("error", "error"))
@@ -119,6 +154,13 @@ object Protocol {
 
     fun deviceResult(actionId: String, result: JSONObject): String =
         JSONObject().put("type", "device.result").put("action_id", actionId).put("result", result).toString()
+
+    /** Transfers live call [callId] to [to], the user's own number; the brain refuses one that is missing or not E.164. */
+    fun takeOver(callId: String, to: String?): String {
+        val body = JSONObject().put("type", "call.take_over").put("call_id", callId)
+        if (to != null) body.put("to", to)
+        return body.toString()
+    }
 
     fun resume(): String = JSONObject().put("type", "resume").toString()
 
@@ -167,10 +209,19 @@ object Protocol {
             val r = list.optJSONObject(i) ?: return@mapNotNull null
             r.optString("id") to r.optString("status")
         }
+
+    private fun callLines(list: JSONArray?): List<CallLineText> =
+        if (list == null) emptyList() else (0 until list.length()).mapNotNull { i ->
+            val line = list.optJSONObject(i) ?: return@mapNotNull null
+            CallLineText(line.optString("speaker"), line.optString("text")).takeIf { it.text.isNotBlank() }
+        }
 }
 
 internal fun JSONObject.optStringOrNull(key: String): String? =
     if (has(key) && !isNull(key)) optString(key) else null
+
+internal fun JSONObject.optDoubleOrNull(key: String): Double? =
+    if (has(key) && !isNull(key)) optDouble(key).takeUnless { it.isNaN() } else null
 
 internal fun JSONArray?.strings(): List<String> =
     if (this == null) emptyList() else (0 until length()).map { optString(it) }

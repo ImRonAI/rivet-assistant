@@ -49,6 +49,11 @@ class Settings(context: Context) {
         get() = prefs.getString("answering_number", null) ?: BuildConfig.DEFAULT_ANSWERING_NUMBER
         set(value) = prefs.edit().putString("answering_number", value.trim()).apply()
 
+    /** The user's own phone number (E.164), where "Take over" transfers a call Rivet is answering. */
+    var ownNumber: String
+        get() = prefs.getString("own_number", "").orEmpty()
+        set(value) = prefs.edit().putString("own_number", value.trim()).apply()
+
     var answeringMode: ForwardMode
         get() = runCatching { ForwardMode.valueOf(prefs.getString("answering_mode", null).orEmpty()) }.getOrDefault(ForwardMode.Unanswered)
         set(value) = prefs.edit().putString("answering_mode", value.name).apply()
@@ -70,6 +75,11 @@ class Settings(context: Context) {
 
     fun gateway(): GatewayConfig = GatewayConfig(gatewayUrl, deviceToken, sessionId)
 }
+
+private val E164 = Regex("""\+[1-9]\d{6,14}""")
+
+/** Whether [number] is in E.164 form (`+` and 7 to 15 digits), as the brain requires for a take-over. */
+fun isE164(number: String): Boolean = E164.matches(number)
 
 /** AES-GCM with an Android Keystore key: `base64(iv || ciphertext)`. */
 object SecretBox {
