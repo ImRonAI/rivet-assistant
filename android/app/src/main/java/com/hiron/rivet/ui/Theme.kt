@@ -83,7 +83,8 @@ val Mono = FontFamily(
 /** The type scale. Display is for the brand mark and counters only; UI text is Plex Sans; telemetry is Plex Mono. */
 object Type {
     val brand = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 28.sp, lineHeight = 26.sp, letterSpacing = 0.06.em)
-    val counter = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, lineHeight = 22.sp, letterSpacing = 0.06.em)
+    val greeting = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 46.sp, lineHeight = 42.sp, letterSpacing = 0.03.em)
+    val stat = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 36.sp, lineHeight = 34.sp, letterSpacing = 0.04.em)
     val headline = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp)
     val title = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp)
     val bodyLg = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 22.sp)

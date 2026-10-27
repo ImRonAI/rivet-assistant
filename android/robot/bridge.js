@@ -22,9 +22,29 @@
     try { window.RivetHost && window.RivetHost.postMessage(JSON.stringify(message)); } catch (e) { }
   }
 
+  /* the stage glows behind Rivet in the colour of what it is doing: cyan working, amber waiting on the user,
+     green done, crimson listening (a live sensor) or stuck */
+  const MOOD = {
+    listening: 'rec', thinking: 'cy', searching: 'cy', working: 'cy', texting: 'cy', emailing: 'cy',
+    calling: 'cy', video: 'cy', waiting: 'amb', done: 'ok', failed: 'rec',
+  };
+  const glow = document.createElement('style');
+  glow.textContent = `
+    .stage::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .8s ease;
+      background:radial-gradient(38% 34% at 50% 46%,var(--mood-c,transparent),transparent 72%)}
+    html[data-mood] .stage::before{opacity:.26;animation:moodbreathe 2.8s ease-in-out infinite}
+    html[data-mood="cy"]{--mood-c:var(--cy)} html[data-mood="amb"]{--mood-c:var(--amb)}
+    html[data-mood="ok"]{--mood-c:var(--ok)} html[data-mood="rec"]{--mood-c:var(--rec)}
+    @keyframes moodbreathe{50%{opacity:.14}}
+    @media (prefers-reduced-motion: reduce){html[data-mood] .stage::before{animation:none}}`;
+  document.head.appendChild(glow);
+
   function state(name) {
     const id = STATE_MOVE[name] || 'idle';
     current = name in STATE_MOVE ? name : 'idle';
+    const mood = MOOD[current];
+    if (mood) document.documentElement.setAttribute('data-mood', mood);
+    else document.documentElement.removeAttribute('data-mood');
     D.lastInput = time;
     if (D.cur.id !== id && D.settle !== id) play(id);
   }

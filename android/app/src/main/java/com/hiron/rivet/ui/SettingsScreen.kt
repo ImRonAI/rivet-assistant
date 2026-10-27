@@ -11,6 +11,7 @@ import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,7 +19,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -30,12 +33,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.hiron.rivet.BuildConfig
+import com.hiron.rivet.R
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
@@ -75,7 +85,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
         Modifier.fillMaxSize().background(p.bg).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        HudCard("Link", pip = linkColor, live = state.connection == Connection.Connecting, meta = linkMeta, metaColor = linkColor) {
+        HudCard("Link", index = "01", pip = linkColor, live = state.connection == Connection.Connecting, meta = linkMeta, metaColor = linkColor) {
             Text(
                 when (state.connection) {
                     Connection.Online -> "Connected to Rivet"
@@ -96,7 +106,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
             }
         }
 
-        if (advanced) HudCard("Connection details") {
+        if (advanced) HudCard("Connection details", index = "01.1") {
             RecessedField(url, { url = it }, label = "Brain URL", placeholder = "https://rivet-brain.fly.dev",
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
             RecessedField(token, { token = it }, label = if (hasToken) "Device token (saved, encrypted)" else "Device token",
@@ -117,7 +127,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
             )
         }
 
-        HudCard("Behaviour") {
+        HudCard("Behaviour", index = "02") {
             Toggle("Read replies aloud", speak) { speak = it; s.speakReplies = it }
             Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
             Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
@@ -125,7 +135,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
 
         CallAnswering(runtime, refresh)
 
-        HudCard("Permissions") {
+        HudCard("Permissions", index = "04") {
             Permissions(context, refresh) { refresh++ }
         }
 
@@ -134,6 +144,35 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
                 "settings, then turn on Notification access and the App operator.",
             style = Type.body, color = p.ink2, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
         )
+
+        UnitPlate()
+    }
+}
+
+/** The unit's data plate: what this is, which build, and who makes it. */
+@Composable
+private fun UnitPlate() {
+    val p = LocalPalette.current
+    HudCard("Unit", index = "05", meta = "R-7") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painterResource(R.drawable.rivet_head), contentDescription = null,
+                modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp)).background(p.tile).padding(6.dp),
+            )
+            Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    buildAnnotatedString {
+                        append("RIV")
+                        withStyle(SpanStyle(color = p.accent)) { append("E") }
+                        append("T")
+                    },
+                    style = Type.brand, color = p.ink,
+                )
+                Text("Version ${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}", style = Type.mono, color = p.ink2)
+            }
+        }
+        Readout("Made by", "Ron AI · hi-ron.com")
+        Readout("Support", "support@hi-ron.com")
     }
 }
 
@@ -164,7 +203,7 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
     }
 
     val on = forwardedTo.isNotBlank()
-    HudCard("Call answering", pip = if (on) p.ok else p.ink2, meta = if (on) "On" else "Off", metaColor = if (on) p.ok else null) {
+    HudCard("Call answering", index = "03", pip = if (on) p.ok else p.ink2, meta = if (on) "On" else "Off", metaColor = if (on) p.ok else null) {
         Text(
             "Callers still dial your number. When this is on, your carrier forwards calls to Rivet's answering line on " +
                 "Telnyx, Rivet takes a message, and you get it here. (Android doesn't let apps speak on ordinary calls.)",

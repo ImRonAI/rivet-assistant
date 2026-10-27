@@ -1,26 +1,35 @@
 package com.hiron.rivet.ui
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -35,10 +44,11 @@ import com.hiron.rivet.core.RivetState
 
 /**
  * The telemetry strip across the top of every screen: the RIVET mark, the unit line, and live readouts for
- * what Rivet is doing, the link to the brain, and how many actions wait on your OK.
+ * what Rivet is doing, the link to the brain, and how many actions wait on your OK. On the robot's own screen
+ * it drops its rule so the header and the stage read as one surface.
  */
 @Composable
-fun HudHeader(state: RivetState, unit: String) {
+fun HudHeader(state: RivetState, unit: String, rule: Boolean = true) {
     val p = LocalPalette.current
     val (mode, modeColor) = mode(state, p)
     val (link, linkColor) = when (state.connection) {
@@ -67,7 +77,7 @@ fun HudHeader(state: RivetState, unit: String) {
                 Telemetry("Queue", "%02d".format(queue), if (queue > 0) p.amb else p.ink2)
             }
         }
-        Rule()
+        if (rule) Rule()
     }
 }
 
@@ -76,7 +86,7 @@ private fun Telemetry(label: String, value: String, color: Color) {
     val p = LocalPalette.current
     Column(Modifier.widthIn(min = 52.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label.uppercase(), style = Type.labelSm, color = p.ink2)
-        Text(value, style = Type.tele, color = color, maxLines = 1)
+        Odometer(value, Type.tele, color)
     }
 }
 
@@ -101,33 +111,49 @@ data class PendantTab<T>(val value: T, val label: String, val icon: ImageVector,
 
 const val TAB_TAG_PREFIX = "tab-"
 
-/** The bottom tab strip: mono caps, a safety-orange bar over the active tab, an amber count for approvals. */
+/**
+ * The bottom tab strip: mono caps under line icons, a safety-orange bar with a soft bloom that slides to the
+ * active tab, and an amber count for approvals.
+ */
 @Composable
 fun <T> PendantTabs(tabs: List<PendantTab<T>>, selected: T, onSelect: (T) -> Unit) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxWidth().background(p.bg).navigationBarsPadding()) {
         Rule()
-        Row(Modifier.fillMaxWidth()) {
-            tabs.forEach { t ->
-                val on = t.value == selected
-                Box(
-                    Modifier.weight(1f).height(58.dp).selectable(on, role = Role.Tab) { onSelect(t.value) }
-                        .testTag(TAB_TAG_PREFIX + t.label.lowercase()),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (on) Box(Modifier.align(Alignment.TopCenter).size(width = 44.dp, height = 2.dp).background(p.accent))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(t.icon, contentDescription = null, tint = if (on) p.ink else p.ink2, modifier = Modifier.size(20.dp))
-                            if (t.badge > 0) {
-                                Spacer(Modifier.size(4.dp))
-                                Text(
-                                    "${t.badge}", style = Type.labelSm, color = p.accentInk,
-                                    modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(p.amb).padding(horizontal = 4.dp, vertical = 1.dp),
-                                )
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val slot = maxWidth / tabs.size.coerceAtLeast(1)
+            val at = tabs.indexOfFirst { it.value == selected }.coerceAtLeast(0)
+            val x by animateDpAsState(slot * at + (slot - 44.dp) / 2, spring(dampingRatio = 0.75f, stiffness = 420f), label = "tab")
+            Box(
+                Modifier.offset(x = x).width(44.dp).height(14.dp).drawBehind {
+                    drawRect(p.accent, size = size.copy(height = 2.dp.toPx()))
+                    drawRect(
+                        Brush.verticalGradient(listOf(p.accent.copy(alpha = 0.22f), Color.Transparent), endY = size.height),
+                        topLeft = Offset(0f, 2.dp.toPx()),
+                    )
+                },
+            )
+            Row(Modifier.fillMaxWidth()) {
+                tabs.forEach { t ->
+                    val on = t.value == selected
+                    Box(
+                        Modifier.weight(1f).height(58.dp).selectable(on, role = Role.Tab) { onSelect(t.value) }
+                            .testTag(TAB_TAG_PREFIX + t.label.lowercase()),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(t.icon, contentDescription = null, tint = if (on) p.ink else p.ink2, modifier = Modifier.size(20.dp))
+                                if (t.badge > 0) {
+                                    Spacer(Modifier.size(4.dp))
+                                    Text(
+                                        "${t.badge}", style = Type.labelSm, color = p.accentInk,
+                                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(p.amb).padding(horizontal = 4.dp, vertical = 1.dp),
+                                    )
+                                }
                             }
+                            Text(t.label.uppercase(), style = Type.labelMd, color = if (on) p.ink else p.ink2)
                         }
-                        Text(t.label.uppercase(), style = Type.labelMd, color = if (on) p.ink else p.ink2)
                     }
                 }
             }

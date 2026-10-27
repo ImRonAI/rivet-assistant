@@ -12,6 +12,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,10 +50,14 @@ import com.hiron.rivet.ui.LocalPalette
 import com.hiron.rivet.ui.PendantTab
 import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
+import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.SettingsScreen
+import com.hiron.rivet.widget.RivetWidgets
 
 class MainActivity : FragmentActivity() {
     private var listenRequests by mutableIntStateOf(0)
+    private var focusRequests by mutableIntStateOf(0)
+    private var homeRequests by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,10 +66,11 @@ class MainActivity : FragmentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
-        handle(intent)
+        // A recreated activity (rotation, theme change) must not replay the request that first opened it.
+        if (savedInstanceState == null) handle(intent)
         // A ready-to-use build connects as soon as it opens; nothing to type first.
         if (rivet.settings.gateway().complete && rivet.state.value.connection == Connection.Offline) RivetService.start(this)
-        setContent { RivetTheme { RivetAppUi(rivet, listenRequests) } }
+        setContent { RivetTheme { RivetAppUi(rivet, listenRequests, focusRequests, homeRequests) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -82,10 +89,20 @@ class MainActivity : FragmentActivity() {
         super.onStop()
     }
 
-    /** Opened as the assistant (long-press Home/Power) or from the "listen" shortcut: start voice input. */
+    /**
+     * Opened as the assistant (long-press Home/Power), from a widget or a launcher shortcut: talk, type, or run a
+     * quick key. A quick key carries only its fixed name, so another app can at most ask Rivet one of those
+     * read-only questions.
+     */
     private fun handle(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_ASSIST || intent?.action == Intent.ACTION_VOICE_COMMAND || intent?.getBooleanExtra(LISTEN, false) == true) {
-            listenRequests++
+        when (intent?.action) {
+            Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND, RivetWidgets.ACTION_LISTEN -> listenRequests++
+            RivetWidgets.ACTION_TYPE -> focusRequests++
+            RivetWidgets.ACTION_QUICK -> Quick.of(intent.data?.lastPathSegment)?.let {
+                rivet.send(it.prompt)
+                homeRequests++
+            }
+            else -> if (intent?.getBooleanExtra(LISTEN, false) == true) listenRequests++
         }
     }
 
@@ -98,7 +115,7 @@ private enum class Tab(val label: String) { Rivet("Rivet"), Activity("Activity")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int) {
+private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int) {
     val state by runtime.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Rivet) }
     var reviewing by rememberSaveable { mutableStateOf(false) }
@@ -122,6 +139,9 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int) {
             runtime.listening(false)
             Toast.makeText(context, "No speech recognizer is installed", Toast.LENGTH_SHORT).show()
         }
+    }
+    LaunchedEffect(focusRequests, homeRequests) {
+        if (focusRequests > 0 || homeRequests > 0) tab = Tab.Rivet
     }
     LaunchedEffect(listenRequests) {
         if (listenRequests > 0) {
@@ -162,10 +182,11 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int) {
                 Tab.Activity -> "R-7 · Activity log"
                 Tab.Settings -> "R-7 · Setup"
             },
+            rule = tab != Tab.Rivet,
         )
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (tab) {
-                Tab.Rivet -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = { reviewing = true })
+        Crossfade(tab, Modifier.weight(1f).fillMaxWidth(), animationSpec = tween(220), label = "tab") { shown ->
+            when (shown) {
+                Tab.Rivet -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = { reviewing = true }, focusRequests = focusRequests)
                 Tab.Activity -> ActivityScreen(runtime, state)
                 Tab.Settings -> SettingsScreen(runtime, state)
             }

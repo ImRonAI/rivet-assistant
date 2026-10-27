@@ -1,5 +1,6 @@
 package com.hiron.rivet.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,9 +40,15 @@ import com.hiron.rivet.core.RivetState
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.DateFormat
+import java.util.Calendar
 import java.util.Date
+import java.util.Locale
 
-/** What Rivet did and what it has scheduled: pending reminders, then the activity log as a trace (newest first). */
+/**
+ * What Rivet did and what it has scheduled: today's counters, pending reminders, then the activity log as a
+ * trace grouped by day (newest first).
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ActivityScreen(runtime: RivetRuntime, state: RivetState) {
     val p = LocalPalette.current
@@ -49,11 +57,19 @@ fun ActivityScreen(runtime: RivetRuntime, state: RivetState) {
         reminders = (runtime.reminders.list().data as? JSONObject)?.optJSONArray("reminders") ?: JSONArray()
     }
     val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
-    val log = state.log.asReversed()
+    val days = remember(state.log) { state.log.asReversed().groupBy { dayOf(it.at) } }
+    val today = state.log.filter { dayOf(it.at) == dayOf(System.currentTimeMillis()) }
     LazyColumn(Modifier.fillMaxSize().background(p.bg), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "stats") {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatTile(today.count { it.kind in setOf("device", "tool", "task", "turn") }, "Steps", p.cy, Modifier.weight(1f))
+                StatTile(today.count { it.kind == "approval" }, "Approvals", p.amb, Modifier.weight(1f))
+                StatTile(today.count { it.kind == "call" }, "Calls", p.accent, Modifier.weight(1f))
+            }
+        }
         if (reminders.length() > 0) {
-            item {
-                HudCard("Reminders", Modifier.padding(16.dp), pip = p.amb, meta = "${reminders.length()} set") {
+            item(key = "reminders") {
+                HudCard("Reminders", Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), pip = p.amb, meta = "${reminders.length()} set") {
                     (0 until reminders.length()).map { reminders.getJSONObject(it) }.forEach { r ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -69,23 +85,54 @@ fun ActivityScreen(runtime: RivetRuntime, state: RivetState) {
                 }
             }
         }
-        item {
+        item(key = "log") {
+            Spacer(Modifier.height(12.dp))
             HudHeaderRow(
                 "Activity log",
                 pip = if (state.activeTurn != null) p.cy else p.ink2,
                 live = state.activeTurn != null,
-                meta = "${log.size} events",
+                meta = "${state.log.size} events",
             )
         }
-        if (log.isEmpty()) {
-            item {
+        if (state.log.isEmpty()) {
+            item(key = "empty") {
                 Text(
                     "Nothing yet. Ask Rivet for something and every step it takes shows up here.",
                     color = p.ink2, style = Type.body, modifier = Modifier.padding(16.dp),
                 )
             }
         }
-        itemsIndexed(log) { i, e -> TraceRow(e, time.format(Date(e.at)), first = i == 0, last = i == log.lastIndex) }
+        days.forEach { (day, entries) ->
+            stickyHeader(key = "day:$day") { DayHeader(day) }
+            itemsIndexed(entries) { i, e -> TraceRow(e, time.format(Date(e.at)), first = i == 0, last = i == entries.lastIndex) }
+        }
+    }
+}
+
+private fun dayOf(at: Long): Long = Calendar.getInstance().apply {
+    timeInMillis = at
+    set(Calendar.HOUR_OF_DAY, 0)
+    set(Calendar.MINUTE, 0)
+    set(Calendar.SECOND, 0)
+    set(Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+@Composable
+private fun DayHeader(day: Long) {
+    val p = LocalPalette.current
+    val today = dayOf(System.currentTimeMillis())
+    val name = when (day) {
+        today -> "Today"
+        dayOf(today - 12 * 3_600_000L) -> "Yesterday"
+        else -> android.text.format.DateFormat.format("EEEE", Date(day)).toString()
+    }
+    val date = android.text.format.DateFormat.format("d MMM", Date(day)).toString()
+    Row(Modifier.fillMaxWidth().background(p.bg).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(name.uppercase(Locale.getDefault()), style = Type.labelMd, color = p.ink)
+        Spacer(Modifier.size(8.dp))
+        Text(date.uppercase(Locale.getDefault()), style = Type.labelMd, color = p.ink2)
+        Spacer(Modifier.size(10.dp))
+        Box(Modifier.weight(1f).height(1.dp).background(p.rule))
     }
 }
 
@@ -112,6 +159,7 @@ private fun TraceRow(e: LogEntry, at: String, first: Boolean, last: Boolean) {
                 val top = if (first) nodeY.toPx() else 0f
                 val bottom = if (last) nodeY.toPx() else size.height
                 if (bottom > top) drawLine(p.hudLine, Offset(x, top), Offset(x, bottom), strokeWidth = 2.dp.toPx())
+                drawCircle(color.copy(alpha = 0.18f), 10.dp.toPx(), Offset(x, nodeY.toPx()))
             },
         ) {
             Box(

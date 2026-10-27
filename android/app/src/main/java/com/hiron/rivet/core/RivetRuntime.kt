@@ -12,6 +12,7 @@ import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.service.Notifications
 import com.hiron.rivet.service.RivetService
 import com.hiron.rivet.voice.Speaker
+import com.hiron.rivet.widget.RivetWidgets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,6 +37,7 @@ class RivetApp : Application() {
         super.onCreate()
         Notifications.createChannels(this)
         runtime = RivetRuntime(this)
+        RivetWidgets.follow(this, runtime)
         if (runtime.settings.autoConnect && runtime.settings.gateway().complete) RivetService.start(this)
     }
 }
