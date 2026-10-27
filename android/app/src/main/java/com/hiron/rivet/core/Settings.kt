@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.hiron.rivet.BuildConfig
 import com.hiron.rivet.device.CarrierStyle
 import com.hiron.rivet.device.ForwardMode
 import java.security.KeyStore
@@ -18,15 +19,16 @@ class Settings(context: Context) {
     private val prefs = context.getSharedPreferences("rivet", Context.MODE_PRIVATE)
 
     var gatewayUrl: String
-        get() = prefs.getString("gateway_url", "").orEmpty()
+        get() = prefs.getString("gateway_url", null) ?: BuildConfig.DEFAULT_BRAIN_URL
         set(value) = prefs.edit().putString("gateway_url", value.trim()).apply()
 
     var sessionId: String
-        get() = prefs.getString("session_id", null) ?: ("phone-" + UUID.randomUUID().toString().take(8)).also { sessionId = it }
+        get() = prefs.getString("session_id", null)
+            ?: BuildConfig.DEFAULT_SESSION.ifBlank { "phone-" + UUID.randomUUID().toString().take(8) }.also { sessionId = it }
         set(value) = prefs.edit().putString("session_id", value.trim()).apply()
 
     var deviceToken: String
-        get() = prefs.getString("device_token", null)?.let { SecretBox.open(it) }.orEmpty()
+        get() = prefs.getString("device_token", null)?.let { SecretBox.open(it) } ?: BuildConfig.DEFAULT_DEVICE_TOKEN
         set(value) = prefs.edit().putString("device_token", if (value.isBlank()) null else SecretBox.seal(value.trim())).apply()
 
     var speakReplies: Boolean
@@ -34,7 +36,7 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putBoolean("speak_replies", value).apply()
 
     var autoConnect: Boolean
-        get() = prefs.getBoolean("auto_connect", false)
+        get() = prefs.getBoolean("auto_connect", BuildConfig.DEFAULT_DEVICE_TOKEN.isNotBlank())
         set(value) = prefs.edit().putBoolean("auto_connect", value).apply()
 
     /** Start a reply task for each new message notification (every reply still needs approval). */
@@ -44,7 +46,7 @@ class Settings(context: Context) {
 
     /** Rivet's Telnyx answering line (saved by the brain's call_answering_setup, or typed in Settings). */
     var answeringNumber: String
-        get() = prefs.getString("answering_number", "").orEmpty()
+        get() = prefs.getString("answering_number", null) ?: BuildConfig.DEFAULT_ANSWERING_NUMBER
         set(value) = prefs.edit().putString("answering_number", value.trim()).apply()
 
     var answeringMode: ForwardMode
@@ -60,6 +62,11 @@ class Settings(context: Context) {
     var forwardedTo: String
         get() = prefs.getString("forwarded_to", "").orEmpty()
         set(value) = prefs.edit().putString("forwarded_to", value.trim()).apply()
+
+    /** Whether the one-time permission request has been shown. */
+    var onboarded: Boolean
+        get() = prefs.getBoolean("onboarded", false)
+        set(value) = prefs.edit().putBoolean("onboarded", value).apply()
 
     fun gateway(): GatewayConfig = GatewayConfig(gatewayUrl, deviceToken, sessionId)
 }

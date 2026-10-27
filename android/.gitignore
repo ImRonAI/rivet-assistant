@@ -4,3 +4,4 @@ build/
 app/build/
 .kotlin/
 *.apk
+rivet.local.properties

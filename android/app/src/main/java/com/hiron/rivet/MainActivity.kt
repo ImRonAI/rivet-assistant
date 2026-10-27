@@ -1,7 +1,9 @@
 package com.hiron.rivet
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.widget.Toast
@@ -38,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.rivet
+import com.hiron.rivet.service.RivetService
 import com.hiron.rivet.ui.ActivityScreen
 import com.hiron.rivet.ui.ApprovalSheet
 import com.hiron.rivet.ui.HomeScreen
@@ -52,6 +55,8 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handle(intent)
+        // A ready-to-use build connects as soon as it opens; nothing to type first.
+        if (rivet.settings.gateway().complete && rivet.state.value.connection == Connection.Offline) RivetService.start(this)
         setContent { RivetTheme { RivetAppUi(rivet, listenRequests) } }
     }
 
@@ -119,6 +124,26 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int) {
     }
     LaunchedEffect(state.connection) {
         if (state.connection == Connection.Offline && !runtime.settings.gateway().complete) tab = Tab.Settings
+    }
+    // First launch: ask for everything Rivet uses in one go, instead of making the user hunt through Settings.
+    val firstRun = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        runtime.settings.onboarded = true
+    }
+    LaunchedEffect(Unit) {
+        if (!runtime.settings.onboarded) {
+            firstRun.launch(
+                buildList {
+                    addAll(
+                        listOf(
+                            Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS,
+                            Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR,
+                            Manifest.permission.CALL_PHONE, Manifest.permission.READ_CALL_LOG,
+                        ),
+                    )
+                    if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                }.toTypedArray(),
+            )
+        }
     }
 
     Scaffold(

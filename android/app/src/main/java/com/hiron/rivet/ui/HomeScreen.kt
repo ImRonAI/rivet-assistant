@@ -1,12 +1,16 @@
 package com.hiron.rivet.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -58,11 +63,22 @@ import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(runtime: RivetRuntime, state: RivetState, onListen: () -> Unit, onReviewApprovals: () -> Unit) {
     val p = LocalPalette.current
+    // The robot gives the chat room once there is a conversation, and more while typing.
+    val keyboard = WindowInsets.isImeVisible
+    val robotHeight by animateDpAsState(
+        when {
+            keyboard -> 120.dp
+            state.messages.isNotEmpty() -> 220.dp
+            else -> 360.dp
+        },
+        label = "robot",
+    )
     Column(Modifier.fillMaxSize().background(p.bg).imePadding()) {
-        Box(Modifier.fillMaxWidth().weight(0.9f)) {
+        Box(Modifier.fillMaxWidth().height(robotHeight)) {
             RobotView(runtime, p.dark, Modifier.fillMaxSize())
             StatusChip(state, Modifier.align(Alignment.TopStart).padding(12.dp))
         }
@@ -129,12 +145,16 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
     }
 }
 
+const val CHAT_TAG = "chat"
+
 @Composable
-private fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier) {
+internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier) {
     val p = LocalPalette.current
     val list = rememberLazyListState()
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
-        if (messages.isNotEmpty()) list.animateScrollToItem(messages.size - 1)
+    // Newest at the bottom (reversed layout): streaming text stays in view while you're at the bottom and
+    // never pulls you back down if you scrolled up; a new message brings you to the bottom.
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) list.animateScrollToItem(0)
     }
     if (messages.isEmpty()) {
         Box(modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -145,10 +165,15 @@ private fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier
         }
         return
     }
-    LazyColumn(modifier.fillMaxWidth(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        modifier.fillMaxWidth().testTag(CHAT_TAG),
+        state = list,
+        reverseLayout = true,
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom),
+    ) {
         item { Spacer(Modifier.height(4.dp)) }
-        items(messages, key = { it.id }) { Bubble(it) }
         if (error != null) item { Text(error, color = p.rec, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp)) }
+        items(messages.asReversed(), key = { it.id }) { Bubble(it) }
         item { Spacer(Modifier.height(4.dp)) }
     }
 }

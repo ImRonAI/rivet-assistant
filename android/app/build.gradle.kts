@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -12,8 +14,17 @@ android {
         applicationId = "com.hiron.rivet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.2"
+        // Ready-to-use defaults from rivet.local.properties (never committed); all stay editable in Settings.
+        val local = Properties().apply {
+            rootProject.file("rivet.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+        }
+        fun baked(key: String) = "\"" + local.getProperty(key, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        buildConfigField("String", "DEFAULT_BRAIN_URL", baked("brainUrl"))
+        buildConfigField("String", "DEFAULT_SESSION", baked("session"))
+        buildConfigField("String", "DEFAULT_DEVICE_TOKEN", baked("deviceToken"))
+        buildConfigField("String", "DEFAULT_ANSWERING_NUMBER", baked("answeringNumber"))
     }
 
     buildTypes {
@@ -31,9 +42,11 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
     lint {
         abortOnError = true
@@ -64,9 +77,13 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
 }

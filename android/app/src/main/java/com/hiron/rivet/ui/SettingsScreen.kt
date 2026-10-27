@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -78,7 +79,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
     }
     val hasToken = remember(refresh, token) { s.deviceToken.isNotBlank() }
 
-    Column(Modifier.fillMaxSize().background(p.bg).verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(Modifier.fillMaxSize().background(p.bg).imePadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("SETTINGS", style = Label, color = p.accent)
         Text("Connect Rivet", style = MaterialTheme.typography.headlineSmall, color = p.ink)
         Spacer(Modifier.size(12.dp))
