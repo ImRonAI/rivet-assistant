@@ -7,25 +7,24 @@ import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.widget.Toast
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ListAlt
-import androidx.compose.material.icons.filled.SmartToy
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +43,10 @@ import com.hiron.rivet.service.RivetService
 import com.hiron.rivet.ui.ActivityScreen
 import com.hiron.rivet.ui.ApprovalSheet
 import com.hiron.rivet.ui.HomeScreen
+import com.hiron.rivet.ui.HudHeader
 import com.hiron.rivet.ui.LocalPalette
+import com.hiron.rivet.ui.PendantTab
+import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
 import com.hiron.rivet.ui.SettingsScreen
 
@@ -53,7 +55,11 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Rivet is dark first: light system-bar icons on its graphite surfaces, whatever the system theme.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         handle(intent)
         // A ready-to-use build connects as soon as it opens; nothing to type first.
         if (rivet.settings.gateway().complete && rivet.state.value.connection == Connection.Offline) RivetService.start(this)
@@ -90,6 +96,7 @@ class MainActivity : FragmentActivity() {
 
 private enum class Tab(val label: String) { Rivet("Rivet"), Activity("Activity"), Settings("Settings") }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int) {
     val state by runtime.state.collectAsStateWithLifecycle()
@@ -146,39 +153,33 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int) {
         }
     }
 
-    Scaffold(
-        containerColor = p.bg,
-        bottomBar = {
-            NavigationBar(containerColor = p.bgHi) {
-                Tab.entries.forEach { t ->
-                    NavigationBarItem(
-                        selected = tab == t,
-                        onClick = { tab = t },
-                        icon = {
-                            BadgedBox(badge = { if (t == Tab.Rivet && state.approvals.isNotEmpty()) Badge { Text("${state.approvals.size}") } }) {
-                                Icon(
-                                    when (t) {
-                                        Tab.Rivet -> Icons.Filled.SmartToy
-                                        Tab.Activity -> Icons.Filled.ListAlt
-                                        Tab.Settings -> Icons.Filled.Tune
-                                    },
-                                    contentDescription = null,
-                                )
-                            }
-                        },
-                        label = { Text(t.label) },
-                        colors = NavigationBarItemDefaults.colors(selectedIconColor = p.accent, selectedTextColor = p.accent, indicatorColor = p.card),
-                    )
-                }
-            }
-        },
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+    // Header HUD, the screen, and the tab strip; the strip steps aside while the keyboard is up.
+    Column(Modifier.fillMaxSize().background(p.bg).imePadding()) {
+        HudHeader(
+            state,
+            when (tab) {
+                Tab.Rivet -> "R-7 · Assistant"
+                Tab.Activity -> "R-7 · Activity log"
+                Tab.Settings -> "R-7 · Setup"
+            },
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
                 Tab.Rivet -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = { reviewing = true })
                 Tab.Activity -> ActivityScreen(runtime, state)
                 Tab.Settings -> SettingsScreen(runtime, state)
             }
+        }
+        if (!WindowInsets.isImeVisible) {
+            PendantTabs(
+                listOf(
+                    PendantTab(Tab.Rivet, Tab.Rivet.label, Icons.Outlined.SmartToy, badge = state.approvals.size),
+                    PendantTab(Tab.Activity, Tab.Activity.label, Icons.Outlined.Timeline),
+                    PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune),
+                ),
+                tab,
+                { tab = it },
+            )
         }
     }
     if (reviewing && state.approvals.isNotEmpty()) {

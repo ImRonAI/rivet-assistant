@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -14,6 +15,8 @@ import com.hiron.rivet.MainActivity
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.rivet
 import com.hiron.rivet.ui.COMPOSER_TAG
+import com.hiron.rivet.ui.STAGE_TAG
+import com.hiron.rivet.ui.TAB_TAG_PREFIX
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -77,6 +80,10 @@ class AppFlowTest {
             }
         }
         FileOutputStream(File(dir, "$name.png")).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // The robot WebView draws nothing under Robolectric; record where its stage is so a review can place it.
+        compose.onAllNodesWithTag(STAGE_TAG).fetchSemanticsNodes().firstOrNull()?.boundsInWindow?.let { b ->
+            File(dir, "$name.stage.json").writeText("""{"left":${b.left},"top":${b.top},"right":${b.right},"bottom":${b.bottom}}""")
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -184,11 +191,11 @@ class AppFlowTest {
             """{"type":"call.message","caller_name":"Dana from Wasatch Dental","callback_number":"+18015550123",
                "message":"Confirming Friday at 9.","urgent":false,"hung_up_early":false,"at":1793080062.0}""",
         )
-        compose.onNodeWithText("Activity").performClick()
+        compose.onNodeWithTag(TAB_TAG_PREFIX + "activity").performClick()
         until { compose.onAllNodesWithTextCount("Dana from Wasatch Dental") > 0 }
         shot("05-activity")
 
-        compose.onNodeWithText("Settings").performClick()
+        compose.onNodeWithTag(TAB_TAG_PREFIX + "settings").performClick()
         compose.waitForIdle()
         shot("06-settings-top")
         compose.onNode(hasText("Turn on")).performScrollTo()

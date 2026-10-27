@@ -12,30 +12,16 @@ import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,8 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -81,86 +65,74 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
     val hasToken = remember(refresh, token) { s.deviceToken.isNotBlank() }
     // A ready-to-use build hides the connection details; they open only when something needs changing.
     var advanced by remember { mutableStateOf(!s.gateway().complete) }
+    val (linkColor, linkMeta) = when (state.connection) {
+        Connection.Online -> p.ok to "Online"
+        Connection.Connecting -> p.amb to "Linking"
+        Connection.Offline -> p.rec to "Offline"
+    }
 
-    Column(Modifier.fillMaxSize().background(p.bg).imePadding().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("SETTINGS", style = Label, color = p.accent)
-        Text("Rivet", style = MaterialTheme.typography.headlineSmall, color = p.ink)
-        Spacer(Modifier.size(12.dp))
-
-        Section("Connection") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(10.dp).clip(RoundedCornerShape(50)).background(
-                        when (state.connection) {
-                            Connection.Online -> p.ok
-                            Connection.Connecting -> p.amb
-                            Connection.Offline -> p.rec
-                        },
-                    ),
-                )
-                Spacer(Modifier.size(10.dp))
-                Text(
-                    when (state.connection) {
-                        Connection.Online -> "Connected to Rivet"
-                        Connection.Connecting -> "Connecting to Rivet…"
-                        Connection.Offline -> state.lastError ?: "Not connected"
-                    },
-                    style = MaterialTheme.typography.titleMedium, color = p.ink, modifier = Modifier.weight(1f),
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(
+        Modifier.fillMaxSize().background(p.bg).verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        HudCard("Link", pip = linkColor, live = state.connection == Connection.Connecting, meta = linkMeta, metaColor = linkColor) {
+            Text(
+                when (state.connection) {
+                    Connection.Online -> "Connected to Rivet"
+                    Connection.Connecting -> "Connecting to Rivet…"
+                    Connection.Offline -> state.lastError ?: "Not connected"
+                },
+                style = Type.headline, color = p.ink,
+            )
+            Readout("Brain", s.gatewayUrl.removePrefix("https://").removePrefix("wss://").trimEnd('/').ifBlank { "not set" })
+            Readout("Session", s.sessionId.ifBlank { "not set" })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (state.connection == Connection.Offline) {
-                    Button(
-                        onClick = { RivetService.start(context) },
-                        colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
-                    ) { Text("Connect") }
+                    Keycap("Connect", { RivetService.start(context) }, tone = KeyTone.Accent)
                 } else {
-                    OutlinedButton(onClick = { RivetService.stop(context) }) { Text("Disconnect") }
+                    Keycap("Disconnect", { RivetService.stop(context) })
                 }
-                TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide details" else "Connection details") }
+                SysKey("Details", advanced, { advanced = it })
             }
         }
 
-        if (advanced) Section("Connection details") {
-            OutlinedTextField(url, { url = it }, label = { Text("Brain URL") }, placeholder = { Text("https://rivet-brain.fly.dev") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
-            OutlinedTextField(token, { token = it }, label = { Text(if (hasToken) "Device token (saved, encrypted)" else "Device token") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation(),
+        if (advanced) HudCard("Connection details") {
+            RecessedField(url, { url = it }, label = "Brain URL", placeholder = "https://rivet-brain.fly.dev",
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+            RecessedField(token, { token = it }, label = if (hasToken) "Device token (saved, encrypted)" else "Device token",
+                placeholder = if (hasToken) "Leave blank to keep it" else null,
+                visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-            OutlinedTextField(session, { session = it }, label = { Text("Session id") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.size(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(
-                    onClick = {
-                        s.gatewayUrl = url
-                        if (token.isNotBlank()) s.deviceToken = token
-                        if (session.isNotBlank()) s.sessionId = session
-                        token = ""
-                        RivetService.start(context)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
-                ) { Text(if (state.connection == Connection.Offline) "Save & connect" else "Save & reconnect") }
-            }
+            RecessedField(session, { session = it }, label = "Session id")
+            Keycap(
+                if (state.connection == Connection.Offline) "Save & connect" else "Save & reconnect",
+                {
+                    s.gatewayUrl = url
+                    if (token.isNotBlank()) s.deviceToken = token
+                    if (session.isNotBlank()) s.sessionId = session
+                    token = ""
+                    RivetService.start(context)
+                },
+                tone = KeyTone.Accent,
+            )
         }
 
-        Section("Behaviour") {
+        HudCard("Behaviour") {
             Toggle("Read replies aloud", speak) { speak = it; s.speakReplies = it }
-            Toggle("Connect automatically (also after reboot)", auto) { auto = it; s.autoConnect = it }
+            Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
             Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
         }
 
-        Section("Call answering") {
-            CallAnswering(runtime, refresh)
-        }
+        CallAnswering(runtime, refresh)
 
-        Section("Permissions") {
+        HudCard("Permissions") {
             Permissions(context, refresh) { refresh++ }
         }
 
         Text(
             "On Android 13+, sideloaded apps must first be allowed restricted settings: App info › ⋮ › Allow restricted " +
                 "settings, then turn on Notification access and the App operator.",
-            style = MaterialTheme.typography.bodySmall, color = p.ink2, modifier = Modifier.padding(vertical = 8.dp),
+            style = Type.body, color = p.ink2, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
         )
     }
 }
@@ -191,70 +163,75 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
         if (error == null) onDone()
     }
 
-    Text(
-        "Callers still dial your number. When this is on, your carrier forwards calls to Rivet's answering line on " +
-            "Telnyx, Rivet takes a message, and you get it here. (Android doesn't let apps speak on ordinary calls.)",
-        style = MaterialTheme.typography.bodySmall, color = p.ink2,
-    )
-    OutlinedTextField(
-        number, { number = it }, label = { Text("Rivet's answering number") }, placeholder = { Text("+17605550100") },
-        singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-    )
-    if (number.isBlank()) {
-        TextButton(onClick = { runtime.send("Set up call answering so you can answer my calls.") }) {
-            Text("Ask Rivet to set up an answering number")
+    val on = forwardedTo.isNotBlank()
+    HudCard("Call answering", pip = if (on) p.ok else p.ink2, meta = if (on) "On" else "Off", metaColor = if (on) p.ok else null) {
+        Text(
+            "Callers still dial your number. When this is on, your carrier forwards calls to Rivet's answering line on " +
+                "Telnyx, Rivet takes a message, and you get it here. (Android doesn't let apps speak on ordinary calls.)",
+            style = Type.body, color = p.ink2,
+        )
+        RecessedField(
+            number, { number = it }, label = "Rivet's answering number", placeholder = "+17605550100",
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+        )
+        if (number.isBlank()) {
+            Keycap("Ask Rivet to set up an answering number", { runtime.send("Set up call answering so you can answer my calls.") })
         }
-    }
-    Text("ANSWER", style = Label, color = p.ink2)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(mode == ForwardMode.Unanswered, { mode = ForwardMode.Unanswered }, label = { Text("Calls I don't pick up") }, colors = rivetChip())
-        FilterChip(mode == ForwardMode.Always, { mode = ForwardMode.Always }, label = { Text("All calls") }, colors = rivetChip())
-    }
-    Text("CARRIER CODES", style = Label, color = p.ink2)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(style == null, { style = null; s.carrierStyle = null }, label = { Text("Auto (${carrierLabel(detected)})") }, colors = rivetChip())
-        FilterChip(style == CarrierStyle.Gsm, { style = CarrierStyle.Gsm; s.carrierStyle = style }, label = { Text("Standard") }, colors = rivetChip())
-        FilterChip(style == CarrierStyle.Verizon, { style = CarrierStyle.Verizon; s.carrierStyle = style }, label = { Text("Verizon") }, colors = rivetChip())
-    }
-    Text(
-        when {
-            forwardedTo.isBlank() -> "Off."
-            forwardedTo != number.trim() -> "On, but forwarding to $forwardedTo. Turn on again to use the new number."
-            else -> "On: forwarding to $forwardedTo."
-        },
-        style = MaterialTheme.typography.bodyMedium, color = if (forwardedTo.isBlank()) p.ink2 else p.ok,
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(
-            onClick = {
-                val target = number.trim()
-                if (code == null) {
-                    error = "Enter Rivet's answering number in +1… form first."
-                } else {
-                    dial(code) {
-                        s.answeringNumber = target
-                        s.answeringMode = mode
-                        s.forwardedTo = target
-                        forwardedTo = target
+        Text("ANSWER", style = Type.labelSm, color = p.ink2)
+        Segmented(
+            listOf(ForwardMode.Unanswered to "Unanswered calls", ForwardMode.Always to "Every call"),
+            mode, { mode = it },
+        )
+        Text("CARRIER CODES", style = Type.labelSm, color = p.ink2)
+        Segmented(
+            listOf<Pair<CarrierStyle?, String>>(null to "Auto", CarrierStyle.Gsm to "Standard", CarrierStyle.Verizon to "Verizon"),
+            style, { style = it; s.carrierStyle = it },
+        )
+        if (style == null) Text("Detected: ${carrierLabel(detected)} codes", style = Type.mono, color = p.ink2)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Pip(if (on) p.ok else p.ink2, size = 7.dp)
+            Text(
+                when {
+                    !on -> "Off."
+                    forwardedTo != number.trim() -> "On, but forwarding to $forwardedTo. Turn on again to use the new number."
+                    else -> "On: forwarding to $forwardedTo."
+                },
+                style = Type.bodyLg, color = if (on) p.ink else p.ink2,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Keycap(
+                "Turn on",
+                {
+                    val target = number.trim()
+                    if (code == null) {
+                        error = "Enter Rivet's answering number in +1… form first."
+                    } else {
+                        dial(code) {
+                            s.answeringNumber = target
+                            s.answeringMode = mode
+                            s.forwardedTo = target
+                            forwardedTo = target
+                        }
                     }
+                },
+                tone = KeyTone.Accent,
+            )
+            Keycap("Turn off", {
+                dial(CallForwarding.disableCode(effective)) {
+                    s.forwardedTo = ""
+                    forwardedTo = ""
                 }
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
-        ) { Text("Turn on") }
-        OutlinedButton(onClick = {
-            dial(CallForwarding.disableCode(effective)) {
-                s.forwardedTo = ""
-                forwardedTo = ""
-            }
-        }) { Text("Turn off") }
+            })
+        }
+        error?.let { Text(it, style = Type.body, color = p.rec) }
+        Text(
+            (code?.let { "Turn on dials $it" } ?: "Turn on dials your carrier's forwarding code") +
+                "; turn off dials ${CallForwarding.disableCode(effective)}. Your carrier confirms on screen. Forwarded calls " +
+                "may count against your plan; calls Rivet answers use Telnyx minutes.",
+            style = Type.body, color = p.ink2,
+        )
     }
-    error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = p.rec) }
-    Text(
-        (code?.let { "Turn on dials $it" } ?: "Turn on dials your carrier's forwarding code") +
-            "; turn off dials ${CallForwarding.disableCode(effective)}. Your carrier confirms on screen. Forwarded calls " +
-            "may count against your plan; calls Rivet answers use Telnyx minutes.",
-        style = MaterialTheme.typography.bodySmall, color = p.ink2,
-    )
 }
 
 private fun carrierLabel(style: CarrierStyle) = if (style == CarrierStyle.Verizon) "Verizon" else "standard"
@@ -270,6 +247,10 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
     }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onChanged() }
     val role = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { onChanged() }
+    val missing = remember(refresh) {
+        runtimePerms.flatMap { it.third }.filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+    }
+    if (missing.isNotEmpty()) Keycap("Allow all", { request.launch(missing.toTypedArray()) }, tone = KeyTone.Accent)
     runtimePerms.forEach { (title, why, perms) ->
         val granted = remember(refresh) { perms.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } }
         PermissionRow(title, why, granted) { request.launch(perms.toTypedArray()) }
@@ -291,9 +272,9 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
     PermissionRow("Default assistant", "Long-press Home or Power to talk to Rivet", assistant) {
         context.startActivity(Intent(AndroidSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
     }
-    TextButton(onClick = {
+    Keycap("Open Rivet's app info", {
         context.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
-    }) { Text("Open Rivet's app info") }
+    })
 }
 
 private fun notificationAccess(context: Context): Boolean {
@@ -305,34 +286,27 @@ private fun notificationAccess(context: Context): Boolean {
 @Composable
 private fun PermissionRow(title: String, why: String, granted: Boolean, onGrant: () -> Unit) {
     val p = LocalPalette.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = p.ink)
-            Text(why, style = MaterialTheme.typography.bodySmall, color = p.ink2)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(title, style = Type.labelLg, color = p.ink)
+            Text(why, style = Type.body, color = p.ink2)
         }
-        if (granted) Text("ON", style = Label, color = p.ok)
-        else OutlinedButton(onClick = onGrant) { Text("Allow") }
+        if (granted) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Pip(p.ok, size = 6.dp)
+                Text("ON", style = Type.labelMd, color = p.ok)
+            }
+        } else {
+            Keycap("Allow", onGrant)
+        }
     }
 }
 
 @Composable
 private fun Toggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = p.ink, modifier = Modifier.weight(1f))
-        Switch(checked = value, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(14.dp)
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(shape).background(p.card).border(1.dp, p.line, shape).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(title.uppercase(), style = Label, color = p.ink2)
-        content()
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = Type.bodyLg, color = p.ink, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        RivetSwitch(value, onChange)
     }
 }
