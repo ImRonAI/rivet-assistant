@@ -115,6 +115,12 @@ class AppFlowTest {
 
     @Test
     fun theWholeAppWorksAgainstABrain() {
+        // First run: the power-on screen, then straight into the app.
+        compose.onNodeWithText("Turn everything on").assertIsDisplayed()
+        shot("00-onboarding")
+        compose.onNodeWithText("Not now").performClick()
+        compose.waitForIdle()
+        assertTrue(compose.activity.rivet.settings.onboarded)
         shot("01-home-start")
 
         // Point the runtime at the stand-in brain and connect, as the baked-in config does with the real one.

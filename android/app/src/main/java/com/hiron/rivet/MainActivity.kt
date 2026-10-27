@@ -1,9 +1,7 @@
 package com.hiron.rivet
 
-import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.widget.Toast
@@ -47,7 +45,9 @@ import com.hiron.rivet.ui.ActivityScreen
 import com.hiron.rivet.ui.ApprovalSheet
 import com.hiron.rivet.ui.HomeScreen
 import com.hiron.rivet.ui.HudHeader
+import com.hiron.rivet.ui.CAPABILITIES
 import com.hiron.rivet.ui.LocalPalette
+import com.hiron.rivet.ui.Onboarding
 import com.hiron.rivet.ui.PendantTab
 import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
@@ -153,25 +153,17 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
     LaunchedEffect(state.connection) {
         if (state.connection == Connection.Offline && !runtime.settings.gateway().complete) tab = Tab.Settings
     }
-    // First launch: ask for everything Rivet uses in one go, instead of making the user hunt through Settings.
-    val firstRun = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+    // First launch: the power-on screen asks for everything Rivet uses in one go, instead of making the user
+    // hunt through Settings.
+    var onboarded by rememberSaveable { mutableStateOf(runtime.settings.onboarded) }
+    val finish = {
         runtime.settings.onboarded = true
+        onboarded = true
     }
-    LaunchedEffect(Unit) {
-        if (!runtime.settings.onboarded) {
-            firstRun.launch(
-                buildList {
-                    addAll(
-                        listOf(
-                            Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS,
-                            Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR,
-                            Manifest.permission.CALL_PHONE, Manifest.permission.READ_CALL_LOG,
-                        ),
-                    )
-                    if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-                }.toTypedArray(),
-            )
-        }
+    val firstRun = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { finish() }
+    if (!onboarded) {
+        Onboarding(runtime, onAllow = { firstRun.launch(CAPABILITIES.flatMap { it.permissions }.toTypedArray()) }, onSkip = finish)
+        return
     }
 
     // Header HUD, the screen, and the tab strip; the strip steps aside while the keyboard is up.
