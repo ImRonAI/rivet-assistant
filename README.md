@@ -89,9 +89,19 @@ token is an HMAC of the session id under the device token.
 Kotlin + Compose, minSdk 29, targetSdk 36. See [`android/README.md`](android/README.md) for building,
 installing and the on-device checklist.
 
+- **Interface**: the Rivet design system (dark graphite, safety orange, cyan/green/amber/crimson status;
+  Big Shoulders, IBM Plex Sans and Plex Mono) in Compose: a telemetry header, the robot on its stage with a
+  greeting, a transcript sheet you pull up over it, and a dock of keycaps (quick keys, a task latch and an
+  orange talk key). Replies render their markdown and citations. First launch is a power-on checklist.
+- **Launcher**: an adaptive icon drawn from Rivet's head with a themed monochrome layer
+  (`android/tools/build_icon.py` generates every icon drawable from one shape list), long-press shortcuts
+  (talk, type, catch me up, my day) and two home-screen widgets: a search bar ("Ask Rivet anything" with
+  a talk key) and a panel with link status, Rivet's latest reply and quick keys. Widgets and shortcuts open
+  the app through fixed actions; a quick key carries only its name, never free text.
 - **Robot**: the original `Rivet_the_Robot.html`, bundled with offline fonts and a small bridge
-  (`android/robot/bridge.js`) so the app drives its moves, trace HUD, email and text cards, and lip sync
-  from text-to-speech. Served from app assets only (no network, no file access).
+  (`android/robot/bridge.js`) so the app drives its moves, trace HUD, email and text cards, lip sync from
+  text-to-speech, and a stage glow in the colour of what Rivet is doing. Served from app assets only (no
+  network, no file access).
 - **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
   reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
 - **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that
