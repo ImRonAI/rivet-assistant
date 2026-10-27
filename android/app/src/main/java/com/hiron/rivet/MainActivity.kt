@@ -1,8 +1,11 @@
 package com.hiron.rivet
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings as AndroidSettings
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
@@ -53,12 +56,24 @@ import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
 import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.SettingsScreen
+import com.hiron.rivet.voice.RivetVoiceService
 import com.hiron.rivet.widget.RivetWidgets
 
 class MainActivity : FragmentActivity() {
     private var listenRequests by mutableIntStateOf(0)
     private var focusRequests by mutableIntStateOf(0)
     private var homeRequests by mutableIntStateOf(0)
+
+    // Asked for from the assistant overlay, which has no activity to show the permission dialog itself.
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        when {
+            granted -> Toast.makeText(this, "Microphone on. Long-press Home to talk to Rivet.", Toast.LENGTH_LONG).show()
+            // Denied for good: only the app's settings page can turn it back on.
+            !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> startActivity(
+                Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+            )
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,14 +106,15 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Opened as the assistant (long-press Home/Power), from a widget or a launcher shortcut: talk, type, or run a
-     * quick key. A quick key carries only its fixed name, so another app can at most ask Rivet one of those
-     * read-only questions.
+     * Opened as the assistant (long-press Home/Power), from a widget, a launcher shortcut or the assistant
+     * overlay: talk, type, run a quick key, or allow the overlay's microphone. A quick key carries only its fixed
+     * name, so another app can at most ask Rivet one of those read-only questions.
      */
     private fun handle(intent: Intent?) {
         when (intent?.action) {
             Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND, RivetWidgets.ACTION_LISTEN -> listenRequests++
             RivetWidgets.ACTION_TYPE -> focusRequests++
+            RivetVoiceService.ACTION_ALLOW_MIC -> micPermission.launch(Manifest.permission.RECORD_AUDIO)
             RivetWidgets.ACTION_QUICK -> Quick.of(intent.data?.lastPathSegment)?.let {
                 rivet.send(it.prompt)
                 homeRequests++

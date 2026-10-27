@@ -25,7 +25,9 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
    - Notification access: turn Rivet on (reading and replying to messages in any app).
    - App operator: Accessibility › Rivet app operator › on.
    - Call screening: accept the role prompt.
-   - Default assistant: Default apps › Digital assistant app › Rivet (long-press Home/Power opens Rivet listening).
+   - Default assistant: Default apps › Digital assistant app › Rivet (long-press Home/Power opens Rivet's overlay,
+     listening, over the app you are in). The first time, the overlay's **Allow mic** key opens Rivet to grant the
+     microphone.
 
 ## On-device checklist
 
@@ -42,7 +44,10 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Turn on airplane mode mid-turn, then off: the app reconnects, pending approvals come back, the turn finishes.
 - [ ] Lock the phone while an approval is pending: the notification's Approve asks for unlock; a high-risk
       approval only offers Review, and approving it in the app asks for biometrics.
-- [ ] Long-press Home with Rivet as the digital assistant: Rivet opens listening.
+- [ ] Long-press Home with Rivet as the digital assistant, from another app: the overlay slides up over that app
+      and listens; your words appear as you speak; the reply streams in and is read aloud; tapping the scrim or Back
+      closes it and stops speech; **Open Rivet** shows the same conversation in the app; **Type** opens a field
+      above the keyboard. With the phone locked, it only offers to unlock.
 - [ ] Call answering (brain needs `RIVET_PUBLIC_URL`): "Set up call answering" ends with the number saved in
       Settings › Call answering; **Turn on** shows the carrier's confirmation; a call you let ring goes to
       Rivet, which takes a message; the phone shows "Rivet is answering…" and then the message; **Turn off** restores normal ringing.
