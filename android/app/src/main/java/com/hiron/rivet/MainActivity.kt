@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
@@ -35,7 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hiron.rivet.core.Connection
@@ -194,7 +195,7 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
         if (!WindowInsets.isImeVisible) {
             PendantTabs(
                 listOf(
-                    PendantTab(Tab.Rivet, Tab.Rivet.label, Icons.Outlined.SmartToy, badge = state.approvals.size),
+                    PendantTab(Tab.Rivet, Tab.Rivet.label, ImageVector.vectorResource(R.drawable.ic_rivet), badge = state.approvals.size),
                     PendantTab(Tab.Activity, Tab.Activity.label, Icons.Outlined.Timeline),
                     PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune),
                 ),

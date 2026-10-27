@@ -18,6 +18,7 @@ import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.ui.Quick
+import com.hiron.rivet.ui.Rich
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,7 +63,7 @@ object RivetWidgets {
 
     fun snapshotOf(state: RivetState) = WidgetSnapshot(
         connection = state.connection,
-        lastReply = state.messages.lastOrNull { !it.fromUser && !it.streaming && it.text.isNotBlank() }?.text.orEmpty(),
+        lastReply = state.messages.lastOrNull { !it.fromUser && !it.streaming && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
         waiting = state.approvals.size,
     )
 

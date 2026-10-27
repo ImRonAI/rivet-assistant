@@ -164,8 +164,8 @@ class AppFlowTest {
         brain(
             socket,
             """{"type":"text","delta":"Tomorrow you have ","lane":"default"}""",
-            """{"type":"text","delta":"a dentist cleaning at 9 AM.","lane":"default"}""",
-            """{"type":"turn.completed","turn_id":"$id","lane":"default","text":"Tomorrow you have a dentist cleaning at 9 AM.","restarts":0}""",
+            """{"type":"text","delta":"a **dentist cleaning** at 9 AM.","lane":"default"}""",
+            """{"type":"turn.completed","turn_id":"$id","lane":"default","text":"Tomorrow you have a **dentist cleaning** at 9 AM.","restarts":0}""",
         )
         until { compose.onAllNodesWithTextCount("dentist cleaning") > 0 }
         compose.onNodeWithText("Tomorrow you have a dentist cleaning at 9 AM.").assertIsDisplayed()

@@ -32,6 +32,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
@@ -118,6 +120,7 @@ const val TAB_TAG_PREFIX = "tab-"
 @Composable
 fun <T> PendantTabs(tabs: List<PendantTab<T>>, selected: T, onSelect: (T) -> Unit) {
     val p = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
     Column(Modifier.fillMaxWidth().background(p.bg).navigationBarsPadding()) {
         Rule()
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -137,7 +140,10 @@ fun <T> PendantTabs(tabs: List<PendantTab<T>>, selected: T, onSelect: (T) -> Uni
                 tabs.forEach { t ->
                     val on = t.value == selected
                     Box(
-                        Modifier.weight(1f).height(58.dp).selectable(on, role = Role.Tab) { onSelect(t.value) }
+                        Modifier.weight(1f).height(58.dp).selectable(on, role = Role.Tab) {
+                            if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                            onSelect(t.value)
+                        }
                             .testTag(TAB_TAG_PREFIX + t.label.lowercase()),
                         contentAlignment = Alignment.Center,
                     ) {

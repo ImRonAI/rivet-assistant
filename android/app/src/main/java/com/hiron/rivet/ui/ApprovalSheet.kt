@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -136,14 +137,18 @@ private fun ApprovalCard(
     }
     val shape = RoundedCornerShape(14.dp)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, p.hudLine, shape).padding(14.dp),
+        Modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, p.hudLine, shape).rivets(p.keyLine).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Tag(a.tier, tierColor, hot = a.high)
             Spacer(Modifier.size(8.dp))
             Text(a.tool, style = Type.labelMd, color = p.ink2, modifier = Modifier.weight(1f), maxLines = 1)
-            if (onToggle != null) RivetSwitch(approved, onToggle)
+            RiskMeter(a.tier, a.high, tierColor)
+            if (onToggle != null) {
+                Spacer(Modifier.size(8.dp))
+                RivetSwitch(approved, onToggle)
+            }
         }
         Text(a.summary, style = Type.title, color = p.ink)
         a.operations.forEach { op ->
@@ -193,6 +198,24 @@ private fun ApprovalCard(
                 Text("Don't ask again for 30 minutes", style = Type.body, color = p.ink2, modifier = Modifier.weight(1f))
                 RivetSwitch(remember30, onRemember)
             }
+        }
+    }
+}
+
+/** Five segments lit up to the action's risk: read, send, write, delete, purchase. */
+@Composable
+private fun RiskMeter(tier: String, high: Boolean, color: Color) {
+    val p = LocalPalette.current
+    val level = when (tier) {
+        "read" -> 1
+        "send" -> 2
+        "write" -> 3
+        "destructive" -> 4
+        else -> if (high) 5 else 3
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+        repeat(5) { i ->
+            Box(Modifier.size(width = 10.dp, height = 6.dp).clip(RoundedCornerShape(2.dp)).background(if (i < level) color else p.keyLine))
         }
     }
 }

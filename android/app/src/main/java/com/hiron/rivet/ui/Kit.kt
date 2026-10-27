@@ -66,6 +66,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -152,6 +154,7 @@ fun IconKey(
 @Composable
 fun SysKey(text: String, on: Boolean, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     Row(
@@ -160,7 +163,10 @@ fun SysKey(text: String, on: Boolean, onToggle: (Boolean) -> Unit, modifier: Mod
             .lip(p.keyShadow, !pressed)
             .clip(KeyShape).background(if (pressed) p.high else p.key).topLight(Color.White.copy(alpha = 0.06f))
             .border(1.dp, if (on) p.ink2 else p.keyLine, KeyShape)
-            .toggleable(on, interactionSource = source, indication = null, role = Role.Switch, onValueChange = onToggle)
+            .toggleable(on, interactionSource = source, indication = null, role = Role.Switch) {
+                haptics.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                onToggle(it)
+            }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -194,6 +200,7 @@ private fun KeyBody(
     content: @Composable RowScope.() -> Unit,
 ) {
     val p = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     Row(
@@ -203,7 +210,10 @@ private fun KeyBody(
             .lip(p.keyShadow, !pressed)
             .clip(KeyShape).background(if (pressed) c.pressed else c.fill).topLight(c.light)
             .border(1.dp, c.line, KeyShape)
-            .clickable(enabled = enabled, interactionSource = source, indication = null, role = role, onClick = onClick)
+            .clickable(enabled = enabled, interactionSource = source, indication = null, role = role) {
+                haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                onClick()
+            }
             .padding(horizontal = if (square) 0.dp else 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -355,6 +365,7 @@ fun Odometer(text: String, style: TextStyle, color: Color, modifier: Modifier = 
 @Composable
 fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
     val well = RoundedCornerShape(50)
     BoxWithConstraints(modifier.fillMaxWidth().height(48.dp).clip(well).background(p.tile).innerShade().border(1.dp, p.keyLine, well).padding(4.dp)) {
         val segment = maxWidth / options.size.coerceAtLeast(1)
@@ -368,7 +379,10 @@ fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> 
             options.forEach { (value, label) ->
                 val on = value == selected
                 Box(
-                    Modifier.weight(1f).fillMaxHeight().clip(well).selectable(on, role = Role.RadioButton) { onSelect(value) },
+                    Modifier.weight(1f).fillMaxHeight().clip(well).selectable(on, role = Role.RadioButton) {
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        onSelect(value)
+                    },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(label, style = Type.key, color = if (on) p.ink else p.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))

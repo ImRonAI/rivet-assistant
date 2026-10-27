@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
@@ -70,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import com.hiron.rivet.core.Activity
 import com.hiron.rivet.core.ChatMessage
+import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
 import kotlinx.coroutines.delay
@@ -195,10 +197,13 @@ private fun Greeting(state: RivetState) {
             Spacer(Modifier.size(10.dp))
             Box(Modifier.size(width = 18.dp, height = 1.dp).background(p.ink2))
             Spacer(Modifier.size(10.dp))
-            Text(
-                if (state.approvals.isNotEmpty()) "${state.approvals.size} WAITING ON YOU" else "TAP THE MIC OR A KEY",
-                style = Type.labelMd.copy(letterSpacing = 0.08.em), color = if (state.approvals.isNotEmpty()) p.amb else p.ink2,
-            )
+            val (note, tone) = when {
+                state.approvals.isNotEmpty() -> "${state.approvals.size} WAITING ON YOU" to p.amb
+                state.connection == Connection.Offline -> "NOT CONNECTED" to p.rec
+                state.connection == Connection.Connecting -> "LINKING" to p.amb
+                else -> "TAP THE MIC OR A KEY" to p.ink2
+            }
+            Text(note, style = Type.labelMd.copy(letterSpacing = 0.08.em), color = tone)
         }
     }
 }
@@ -349,8 +354,9 @@ private fun Bubble(m: ChatMessage, modifier: Modifier) {
                     }
                 }
             }
+            val body = remember(m.text, m.fromUser) { if (m.fromUser) AnnotatedString(m.text) else Rich.format(m.text.ifBlank { "…" }, p) }
             Text(
-                m.text.ifBlank { "…" } + if (m.streaming) " ▍" else "",
+                if (m.streaming) body + AnnotatedString(" ▍") else body,
                 color = if (m.fromUser) p.accentInk else p.ink,
                 style = Type.bodyLg,
             )
