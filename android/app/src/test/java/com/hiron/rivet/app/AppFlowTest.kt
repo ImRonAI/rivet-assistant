@@ -171,6 +171,14 @@ class AppFlowTest {
         compose.onNodeWithText("Tomorrow you have a dentist cleaning at 9 AM.").assertIsDisplayed()
         shot("03-home-conversation")
 
+        // The transcript sheet pulls up over the stage and back down.
+        compose.onNodeWithContentDescription("Expand transcript").performClick()
+        until { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Show Rivet")).fetchSemanticsNodes().isNotEmpty() }
+        compose.mainClock.advanceTimeBy(600)
+        shot("03b-home-transcript-expanded")
+        compose.onNodeWithContentDescription("Show Rivet").performClick()
+        compose.mainClock.advanceTimeBy(600)
+
         // An approval pops the review sheet; approving answers the brain.
         brain(
             socket,
