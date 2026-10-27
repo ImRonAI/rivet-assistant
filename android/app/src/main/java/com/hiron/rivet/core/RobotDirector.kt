@@ -36,10 +36,16 @@ object RobotDirector {
             after.trace.forEach { steps.put(JSONObject().put("tag", it.tag).put("text", it.text).put("tone", it.tone)) }
             commands += RobotCommand("trace", listOf(steps))
         }
-        if (before?.activity != after.activity) {
-            commands += RobotCommand("state", listOf(STATE.getValue(after.activity)))
+        if (before == null || stance(before) != stance(after)) {
+            commands += RobotCommand("state", listOf(stance(after)))
         }
         return commands
+    }
+
+    /** What the robot is doing: on the phone while Rivet's answering line has a caller, else the activity's move. */
+    private fun stance(state: RivetState): String {
+        val onCall = state.liveCall?.status.let { it == LiveCallStatus.Answering || it == LiveCallStatus.Transferring }
+        return if (onCall) "calling" else STATE.getValue(state.activity)
     }
 
     /** What the phone card or email card should show while a device tool runs. */

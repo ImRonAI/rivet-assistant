@@ -39,6 +39,17 @@ class RobotDirectorTest {
     }
 
     @Test
+    fun theRobotTakesThePhoneWhileRivetAnswersACall() {
+        val idle = RivetState(activity = Activity.Idle)
+        val call = LiveCall("c-1", "Dana", "+18015550123", true, 0, LiveCallStatus.Answering)
+        val onCall = idle.copy(liveCall = call)
+        assertEquals(listOf("calling"), RobotDirector.diff(idle, onCall).map { it.args.single() })
+        assertTrue(RobotDirector.diff(onCall, onCall.copy(activity = Activity.Thinking)).isEmpty())
+        val ended = onCall.copy(liveCall = call.copy(status = LiveCallStatus.Ended))
+        assertEquals(listOf("idle"), RobotDirector.diff(onCall, ended).map { it.args.single() })
+    }
+
+    @Test
     fun smsCallShowsTheThreadWithTheRecipient() {
         val commands = RobotDirector.forDeviceCall("sms_send", JSONObject().put("to", "Mom").put("body", "On my way"))
         assertEquals(listOf("thread", "state"), commands.map { it.method })
