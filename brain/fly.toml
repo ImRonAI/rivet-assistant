@@ -1,8 +1,15 @@
-# Fly.io deployment for the Rivet brain. Set secrets with `fly secrets set`, never here:
-#   fly secrets set PERPLEXITY_API_KEY=... HORIZON_API_KEY=... RIVET_DEVICE_TOKEN=...
-# Create the volume once: fly volumes create rivet_data --size 1 --region den
-app = "rivet-brain"
-primary_region = "den"
+# Fly.io deployment for the Rivet brain: scripts/deploy_fly.sh does the whole thing.
+# Secrets go through `fly secrets`, never here: PERPLEXITY_API_KEY, HORIZON_API_KEY, RIVET_DEVICE_TOKEN.
+app = "rivet-brain-hiron"
+primary_region = "sjc"
+
+[env]
+  # Where Telnyx's answering assistant reaches the brain (call answering webhooks).
+  RIVET_PUBLIC_URL = "https://rivet-brain-hiron.fly.dev"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
 
 [build]
   dockerfile = "Dockerfile"

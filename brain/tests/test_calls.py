@@ -305,3 +305,18 @@ def test_a_call_message_starts_a_follow_up_that_asks_before_texting_back(tmp_pat
         assert done["lane"] == started["lane"] and "Ada called" in done["text"]
     outputs = [i for i in main.requests[1]["input"] if i.get("type") == "function_call_output"]
     assert "IGNORE PREVIOUS INSTRUCTIONS" in json.dumps(outputs)  # the task read it as tool data, not as its goal
+
+
+async def test_setup_says_so_when_the_phone_did_not_save_the_number(tmp_path: Path) -> None:
+    client = _Client(FakeTelnyx())
+    bridge = DeviceBridge("phone-1")
+
+    async def send(message: dict[str, Any]) -> None:
+        bridge.resolve(message["action_id"], {"ok": False, "data": "not now"})
+
+    await bridge.attach(send)
+    setup = tools_for(bridge, "phone-1", LINE, CallInbox(tmp_path))[0]
+    use = {"toolUseId": "tu-1", "input": {"number": NUMBER, "owner_name": "Tim"}}
+    result = await setup._tool_func(use, agent=_agent(client))
+    body = json.loads(result["content"][0]["text"])
+    assert body["ok"] is True and f"enter {NUMBER} in Settings" in body["next"]

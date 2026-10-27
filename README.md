@@ -108,6 +108,11 @@ export PERPLEXITY_API_KEY=... HORIZON_API_KEY=... RIVET_DEVICE_TOKEN=$(python -c
 uv run rivet-brain            # serves :8080, /healthz and /v1/sessions/{session_id}
 ```
 
+Deployed on Fly.io as `rivet-brain-hiron` (https://rivet-brain-hiron.fly.dev, region `sjc`, one machine,
+1 GB volume): `brain/scripts/deploy_fly.sh` creates or updates it (`FLY_LOCAL_BUILD=1` builds with local
+Docker when Fly's remote builder is unreachable). `brain/scripts/setup_call_answering.py` sets up call
+answering for a session from outside the phone.
+
 Configuration is in `brain/.env.example`. Secrets belong in your secret store (Fly secrets, cloud
 environment secrets), never in the repo. Deploy with `fly deploy` from `brain/` (`fly.toml`, one machine
 with a `/data` volume: sessions are single-writer).

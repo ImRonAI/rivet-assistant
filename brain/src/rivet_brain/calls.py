@@ -322,13 +322,14 @@ def tools_for(bridge: DeviceBridge, session_id: str, line: CallLine | None, inbo
         if not outcome.get("ok"):
             reason = _REASONS.get(str(outcome.get("reason")), "Telnyx setup failed: {reason}")
             return _result(tool_use_id, False, reason.format(**{"connection_name": None, "reason": None, **outcome}))
-        saved = "The number is saved on the phone."
+        unsaved = f"The phone did not save it; the user can enter {number} in Settings › Call answering."
         try:
-            await bridge.call(
+            reply = await bridge.call(
                 "call_answering_number", {"number": number, "owner_name": owner}, f"{tool_use_id}:phone", 30.0
             )
+            saved = "The number is saved on the phone." if reply.get("ok", True) else unsaved
         except (DeviceUnavailableError, TimeoutError):
-            saved = "The phone was not connected; the user can enter the number in Settings › Call answering."
+            saved = unsaved
         return _result(
             tool_use_id,
             True,
