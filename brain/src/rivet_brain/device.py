@@ -27,7 +27,8 @@ class DeviceUnavailableError(RuntimeError):
 class DeviceBridge:
     """Routes device tool calls to the connected phone and hands results back to the waiting tool."""
 
-    def __init__(self) -> None:
+    def __init__(self, session_id: str = "") -> None:
+        self.session_id = session_id
         self._send: Sender | None = None
         self._pending: dict[str, tuple[asyncio.Future[dict[str, Any]], dict[str, Any]]] = {}
 

@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +53,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.device.CallForwarding
+import com.hiron.rivet.device.CarrierStyle
+import com.hiron.rivet.device.ForwardMode
 import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.device.ScreenOperator
 import com.hiron.rivet.service.RivetService
@@ -116,6 +120,10 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
             Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
         }
 
+        Section("Call answering") {
+            CallAnswering(runtime, refresh)
+        }
+
         Section("Permissions") {
             Permissions(context, refresh) { refresh++ }
         }
@@ -127,6 +135,100 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
         )
     }
 }
+
+@Composable
+private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    val s = runtime.settings
+    var number by remember(refresh) { mutableStateOf(s.answeringNumber) }
+    var mode by remember { mutableStateOf(s.answeringMode) }
+    var style by remember { mutableStateOf(s.carrierStyle) }
+    var forwardedTo by remember(refresh) { mutableStateOf(s.forwardedTo) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val detected = remember { CallForwarding.detect(context) }
+    val effective = style ?: detected
+    val code = CallForwarding.enableCode(number, mode, effective)
+    val phonePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        error = if (granted) null else "Rivet needs the Phone permission to dial your carrier's forwarding code."
+    }
+
+    fun dial(code: String, onDone: () -> Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+            phonePermission.launch(Manifest.permission.CALL_PHONE)
+            return
+        }
+        error = CallForwarding.dial(context, code)
+        if (error == null) onDone()
+    }
+
+    Text(
+        "Callers still dial your number. When this is on, your carrier forwards calls to Rivet's answering line on " +
+            "Telnyx, Rivet takes a message, and you get it here. (Android doesn't let apps speak on ordinary calls.)",
+        style = MaterialTheme.typography.bodySmall, color = p.ink2,
+    )
+    OutlinedTextField(
+        number, { number = it }, label = { Text("Rivet's answering number") }, placeholder = { Text("+17605550100") },
+        singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+    )
+    if (number.isBlank()) {
+        TextButton(onClick = { runtime.send("Set up call answering so you can answer my calls.") }) {
+            Text("Ask Rivet to set up an answering number")
+        }
+    }
+    Text("ANSWER", style = Label, color = p.ink2)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(mode == ForwardMode.Unanswered, { mode = ForwardMode.Unanswered }, label = { Text("Calls I don't pick up") })
+        FilterChip(mode == ForwardMode.Always, { mode = ForwardMode.Always }, label = { Text("All calls") })
+    }
+    Text("CARRIER CODES", style = Label, color = p.ink2)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(style == null, { style = null; s.carrierStyle = null }, label = { Text("Auto (${carrierLabel(detected)})") })
+        FilterChip(style == CarrierStyle.Gsm, { style = CarrierStyle.Gsm; s.carrierStyle = style }, label = { Text("Standard") })
+        FilterChip(style == CarrierStyle.Verizon, { style = CarrierStyle.Verizon; s.carrierStyle = style }, label = { Text("Verizon") })
+    }
+    Text(
+        when {
+            forwardedTo.isBlank() -> "Off."
+            forwardedTo != number.trim() -> "On, but forwarding to $forwardedTo. Turn on again to use the new number."
+            else -> "On: forwarding to $forwardedTo."
+        },
+        style = MaterialTheme.typography.bodyMedium, color = if (forwardedTo.isBlank()) p.ink2 else p.ok,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(
+            onClick = {
+                val target = number.trim()
+                if (code == null) {
+                    error = "Enter Rivet's answering number in +1… form first."
+                } else {
+                    dial(code) {
+                        s.answeringNumber = target
+                        s.answeringMode = mode
+                        s.forwardedTo = target
+                        forwardedTo = target
+                    }
+                }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = Color.White),
+        ) { Text("Turn on") }
+        OutlinedButton(onClick = {
+            dial(CallForwarding.disableCode(effective)) {
+                s.forwardedTo = ""
+                forwardedTo = ""
+            }
+        }) { Text("Turn off") }
+    }
+    error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = p.rec) }
+    Text(
+        (code?.let { "Turn on dials $it" } ?: "Turn on dials your carrier's forwarding code") +
+            "; turn off dials ${CallForwarding.disableCode(effective)}. Your carrier confirms on screen. Forwarded calls " +
+            "may count against your plan; calls Rivet answers use Telnyx minutes.",
+        style = MaterialTheme.typography.bodySmall, color = p.ink2,
+    )
+}
+
+private fun carrierLabel(style: CarrierStyle) = if (style == CarrierStyle.Verizon) "Verizon" else "standard"
 
 @Composable
 private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {

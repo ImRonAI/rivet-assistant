@@ -25,6 +25,7 @@ from strands_harness import build_system_prompt, create_harness
 
 from .approvals import RivetApprovals
 from .auth import HorizonBearer
+from .calls import INSTRUCTIONS as CALL_INSTRUCTIONS
 from .config import BrainSettings
 from .device_tools import INSTRUCTIONS as PHONE_INSTRUCTIONS
 from .events import RivetEventBridge, UiSink
@@ -58,6 +59,8 @@ show exactly what will run. Never buy numbers or services unless the user asked 
 
 """
     + PHONE_INSTRUCTIONS
+    + "\n\n"
+    + CALL_INSTRUCTIONS
 )
 
 

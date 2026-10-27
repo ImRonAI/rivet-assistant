@@ -63,7 +63,7 @@ class RivetRuntime(private val app: Context) {
 
     private val ledger = ActionLedger(File(app.filesDir, "actions.json"))
     val reminders = Reminders(app, ReminderStore(File(app.filesDir, ReminderStoreFile)))
-    val tools = DeviceTools(app, reminders) { visible }
+    val tools = DeviceTools(app, reminders, settings) { visible }
 
     private val http = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -148,6 +148,8 @@ class RivetRuntime(private val app: Context) {
             is ServerEvent.ApprovalExpired -> state.value.approvals
                 .filter { it.turnId == event.turnId && it.lane == event.lane }
                 .forEach { Notifications.clearApproval(app, it.id) }
+            is ServerEvent.CallAnswering -> Notifications.callAnswering(app, event.from)
+            is ServerEvent.CallMessage -> Notifications.callMessage(app, event)
             is ServerEvent.TurnCompleted -> if (event.lane == "default" && settings.speakReplies && visible) {
                 speaker.speak(event.text)
             }

@@ -7,7 +7,10 @@ Phone to brain: ``turn`` {text, turn_id?}, ``approval.response`` {answers: {inte
 
 Brain to phone: ``turn.accepted``, ``turn.started``, the agent's UI events (``text``, ``thinking``,
 ``searching``, ``sources``, ``tool``, ...), ``approval.request``, ``approval.expired``, ``restart``,
-``turn.completed``, ``turn.failed``, ``device.call``, ``session.ready``, ``pong``, ``error``.
+``turn.completed``, ``turn.failed``, ``device.call``, ``call.answering`` {from, verified}, ``call.message``
+{caller_name, callback_number, message, urgent, hung_up_early, at}, ``session.ready``, ``pong``, ``error``.
+
+Telnyx's answering assistant posts to ``/v1/calls/{session_id}/{token}/start|message`` (see ``calls.py``).
 
 Events emitted while the phone is away are buffered and delivered in order when it reconnects.
 """
@@ -17,12 +20,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hmac
+import json
 import logging
 import os
 import re
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from starlette.applications import Starlette
@@ -32,8 +37,9 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from strands.storage import LocalFileStorage, Storage
 
-from . import device_tools
+from . import calls, device_tools
 from .approvals import RivetApprovals
+from .calls import CallInbox, CallLine, call_token, caller_of, clean_message
 from .config import BrainSettings
 from .device import DeviceBridge
 from .factory import build_agent
@@ -45,6 +51,7 @@ DEVICE_TOKEN_ENV = "RIVET_DEVICE_TOKEN"
 MIN_TOKEN_LENGTH = 24
 BUFFER_LIMIT = 1000
 TURN_MEMORY = 256
+CALL_BODY_LIMIT = 64 * 1024
 _SESSION_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
@@ -53,8 +60,8 @@ ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
 class _Session:
     """One session's supervisor, device bridge, and the phone socket attached to it."""
 
-    def __init__(self, supervisor_factory: Callable[[_Session], SessionSupervisor]) -> None:
-        self.bridge = DeviceBridge()
+    def __init__(self, session_id: str, supervisor_factory: Callable[[_Session], SessionSupervisor]) -> None:
+        self.bridge = DeviceBridge(session_id)
         self.socket: WebSocket | None = None
         self.buffer: deque[dict[str, Any]] = deque(maxlen=BUFFER_LIMIT)
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
@@ -222,7 +229,7 @@ class SessionHub:
                     build=self.build,
                 )
 
-            session = self.sessions[session_id] = _Session(factory)
+            session = self.sessions[session_id] = _Session(session_id, factory)
         return session
 
     async def close(self) -> None:
@@ -239,6 +246,7 @@ def create_app(
     tools_for: ToolsFor | None = None,
     approvals: RivetApprovals | None = None,
     device_token: str | None = None,
+    call_inbox: CallInbox | None = None,
 ) -> Starlette:
     """The gateway ASGI app.
 
@@ -249,6 +257,7 @@ def create_app(
         tools_for: Local tools for a session, given its device bridge.
         approvals: Approval policy shared by every session (device tool policies go here).
         device_token: The phone's bearer token; defaults to ``$RIVET_DEVICE_TOKEN``. Required.
+        call_inbox: Where answered calls and messages are kept; defaults to ``calls/`` beside the sessions.
     """
     token = device_token or os.environ.get(DEVICE_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_LENGTH:
@@ -261,6 +270,7 @@ def create_app(
         approvals=approvals or RivetApprovals(),
     )
     expected = f"Bearer {token}".encode()
+    inbox = call_inbox or CallInbox(Path(settings.session_dir).parent / "calls")
 
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
@@ -287,6 +297,34 @@ def create_app(
         finally:
             session.detach(socket)
 
+    async def call_webhook(request: Request) -> JSONResponse:
+        """Telnyx's answering assistant: ``start`` when it picks up a call, ``message`` when it took one."""
+        session_id = request.path_params["session_id"]
+        kind = request.path_params["kind"]
+        offered = str(request.path_params["token"]).encode()
+        if (
+            kind not in ("start", "message")
+            or not _SESSION_ID.match(session_id)
+            or not hmac.compare_digest(offered, call_token(token, session_id).encode())
+        ):
+            return JSONResponse({"error": "not found"}, status_code=404)
+        raw = await request.body()
+        if len(raw) > CALL_BODY_LIMIT:
+            return JSONResponse({"error": "too large"}, status_code=413)
+        try:
+            body = json.loads(raw or b"{}")
+        except ValueError:
+            body = {}
+        session = hub.get(session_id)
+        if kind == "start":
+            caller, verified = caller_of(body)
+            inbox.add(session_id, {"kind": "answering", "from": caller, "verified": verified})
+            session.emit({"type": "call.answering", "from": caller, "verified": verified})
+            return JSONResponse({"dynamic_variables": {}})
+        record = inbox.add(session_id, clean_message(body))
+        session.emit({"type": "call.message", **{k: v for k, v in record.items() if k != "kind"}})
+        return JSONResponse({"result": "Message saved and delivered."})
+
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         try:
@@ -295,7 +333,11 @@ def create_app(
             await hub.close()
 
     app = Starlette(
-        routes=[Route("/healthz", healthz), WebSocketRoute("/v1/sessions/{session_id}", session_socket)],
+        routes=[
+            Route("/healthz", healthz),
+            WebSocketRoute("/v1/sessions/{session_id}", session_socket),
+            Route("/v1/calls/{session_id}/{token}/{kind}", call_webhook, methods=["POST"]),
+        ],
         lifespan=lifespan,
     )
     app.state.hub = hub
@@ -309,10 +351,28 @@ def main() -> None:
     logging.basicConfig(
         level=os.environ.get("RIVET_LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s"
     )
+    settings = BrainSettings.from_env()
+    public_url = os.environ.get("RIVET_PUBLIC_URL", "").strip()
+    line = (
+        CallLine(
+            public_url,
+            os.environ.get(DEVICE_TOKEN_ENV, ""),
+            model=os.environ.get("RIVET_CALL_MODEL", calls.DEFAULT_MODEL),
+            voice=os.environ.get("RIVET_CALL_VOICE", calls.DEFAULT_VOICE),
+        )
+        if public_url
+        else None
+    )
+    inbox = CallInbox(Path(settings.session_dir).parent / "calls")
+
+    def tools_for(bridge: DeviceBridge) -> list[Any]:
+        return [*device_tools.tools_for(bridge), *calls.tools_for(bridge, bridge.session_id, line, inbox)]
+
     app = create_app(
-        BrainSettings.from_env(),
-        tools_for=device_tools.tools_for,
-        approvals=RivetApprovals(device_tools.POLICIES),
+        settings,
+        tools_for=tools_for,
+        approvals=RivetApprovals({**device_tools.POLICIES, **calls.POLICIES}),
+        call_inbox=inbox,
     )
     uvicorn.run(
         app,

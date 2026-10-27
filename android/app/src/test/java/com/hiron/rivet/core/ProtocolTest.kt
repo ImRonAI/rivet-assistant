@@ -55,6 +55,19 @@ class ProtocolTest {
     }
 
     @Test
+    fun parsesCallEventsAsTheGatewaySendsThem() {
+        assertEquals(
+            ServerEvent.CallAnswering("+18015550100", true),
+            Protocol.parse("""{"type":"call.answering","from":"+18015550100","verified":true,"session_id":"s","lane":"default"}"""),
+        )
+        val message = Protocol.parse(
+            """{"type":"call.message","caller_name":"Ada","callback_number":"+18015550100","message":"Lunch Friday?",
+               "urgent":true,"hung_up_early":false,"at":1761500000.0}""",
+        )
+        assertEquals(ServerEvent.CallMessage("Ada", "+18015550100", "Lunch Friday?", true, false), message)
+    }
+
+    @Test
     fun buildsApprovalResponseTheSupervisorAccepts() {
         val body = JSONObject(
             Protocol.approvalResponse("default", mapOf("a" to Protocol.Answer(true, 30), "b" to Protocol.Answer(false))),

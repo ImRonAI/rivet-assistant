@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import com.hiron.rivet.core.Settings
 import org.json.JSONObject
 
 /**
@@ -14,6 +15,7 @@ import org.json.JSONObject
 class DeviceTools(
     private val context: Context,
     private val reminders: Reminders,
+    private val settings: Settings,
     private val isVisible: () -> Boolean,
 ) {
     private val messaging = Messaging(context)
@@ -50,6 +52,7 @@ class DeviceTools(
         "apps_list" to Tool { apps.list(it.optString("query").ifBlank { null }) },
         "app_open" to Tool { apps.open(it.req("app")) },
         "device_status" to Tool { apps.status() },
+        "call_answering_number" to Tool { saveAnsweringNumber(it.req("number")) },
         "screen_read" to Tool { ScreenOperator.read() },
         "screen_act" to Tool {
             ScreenOperator.act(
@@ -81,6 +84,18 @@ class DeviceTools(
         } catch (e: SecurityException) {
             ToolResult.error("Android refused this action: ${e.message}. A permission or role may be missing.")
         }
+    }
+
+    /** Saves the line forwarding would point at; turning forwarding on stays the user's own tap in Settings. */
+    private fun saveAnsweringNumber(number: String): ToolResult {
+        if (!number.trim().startsWith("+") || Phones.digits(number).length < 8) {
+            return ToolResult.error("\"$number\" is not an E.164 number.")
+        }
+        settings.answeringNumber = number
+        return ToolResult.ok(
+            JSONObject().put("saved", number.trim()).put("forwarding_on", settings.forwardedTo.isNotBlank())
+                .put("note", "The user turns call answering on in Rivet › Settings › Call answering."),
+        )
     }
 
     private class Tool(val permissions: List<String> = emptyList(), val run: suspend (JSONObject) -> ToolResult)

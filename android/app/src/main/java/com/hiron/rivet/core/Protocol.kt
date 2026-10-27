@@ -41,6 +41,14 @@ sealed interface ServerEvent {
     data class TurnCompleted(val turnId: String, val lane: String, val text: String, val restarts: Int, val goal: String?) : ServerEvent
     data class TurnFailed(val turnId: String?, val lane: String, val error: String) : ServerEvent
     data class DeviceCall(val actionId: String, val tool: String, val input: JSONObject) : ServerEvent
+    data class CallAnswering(val from: String, val verified: Boolean) : ServerEvent
+    data class CallMessage(
+        val callerName: String,
+        val callbackNumber: String,
+        val message: String,
+        val urgent: Boolean,
+        val hungUpEarly: Boolean,
+    ) : ServerEvent
     data object SessionReady : ServerEvent
     data object Pong : ServerEvent
     data class Error(val message: String) : ServerEvent
@@ -79,6 +87,11 @@ object Protocol {
             "turn.failed" -> ServerEvent.TurnFailed(o.optStringOrNull("turn_id"), lane, o.optString("error", "failed"))
             "device.call" -> ServerEvent.DeviceCall(
                 o.optString("action_id"), o.optString("tool"), o.optJSONObject("input") ?: JSONObject(),
+            )
+            "call.answering" -> ServerEvent.CallAnswering(o.optString("from"), o.optBoolean("verified", false))
+            "call.message" -> ServerEvent.CallMessage(
+                o.optString("caller_name"), o.optString("callback_number"), o.optString("message"),
+                o.optBoolean("urgent", false), o.optBoolean("hung_up_early", false),
             )
             "session.ready" -> ServerEvent.SessionReady
             "pong" -> ServerEvent.Pong

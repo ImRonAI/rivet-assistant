@@ -29,6 +29,18 @@ data class TraceStep(val tag: String, val text: String, val tone: String)
 
 data class LogEntry(val at: Long, val kind: String, val text: String)
 
+/** How a message Rivet took on a call reads in the log and notifications. */
+object CallText {
+    fun caller(event: ServerEvent.CallMessage): String =
+        listOf(event.callerName, event.callbackNumber).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Unknown caller" }
+
+    fun describe(event: ServerEvent.CallMessage): String {
+        val flags = listOfNotNull(if (event.urgent) "urgent" else null, if (event.hungUpEarly) "hung up early" else null)
+        val suffix = if (flags.isEmpty()) "" else " (${flags.joinToString()})"
+        return "Message from ${caller(event)}$suffix: ${event.message.ifBlank { "(no message)" }}"
+    }
+}
+
 object RivetStore {
     private const val LOG_LIMIT = 200
     private const val TRACE_LIMIT = 7
@@ -78,6 +90,8 @@ object RivetStore {
         ).log(now, "error", event.error)
         is ServerEvent.Error -> state.copy(lastError = event.message).log(now, "error", event.message)
         is ServerEvent.DeviceCall -> state.log(now, "device", event.tool)
+        is ServerEvent.CallAnswering -> state.log(now, "call", "Rivet is answering a call from ${event.from.ifBlank { "an unknown number" }}")
+        is ServerEvent.CallMessage -> state.log(now, "call", CallText.describe(event))
         else -> state
     }
 

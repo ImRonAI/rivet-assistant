@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -17,23 +18,23 @@ from tests.sse import SSE, FakePerplexity
 TOKEN = "device-token-0123456789abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
-# The phone's tool registry (android/.../device/DeviceTools.kt); both sides must agree on every name.
-PHONE_TOOLS = {
-    "sms_send", "sms_list", "contacts_search", "calls_recent", "phone_call", "calendar_list", "calendar_create",
-    "notifications_list", "notification_reply", "reminder_create", "reminders_list", "reminder_cancel",
-    "email_draft", "apps_list", "app_open", "device_status", "screen_read", "screen_act",
-}  # fmt: skip
+# The phone's tool registry, read from the app's source so both sides cannot drift apart.
+PHONE_REGISTRY = Path(__file__).resolve().parents[2] / "android/app/src/main/java/com/hiron/rivet/device/DeviceTools.kt"
+PHONE_TOOLS = set(re.findall(r'^\s*"([a-z_]+)" to Tool', PHONE_REGISTRY.read_text(), re.MULTILINE))
+# Run on the phone only by the brain's own code (calls.py saves the answering number), never by the model.
+INTERNAL_PHONE_TOOLS = {"call_answering_number"}
 
 
 def test_every_phone_tool_is_declared_with_a_policy_and_a_valid_schema() -> None:
-    assert {spec.name for spec in SPECS} == PHONE_TOOLS
+    assert len(PHONE_TOOLS) > 10
+    assert {spec.name for spec in SPECS} == PHONE_TOOLS - INTERNAL_PHONE_TOOLS
     for spec in SPECS:
         schema = spec.input_schema
         assert schema["type"] == "object"
         assert set(spec.required) <= set(schema["properties"]), spec.name
         assert spec.description and spec.policy.summary
     names = [tool.tool_name for tool in tools_for(DeviceBridge())]
-    assert sorted(names) == sorted(PHONE_TOOLS)
+    assert sorted(names) == sorted(PHONE_TOOLS - INTERNAL_PHONE_TOOLS)
 
 
 @pytest.mark.parametrize(

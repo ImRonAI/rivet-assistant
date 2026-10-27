@@ -43,3 +43,6 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Lock the phone while an approval is pending: the notification's Approve asks for unlock; a high-risk
       approval only offers Review, and approving it in the app asks for biometrics.
 - [ ] Long-press Home with Rivet as the digital assistant: Rivet opens listening.
+- [ ] Call answering (brain needs `RIVET_PUBLIC_URL`): "Set up call answering" ends with the number saved in
+      Settings › Call answering; **Turn on** shows the carrier's confirmation; a call you let ring goes to
+      Rivet, which takes a message; the phone shows "Rivet is answering…" and then the message; **Turn off** restores normal ringing.

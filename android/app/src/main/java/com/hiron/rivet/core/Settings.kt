@@ -4,6 +4,8 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.hiron.rivet.device.CarrierStyle
+import com.hiron.rivet.device.ForwardMode
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
@@ -39,6 +41,25 @@ class Settings(context: Context) {
     var offerReplies: Boolean
         get() = prefs.getBoolean("offer_replies", false)
         set(value) = prefs.edit().putBoolean("offer_replies", value).apply()
+
+    /** Rivet's Telnyx answering line (saved by the brain's call_answering_setup, or typed in Settings). */
+    var answeringNumber: String
+        get() = prefs.getString("answering_number", "").orEmpty()
+        set(value) = prefs.edit().putString("answering_number", value.trim()).apply()
+
+    var answeringMode: ForwardMode
+        get() = runCatching { ForwardMode.valueOf(prefs.getString("answering_mode", null).orEmpty()) }.getOrDefault(ForwardMode.Unanswered)
+        set(value) = prefs.edit().putString("answering_mode", value.name).apply()
+
+    /** Null means detect from the SIM. */
+    var carrierStyle: CarrierStyle?
+        get() = prefs.getString("carrier_style", null)?.let { runCatching { CarrierStyle.valueOf(it) }.getOrNull() }
+        set(value) = prefs.edit().putString("carrier_style", value?.name).apply()
+
+    /** The number Rivet last asked the carrier to forward to ("" after turning it off); the carrier is the truth. */
+    var forwardedTo: String
+        get() = prefs.getString("forwarded_to", "").orEmpty()
+        set(value) = prefs.edit().putString("forwarded_to", value.trim()).apply()
 
     fun gateway(): GatewayConfig = GatewayConfig(gatewayUrl, deviceToken, sessionId)
 }

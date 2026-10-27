@@ -30,7 +30,7 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
 | 2 | Android app: robot WebView, gateway client, chat, voice, approvals, activity, settings | **Built**: APK, JVM tests and lint green; needs an on-device pass (no emulator here) |
 | 3 | Device tools: SMS, replies in any messaging app, contacts, calendar, calls, reminders, email drafts | **Built** on both sides; phone tools verified live through the brain with a scripted phone |
 | 4 | App operator (Accessibility): read screen, tap/type/scroll, Stop overlay, approval at commit points | **Built**; needs an on-device pass |
-| 5 | Calls: screening (logs callers), Telnyx AI Assistant answering | Screening built; AI answering needs a Telnyx number, which needs your explicit go-ahead to buy |
+| 5 | Calls: screening, and Rivet answering calls to the user's own number | **Built**: setup verified live up to the first Telnyx write; turning it on needs a Telnyx number Rivet may use (moving one that's in use, or buying one, needs your OK) |
 
 ## How the brain works
 
@@ -62,6 +62,24 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
   reads run (messages, notifications, calendar and screens taint the turn), texts, replies and calls ask
   (rememberable per recipient), calendar writes ask, and the app operator asks when a tap's label reads
   like a commit point (send, pay, delete, confirm). The phone refuses a tap whose label changed.
+
+## Answering your calls (`brain/src/rivet_brain/calls.py`)
+
+Callers keep dialing your own number. Android doesn't let an ordinary app speak on a cellular call, so when
+you turn call answering on, Rivet dials your carrier's forwarding code (calls you don't pick up, or all calls)
+to a Telnyx number where a Telnyx AI Assistant answers as Rivet and takes a message.
+
+1. Ask Rivet to "set up call answering" with a Telnyx number on your account. `call_answering_setup` creates
+   (or updates) the *Rivet call answering* assistant (a non-Anthropic Telnyx model; `RIVET_CALL_MODEL`) and
+   routes the number to it, after your approval. A number already used by another connection is only moved
+   if you say so (biometric approval). The number is saved on the phone.
+2. Turn it on in Rivet › Settings › Call answering. That dials `**004*` / `**21*` (most carriers) or `*71` /
+   `*72` (Verizon); turning off dials `##002#` / `*73`.
+3. When the assistant picks up, the phone shows "Rivet is answering a call from …"; the message the caller
+   leaves arrives as a notification and in `call_messages`, so you can ask Rivet to text them back.
+
+The assistant reaches the brain at `RIVET_PUBLIC_URL/v1/calls/{session}/{token}/start|message`, where the
+token is an HMAC of the session id under the device token.
 
 ## The Android app (`android/`)
 

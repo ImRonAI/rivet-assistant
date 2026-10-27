@@ -13,6 +13,8 @@ import androidx.core.content.ContextCompat
 import com.hiron.rivet.MainActivity
 import com.hiron.rivet.R
 import com.hiron.rivet.core.ApprovalRequest
+import com.hiron.rivet.core.CallText
+import com.hiron.rivet.core.ServerEvent
 
 /** Rivet's notification channels and the notifications it posts. */
 object Notifications {
@@ -20,10 +22,13 @@ object Notifications {
     const val APPROVALS = "rivet.approvals"
     const val REMINDERS = "rivet.reminders"
     const val ACTIONS = "rivet.actions"
+    const val CALLS = "rivet.calls"
     const val SERVICE_ID = 1
     private const val APPROVAL_BASE = 1000
     private const val ACTION_BASE = 5000
     private const val REMINDER_BASE = 9000
+    private const val CALL_ANSWERING_ID = 14000
+    private const val CALL_MESSAGE_BASE = 10000
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -36,6 +41,9 @@ object Notifications {
                 NotificationChannel(REMINDERS, "Reminders", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(ACTIONS, "Ready to open", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "Drafts and apps Rivet has ready for you"
+                },
+                NotificationChannel(CALLS, "Calls Rivet answered", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Calls Rivet's answering line picked up and the messages callers left"
                 },
             ),
         )
@@ -89,6 +97,34 @@ object Notifications {
             .setContentIntent(openApp(context))
             .setAutoCancel(true),
     )
+
+    fun callAnswering(context: Context, from: String) = post(
+        context, CALL_ANSWERING_ID,
+        NotificationCompat.Builder(context, CALLS)
+            .setSmallIcon(R.drawable.ic_rivet)
+            .setContentTitle("Rivet is answering a call")
+            .setContentText("From ${from.ifBlank { "an unknown number" }}")
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setTimeoutAfter(10 * 60_000L)
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true),
+    )
+
+    fun callMessage(context: Context, event: ServerEvent.CallMessage) {
+        NotificationManagerCompat.from(context).cancel(CALL_ANSWERING_ID)
+        post(
+            context, CALL_MESSAGE_BASE + (event.callbackNumber + event.message).hashCode().mod(4000),
+            NotificationCompat.Builder(context, CALLS)
+                .setSmallIcon(R.drawable.ic_rivet)
+                .setContentTitle((if (event.urgent) "Urgent message from " else "Message from ") + CallText.caller(event))
+                .setContentText(event.message.ifBlank { "(no message)" })
+                .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.describe(event)))
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setPriority(if (event.urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+                .setContentIntent(openApp(context))
+                .setAutoCancel(true),
+        )
+    }
 
     fun action(context: Context, title: String, text: String, intent: Intent) {
         val id = ACTION_BASE + (title + text).hashCode().mod(4000)

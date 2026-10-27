@@ -79,6 +79,17 @@ class RivetStoreTest {
     }
 
     @Test
+    fun answeredCallsAndMessagesAreLogged() {
+        var s = RivetStore.reduce(RivetState(), ServerEvent.CallAnswering("+18015550100", true), 1)
+        s = RivetStore.reduce(s, ServerEvent.CallMessage("Ada", "+18015550100", "Lunch Friday?", true, false), 2)
+        assertEquals(listOf("call", "call"), s.log.map { it.kind })
+        assertEquals("Rivet is answering a call from +18015550100", s.log[0].text)
+        assertEquals("Message from Ada · +18015550100 (urgent): Lunch Friday?", s.log[1].text)
+        val anonymous = CallText.describe(ServerEvent.CallMessage("", "", "", false, true))
+        assertEquals("Message from Unknown caller (hung up early): (no message)", anonymous)
+    }
+
+    @Test
     fun deviceCallsAreLogged() {
         val s = RivetStore.reduce(RivetState(), ServerEvent.DeviceCall("a", "calendar_list", JSONObject()), 5)
         assertEquals(LogEntry(5, "device", "calendar_list"), s.log.single())
