@@ -2,6 +2,8 @@
 # Deploys the Rivet brain to Fly.io as one always-on machine with a volume.
 #
 # Needs in the environment: FLY_API_TOKEN, PERPLEXITY_API_KEY, HORIZON_API_KEY.
+# Optional: RIVET_EMAIL_ADDRESS and RIVET_EMAIL_PASSWORD (an app password) give Rivet the user's mailbox, with
+# RIVET_EMAIL_IMAP_HOST/_PORT and RIVET_EMAIL_SMTP_HOST/_PORT for providers without defaults; those set are staged too.
 # FLY_LOCAL_BUILD=1 builds with local Docker and pushes instead of using Fly's remote builder.
 # Creates the app, volume and device token on the first run; later runs only redeploy.
 # The device token (what the phone enters in Settings) is written to $RIVET_TOKEN_FILE, never printed.
@@ -25,6 +27,10 @@ secrets="$(mktemp)"
 trap 'rm -f "$secrets"' EXIT
 chmod 600 "$secrets"
 printf 'PERPLEXITY_API_KEY=%s\nHORIZON_API_KEY=%s\n' "$PERPLEXITY_API_KEY" "$HORIZON_API_KEY" >"$secrets"
+for name in RIVET_EMAIL_ADDRESS RIVET_EMAIL_PASSWORD RIVET_EMAIL_IMAP_HOST RIVET_EMAIL_IMAP_PORT \
+  RIVET_EMAIL_SMTP_HOST RIVET_EMAIL_SMTP_PORT; do
+  if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}" >>"$secrets"; fi
+done
 if ! "$FLY" secrets list -a "$APP" --json | grep -q RIVET_DEVICE_TOKEN; then
   (umask 077 && python3 -c 'import secrets; print(secrets.token_urlsafe(32))' >"$TOKEN_FILE")
   printf 'RIVET_DEVICE_TOKEN=%s\n' "$(cat "$TOKEN_FILE")" >>"$secrets"

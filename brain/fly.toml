@@ -1,5 +1,6 @@
 # Fly.io deployment for the Rivet brain: scripts/deploy_fly.sh does the whole thing.
-# Secrets go through `fly secrets`, never here: PERPLEXITY_API_KEY, HORIZON_API_KEY, RIVET_DEVICE_TOKEN.
+# Secrets go through `fly secrets`, never here: PERPLEXITY_API_KEY, HORIZON_API_KEY, RIVET_DEVICE_TOKEN, and for
+# email RIVET_EMAIL_ADDRESS and RIVET_EMAIL_PASSWORD.
 app = "rivet-brain-hiron"
 primary_region = "sjc"
 

@@ -37,7 +37,7 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from strands.storage import LocalFileStorage, Storage
 
-from . import calls, device_tools
+from . import calls, device_tools, email_tools
 from .approvals import RivetApprovals
 from .calls import (
     FOLLOW_UP_ATTEMPTS,
@@ -391,14 +391,22 @@ def main() -> None:
         else None
     )
     inbox = CallInbox(Path(settings.session_dir).parent / "calls")
+    account = email_tools.EmailAccount.from_env()
+    mailbox = email_tools.Mailbox(account) if account is not None else None
+    if account is not None:
+        logger.info("imap=<%s>, smtp=<%s> | email tools enabled", account.imap_host, account.smtp_host)
 
     def tools_for(bridge: DeviceBridge) -> list[Any]:
-        return [*device_tools.tools_for(bridge), *calls.tools_for(bridge, bridge.session_id, line, inbox)]
+        return [
+            *device_tools.tools_for(bridge),
+            *calls.tools_for(bridge, bridge.session_id, line, inbox),
+            *email_tools.tools_for(mailbox),
+        ]
 
     app = create_app(
         settings,
         tools_for=tools_for,
-        approvals=RivetApprovals({**device_tools.POLICIES, **calls.POLICIES}),
+        approvals=RivetApprovals({**device_tools.POLICIES, **calls.POLICIES, **email_tools.POLICIES}),
         call_inbox=inbox,
         follow_up_calls=os.environ.get("RIVET_CALL_FOLLOW_UP", "1") != "0",
     )
