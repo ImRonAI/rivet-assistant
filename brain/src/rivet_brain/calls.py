@@ -5,10 +5,13 @@ phone turns on carrier call forwarding (no answer/busy/unreachable, or all calls
 Telnyx AI Assistant answers there and takes a message. That assistant calls back into the brain:
 
 - ``POST /v1/calls/{session_id}/{token}/start``: Telnyx's dynamic-variables webhook at the start of each call,
-  so the phone can show "Rivet is answering a call from ...".
+  so the phone can show "Rivet is answering a call from ...". The answer gives the call a ``rivet_call_id``.
 - ``POST /v1/calls/{session_id}/{token}/message``: the assistant's ``take_message`` webhook tool.
+- ``POST /v1/calls/{session_id}/{token}/summary``: its ``call_summary`` tool, in the turn after the call ends.
 
 ``token`` is an HMAC of the session id under the device token, so only Telnyx (which holds the URL) can post.
+Both tools send ``rivet_call_id`` back as a preset body field the assistant's model never sees. The live
+transcript and the user's take-over are in ``live_calls.py``.
 
 Setup is one deterministic tool (``call_answering_setup``): it runs fixed code through the Telnyx MCP
 ``execute`` tool, so the approval sheet describes exactly what happens and the webhook token never passes
@@ -21,8 +24,9 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -43,6 +47,11 @@ MESSAGE_LIMIT = 1000
 INBOX_LIMIT = 200
 TELNYX_EXECUTE_TOOL = "telnyx_execute"
 SETUP_TIMEOUT = timedelta(seconds=90)
+CALL_ID_VARIABLE = "rivet_call_id"
+CALL_ID = re.compile(r"^c-[0-9a-f]{12}$")
+SUMMARY_OUTCOMES = ("message_taken", "no_message", "caller_hung_up", "spam")
+# Preset webhook body fields: Telnyx fills them in from the start webhook's answer; the model never sees them.
+_CALL_FIELDS = {"call_id": "{{" + CALL_ID_VARIABLE + "}}"}
 
 ANSWERING_INSTRUCTIONS = """\
 You are Rivet, {{owner_name}}'s phone assistant, answering a call {{owner_name}} could not pick up.
@@ -55,7 +64,9 @@ Never promise a callback time or agree to anything on their behalf.
 - As soon as you have the message, call take_message once. Then tell the caller {{owner_name}} will get it, say \
 goodbye, and hang up.
 - If the conversation ends before you called take_message, call it then with whatever you learned, noting \
-that the caller hung up."""
+that the caller hung up.
+- After the call has ended, call call_summary once, last: who called, what they wanted in a sentence or two, and \
+how the call ended."""
 
 ANSWERING_GREETING = (
     "Hi, you've reached {{owner_name}}. This is Rivet, {{owner_name}}'s assistant. "
@@ -95,7 +106,7 @@ class CallLine:
             raise ValueError("Rivet's call answering must not run on an Anthropic model")
 
     def webhook(self, session_id: str, kind: str) -> str:
-        """``start`` or ``message`` webhook URL for one session."""
+        """``start``, ``message`` or ``summary`` webhook URL for one session."""
         base = self.public_url.rstrip("/")
         return f"{base}/v1/calls/{session_id}/{call_token(self.device_token, session_id)}/{kind}"
 
@@ -109,10 +120,11 @@ class CallLine:
             "instructions": ANSWERING_INSTRUCTIONS,
             "greeting": ANSWERING_GREETING,
             "enabled_features": ["telephony"],
-            "dynamic_variables": {"owner_name": owner_name},
+            "dynamic_variables": {"owner_name": owner_name, CALL_ID_VARIABLE: ""},
             "dynamic_variables_webhook_url": self.webhook(session_id, "start"),
             "dynamic_variables_webhook_timeout_ms": 3000,
             "voice_settings": {"voice": self.voice},
+            # The turn after the call ends, where the assistant calls call_summary.
             "post_conversation_settings": {"enabled": True},
             "tools": [
                 {
@@ -123,6 +135,7 @@ class CallLine:
                         "description": f"Deliver the caller's message to {owner_name}. Call it once per call.",
                         "url": self.webhook(session_id, "message"),
                         "method": "POST",
+                        "preset_body_fields": dict(_CALL_FIELDS),
                         "body_parameters": {
                             "type": "object",
                             "properties": {
@@ -133,6 +146,30 @@ class CallLine:
                                 "hung_up_early": {"type": "boolean", "description": "Caller left before finishing."},
                             },
                             "required": ["message"],
+                        },
+                    },
+                },
+                {
+                    "type": "webhook",
+                    "timeout_ms": 10000,
+                    "webhook": {
+                        "name": "call_summary",
+                        "description": f"After the call has ended, tell {owner_name} how it went. Call it once, last.",
+                        "url": self.webhook(session_id, "summary"),
+                        "method": "POST",
+                        "preset_body_fields": {**_CALL_FIELDS, "caller": "{{telnyx_end_user_target}}"},
+                        "body_parameters": {
+                            "type": "object",
+                            "properties": {
+                                "caller_name": {"type": "string", "description": "Who called, if they said."},
+                                "summary": {"type": "string", "description": "What they wanted, in a sentence or two."},
+                                "outcome": {
+                                    "type": "string",
+                                    "enum": list(SUMMARY_OUTCOMES),
+                                    "description": "How the call ended.",
+                                },
+                            },
+                            "required": ["summary", "outcome"],
                         },
                     },
                 },
@@ -220,21 +257,46 @@ class CallInbox:
         return rows[::-1][: max(1, min(limit, INBOX_LIMIT))]
 
 
-def clean_message(body: Any) -> dict[str, Any]:
-    """The take_message webhook body, reduced to known fields of bounded size."""
+def _texts(body: Any) -> tuple[Mapping[str, Any], Callable[[str], str]]:
     data = body if isinstance(body, Mapping) else {}
 
     def text(key: str) -> str:
         value = data.get(key)
         return str(value).strip()[:MESSAGE_LIMIT] if value is not None else ""
 
+    return data, text
+
+
+def _call_id(data: Mapping[str, Any]) -> str:
+    value = data.get("call_id")
+    return value if isinstance(value, str) and CALL_ID.match(value) else ""
+
+
+def clean_message(body: Any) -> dict[str, Any]:
+    """The take_message webhook body, reduced to known fields of bounded size."""
+    data, text = _texts(body)
     return {
         "kind": "message",
+        "call_id": _call_id(data),
         "caller_name": text("caller_name"),
         "callback_number": text("callback_number"),
         "message": text("message"),
         "urgent": data.get("urgent") is True,
         "hung_up_early": data.get("hung_up_early") is True,
+    }
+
+
+def clean_summary(body: Any) -> dict[str, Any]:
+    """The call_summary webhook body, reduced to known fields of bounded size."""
+    data, text = _texts(body)
+    outcome = text("outcome")
+    return {
+        "kind": "summary",
+        "call_id": _call_id(data),
+        "caller": text("caller")[:64],
+        "caller_name": text("caller_name")[:100],
+        "summary": text("summary"),
+        "outcome": outcome if outcome in SUMMARY_OUTCOMES else "unknown",
     }
 
 
@@ -366,7 +428,7 @@ def tools_for(bridge: DeviceBridge, session_id: str, line: CallLine | None, inbo
     }
     messages_spec = {
         "name": "call_messages",
-        "description": "Calls Rivet answered and the messages callers left, newest first.",
+        "description": "Calls Rivet answered, the messages callers left and call summaries, newest first.",
         "inputSchema": {
             "json": {"type": "object", "properties": {"limit": {"type": "integer", "description": "Default 10."}}}
         },

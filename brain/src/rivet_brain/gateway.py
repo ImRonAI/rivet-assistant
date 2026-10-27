@@ -3,14 +3,22 @@
 Protocol (JSON messages on ``/v1/sessions/{session_id}``, ``Authorization: Bearer <RIVET_DEVICE_TOKEN>``):
 
 Phone to brain: ``turn`` {text, turn_id?}, ``approval.response`` {answers: {interrupt_id: response}, lane?},
-``task`` {goal, task_id?, max_attempts?, timeout?}, ``device.result`` {action_id, result}, ``resume``, ``ping``.
+``task`` {goal, task_id?, max_attempts?, timeout?}, ``device.result`` {action_id, result}, ``call.take_over``
+{call_id, to} (transfer a live call to ``to``, the user's own E.164 number; the tap is the approval), ``resume``,
+``ping``.
 
 Brain to phone: ``turn.accepted``, ``turn.started``, the agent's UI events (``text``, ``thinking``,
 ``searching``, ``sources``, ``tool``, ...), ``approval.request``, ``approval.expired``, ``restart``,
-``turn.completed``, ``turn.failed``, ``device.call``, ``call.answering`` {from, verified}, ``call.message``
-{caller_name, callback_number, message, urgent, hung_up_early, at}, ``session.ready``, ``pong``, ``error``.
+``turn.completed``, ``turn.failed``, ``device.call``, ``call.answering`` {call_id, from, verified}, ``call.live``
+{call_id, from, verified, started_at, status: answering|transferring, lines: [{speaker: caller|rivet, text}],
+snapshot} (``lines`` are new since the last one, or all of them when ``snapshot``; a snapshot of each live call
+is re-sent on ``resume``), ``call.take_over.failed`` {call_id, error}, ``call.message`` {call_id, caller_name,
+callback_number, message, urgent, hung_up_early, at}, ``call.ended`` {call_id, from, caller_name, started_at,
+ended_at, duration, summary, outcome, taken_over}, ``session.ready``, ``pong``, ``error``. Times are Unix seconds;
+``started_at`` and ``duration`` are null for a call that began before the brain did.
 
-Telnyx's answering assistant posts to ``/v1/calls/{session_id}/{token}/start|message`` (see ``calls.py``).
+Telnyx's answering assistant posts to ``/v1/calls/{session_id}/{token}/start|message|summary`` (see ``calls.py``
+and ``live_calls.py``).
 
 Events emitted while the phone is away are buffered and delivered in order when it reconnects.
 """
@@ -40,6 +48,7 @@ from strands.storage import LocalFileStorage, Storage
 from . import calls, device_tools
 from .approvals import RivetApprovals
 from .calls import (
+    CALL_ID_VARIABLE,
     FOLLOW_UP_ATTEMPTS,
     FOLLOW_UP_GOAL,
     FOLLOW_UP_TIMEOUT,
@@ -48,10 +57,12 @@ from .calls import (
     call_token,
     caller_of,
     clean_message,
+    clean_summary,
 )
 from .config import BrainSettings
 from .device import DeviceBridge
-from .factory import build_agent
+from .factory import Wiring, build_agent, build_telnyx_client
+from .live_calls import POLL_SECONDS, LiveCalls, TelnyxRunner
 from .supervisor import BuildFn, NoPendingApprovalError, SessionLockedError, SessionSupervisor
 
 logger = logging.getLogger(__name__)
@@ -67,9 +78,16 @@ ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
 
 
 class _Session:
-    """One session's supervisor, device bridge, and the phone socket attached to it."""
+    """One session's supervisor, device bridge, live calls, and the phone socket attached to it."""
 
-    def __init__(self, session_id: str, supervisor_factory: Callable[[_Session], SessionSupervisor]) -> None:
+    def __init__(
+        self,
+        session_id: str,
+        supervisor_factory: Callable[[_Session], SessionSupervisor],
+        *,
+        telnyx: TelnyxRunner | None = None,
+        call_poll: float = POLL_SECONDS,
+    ) -> None:
         self.bridge = DeviceBridge(session_id)
         self.socket: WebSocket | None = None
         self.buffer: deque[dict[str, Any]] = deque(maxlen=BUFFER_LIMIT)
@@ -77,6 +95,7 @@ class _Session:
         self.send_lock = asyncio.Lock()
         self.tasks: set[asyncio.Task[Any]] = set()
         self.turn_ids: deque[str] = deque(maxlen=TURN_MEMORY)
+        self.calls = LiveCalls(self.emit, self.spawn, telnyx=telnyx, poll=call_poll)
         self.supervisor = supervisor_factory(self)
         self.failed: str | None = None
         self.started = self.spawn(self._start())
@@ -121,6 +140,10 @@ class _Session:
             if not self.bridge.resolve(str(message.get("action_id")), message.get("result") or {}):
                 logger.info("action_id=<%s> | device result had no waiting call", message.get("action_id"))
             return
+        if kind == "call.take_over":
+            # A caller is waiting: this never queues behind the supervisor.
+            self.calls.take_over(str(message.get("call_id") or ""), message.get("to"))
+            return
         await self.started
         if self.failed is not None:
             self.emit({"type": "error", "error": self.failed})
@@ -154,6 +177,8 @@ class _Session:
                 approvals = self.supervisor.pending_approvals(lane)
                 if approvals:
                     self.emit({"type": "approval.request", "lane": lane, "approvals": approvals, "resent": True})
+            for event in self.calls.snapshots():
+                self.emit(event)
             self.emit({"type": "session.ready"})
         else:
             self.emit({"type": "error", "error": f"unsupported message: {kind!r}"})
@@ -228,12 +253,16 @@ class SessionHub:
         build: BuildFn,
         tools_for: ToolsFor | None,
         approvals: RivetApprovals,
+        telnyx: TelnyxRunner | None = None,
+        call_poll: float = POLL_SECONDS,
     ) -> None:
         self.settings = settings
         self.backend = backend
         self.build = build
         self.tools_for = tools_for
         self.approvals = approvals
+        self.telnyx = telnyx
+        self.call_poll = call_poll
         self.sessions: dict[str, _Session] = {}
 
     def get(self, session_id: str) -> _Session:
@@ -252,7 +281,8 @@ class SessionHub:
                     build=self.build,
                 )
 
-            session = self.sessions[session_id] = _Session(session_id, factory)
+            session = _Session(session_id, factory, telnyx=self.telnyx, call_poll=self.call_poll)
+            self.sessions[session_id] = session
         return session
 
     async def close(self) -> None:
@@ -271,6 +301,8 @@ def create_app(
     device_token: str | None = None,
     call_inbox: CallInbox | None = None,
     follow_up_calls: bool = True,
+    call_telnyx: TelnyxRunner | None = None,
+    call_poll: float = POLL_SECONDS,
 ) -> Starlette:
     """The gateway ASGI app.
 
@@ -283,6 +315,8 @@ def create_app(
         device_token: The phone's bearer token; defaults to ``$RIVET_DEVICE_TOKEN``. Required.
         call_inbox: Where answered calls and messages are kept; defaults to ``calls/`` beside the sessions.
         follow_up_calls: Start a task for each message a caller leaves, to propose the next step.
+        call_telnyx: Telnyx connection for live calls (transcript and take-over); closed with the app.
+        call_poll: Seconds between live transcript reads.
     """
     token = device_token or os.environ.get(DEVICE_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_LENGTH:
@@ -293,6 +327,8 @@ def create_app(
         build=build,
         tools_for=tools_for,
         approvals=approvals or RivetApprovals(),
+        telnyx=call_telnyx,
+        call_poll=call_poll,
     )
     expected = f"Bearer {token}".encode()
     inbox = call_inbox or CallInbox(Path(settings.session_dir).parent / "calls")
@@ -323,12 +359,13 @@ def create_app(
             session.detach(socket)
 
     async def call_webhook(request: Request) -> JSONResponse:
-        """Telnyx's answering assistant: ``start`` when it picks up a call, ``message`` when it took one."""
+        """Telnyx's answering assistant: ``start`` when it picks up a call, ``message`` when it took one,
+        ``summary`` after the call ended."""
         session_id = request.path_params["session_id"]
         kind = request.path_params["kind"]
         offered = str(request.path_params["token"]).encode()
         if (
-            kind not in ("start", "message")
+            kind not in ("start", "message", "summary")
             or not _SESSION_ID.match(session_id)
             or not hmac.compare_digest(offered, call_token(token, session_id).encode())
         ):
@@ -343,9 +380,12 @@ def create_app(
         session = hub.get(session_id)
         if kind == "start":
             caller, verified = caller_of(body)
-            inbox.add(session_id, {"kind": "answering", "from": caller, "verified": verified})
-            session.emit({"type": "call.answering", "from": caller, "verified": verified})
-            return JSONResponse({"dynamic_variables": {}})
+            call = session.calls.open(caller, verified)
+            inbox.add(session_id, {"kind": "answering", "call_id": call.call_id, "from": caller, "verified": verified})
+            return JSONResponse({"dynamic_variables": {CALL_ID_VARIABLE: call.call_id}})
+        if kind == "summary":
+            session.calls.end(inbox.add(session_id, clean_summary(body)))
+            return JSONResponse({"result": "Summary delivered."})
         record = inbox.add(session_id, clean_message(body))
         session.emit({"type": "call.message", **{k: v for k, v in record.items() if k != "kind"}})
         if follow_up_calls:
@@ -358,6 +398,8 @@ def create_app(
             yield
         finally:
             await hub.close()
+            if call_telnyx is not None:
+                await call_telnyx.close()
 
     app = Starlette(
         routes=[
@@ -391,6 +433,8 @@ def main() -> None:
         else None
     )
     inbox = CallInbox(Path(settings.session_dir).parent / "calls")
+    # Live calls run fixed code on a Telnyx connection of their own (see live_calls.TelnyxRunner).
+    telnyx = TelnyxRunner(lambda: build_telnyx_client(settings, Wiring())) if line else None
 
     def tools_for(bridge: DeviceBridge) -> list[Any]:
         return [*device_tools.tools_for(bridge), *calls.tools_for(bridge, bridge.session_id, line, inbox)]
@@ -401,6 +445,8 @@ def main() -> None:
         approvals=RivetApprovals({**device_tools.POLICIES, **calls.POLICIES}),
         call_inbox=inbox,
         follow_up_calls=os.environ.get("RIVET_CALL_FOLLOW_UP", "1") != "0",
+        call_telnyx=telnyx,
+        call_poll=float(os.environ.get("RIVET_CALL_POLL") or POLL_SECONDS),
     )
     uvicorn.run(
         app,
