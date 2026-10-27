@@ -9,6 +9,10 @@
     <string name="widget_mark">RIVET</string>
     <string name="widget_unit">R-7 · ASSISTANT</string>
     <string name="widget_waiting">Ask Rivet for anything: your day, your texts, a call back.</string>
+    <plurals name="widget_needs_ok">
+        <item quantity="one">Rivet is waiting on your OK for %d action. Tap to review it.</item>
+        <item quantity="other">Rivet is waiting on your OK for %d actions. Tap to review them.</item>
+    </plurals>
     <string name="widget_key_catchup">Catch up</string>
     <string name="widget_key_myday">My day</string>
     <string name="widget_key_texts">Texts</string>

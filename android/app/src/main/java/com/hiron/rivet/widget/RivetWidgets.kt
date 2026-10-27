@@ -95,7 +95,14 @@ object RivetWidgets {
             views.setTextViewText(R.id.mark, mark())
             views.setTextViewText(R.id.status_text, label)
             views.setTextColor(R.id.status_text, dot)
-            views.setTextViewText(R.id.last, snap.lastReply.ifBlank { context.getString(R.string.widget_waiting) })
+            views.setTextViewText(
+                R.id.last,
+                when {
+                    snap.waiting > 0 -> context.resources.getQuantityString(R.plurals.widget_needs_ok, snap.waiting, snap.waiting)
+                    snap.lastReply.isNotBlank() -> snap.lastReply
+                    else -> context.getString(R.string.widget_waiting)
+                },
+            )
             views.setOnClickPendingIntent(R.id.last, open(context, null, 0))
             mapOf(
                 R.id.key_catchup to Quick.CatchUp, R.id.key_myday to Quick.MyDay,

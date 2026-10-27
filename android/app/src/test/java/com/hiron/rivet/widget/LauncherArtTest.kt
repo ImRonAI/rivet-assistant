@@ -83,15 +83,15 @@ class LauncherArtTest {
         render(RivetWidgets.views(context, snap, panel = false), 360f, 72f, "widget-search").let { root ->
             listOf(R.id.ask, R.id.mic, R.id.head).forEach { assertTrue(root.findViewById<View>(it).hasOnClickListeners()) }
         }
-        render(RivetWidgets.views(context, snap, panel = true), 360f, 210f, "widget-panel").let { root ->
+        render(RivetWidgets.views(context, snap, panel = true), 360f, 200f, "widget-panel").let { root ->
             assertEquals(snap.lastReply, root.findViewById<TextView>(R.id.last).text.toString())
             assertEquals("ONLINE", root.findViewById<TextView>(R.id.status_text).text.toString())
             listOf(R.id.ask, R.id.mic, R.id.last, R.id.key_catchup, R.id.key_myday, R.id.key_texts, R.id.key_calls)
                 .forEach { assertTrue(root.findViewById<View>(it).hasOnClickListeners()) }
         }
-        val waiting = render(RivetWidgets.views(context, snap.copy(waiting = 2, lastReply = ""), panel = true), 360f, 210f, "widget-panel-waiting")
+        val waiting = render(RivetWidgets.views(context, snap.copy(waiting = 2, lastReply = ""), panel = true), 360f, 200f, "widget-panel-waiting")
         assertEquals("2 WAITING", waiting.findViewById<TextView>(R.id.status_text).text.toString())
-        assertEquals(context.getString(R.string.widget_waiting), waiting.findViewById<TextView>(R.id.last).text.toString())
+        assertEquals("Rivet is waiting on your OK for 2 actions. Tap to review them.", waiting.findViewById<TextView>(R.id.last).text.toString())
     }
 
     @Test
