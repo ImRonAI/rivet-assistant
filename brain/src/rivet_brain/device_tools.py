@@ -300,15 +300,27 @@ SPECS: tuple[DeviceToolSpec, ...] = (
 
 POLICIES: dict[str, ToolPolicy] = {spec.name: spec.policy for spec in SPECS}
 
-INSTRUCTIONS = """\
+_EMAIL_ON_PHONE = (
+    "you can read email previews in `notifications_list`; to write one, use `email_draft` (the user sends it)."
+)
+_EMAIL_IN_MAILBOX = "the user's mailbox is connected, so use the Email tools below rather than notification previews."
+
+
+def instructions(*, mailbox: bool = False) -> str:
+    """The phone section of Rivet's instructions; ``mailbox`` when the brain's own email tools are registered."""
+    email = _EMAIL_IN_MAILBOX if mailbox else _EMAIL_ON_PHONE
+    return f"""\
 # Phone
  - Texts: find the number with `contacts_search`, then `sms_send`. To answer a message in any app, use \
 `notifications_list` and `notification_reply` with its key.
  - Times you send are in the phone's zone; check `device_status` when the zone matters.
- - Email: you can read email previews in `notifications_list`; to write one, use `email_draft` (the user sends it).
+ - Email: {email}
  - Apps: `app_open`, then `screen_read` and `screen_act` one step at a time, reading the screen after each \
 action. Stop and ask the user when you reach a login, a payment, or anything you are unsure of.
  - A tool error saying a permission is missing means the user must grant it in Rivet's Settings; tell them which."""
+
+
+INSTRUCTIONS = instructions()
 
 
 def tools_for(bridge: DeviceBridge) -> list[PythonAgentTool]:

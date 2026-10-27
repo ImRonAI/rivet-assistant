@@ -192,8 +192,8 @@ class ToolPolicy:
         summary: Short description shown on the approval sheet.
         untrusted_output: The result can carry third-party text (messages, mail, screens, web pages);
             reading it taints the turn, which suspends remembered approvals until the next turn.
-        scope_arg: Input field a remembered approval is keyed on (e.g. ``to``), so approving texts to one
-            contact never covers another.
+        scope_arg: Input field (or fields) a remembered approval is keyed on (e.g. ``to``), so approving texts
+            to one contact never covers another; ``("to", "cc")`` also keeps it from covering added recipients.
         assess: Optional ``(tool_input) -> (tier, summary)`` for tools whose risk depends on their input (the
             app operator's tap is a commit point or not by its label); it replaces ``tier`` and ``summary``.
     """
@@ -201,7 +201,7 @@ class ToolPolicy:
     tier: Tier
     summary: str = ""
     untrusted_output: bool = False
-    scope_arg: str | None = None
+    scope_arg: str | tuple[str, ...] | None = None
     assess: Callable[[Any], tuple[Tier, str]] | None = None
 
 
@@ -367,8 +367,9 @@ class RivetApprovals(InterventionHandler):
             return Assessment(tool, "unknown", "Tool has no approval policy", preview=preview)
         scope = ""
         if policy.scope_arg is not None:
-            value = tool_input.get(policy.scope_arg) if isinstance(tool_input, Mapping) else None
-            scope = f"{policy.scope_arg}={value}"
+            data = tool_input if isinstance(tool_input, Mapping) else {}
+            fields = (policy.scope_arg,) if isinstance(policy.scope_arg, str) else policy.scope_arg
+            scope = ",".join(f"{name}={data.get(name)}" for name in fields)
         tier, summary = policy.tier, policy.summary or tool
         if policy.assess is not None:
             tier, summary = policy.assess(tool_input)

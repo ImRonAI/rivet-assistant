@@ -28,7 +28,7 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
 | 0 | Perplexity contract probe (`brain/scripts/probe_perplexity.py`) | **Done**: real streams recorded in `brain/tests/fixtures/perplexity`, replayed by `test_recorded_streams.py` |
 | 1 | Brain: model, approvals, supervisor, gateway, chaos suite | **Built, tested, verified live** against Perplexity and the Telnyx MCP server (read-only) |
 | 2 | Android app: robot WebView, gateway client, chat, voice, approvals, activity, settings | **Built**: APK, JVM tests and lint green; needs an on-device pass (no emulator here) |
-| 3 | Device tools: SMS, replies in any messaging app, contacts, calendar, calls, reminders, email drafts | **Built** on both sides; phone tools verified live through the brain with a scripted phone |
+| 3 | Device tools: SMS, replies in any messaging app, contacts, calendar, calls, reminders, email drafts; email over IMAP/SMTP | **Built** on both sides; phone tools verified live through the brain with a scripted phone; email tested against local TLS mail servers (not yet against a real mailbox) |
 | 4 | App operator (Accessibility): read screen, tap/type/scroll, Stop overlay, approval at commit points | **Built**; needs an on-device pass |
 | 5 | Calls: screening, and Rivet answering calls to the user's own number | **Built**: setup verified live up to the first Telnyx write; turning it on needs a Telnyx number Rivet may use (moving one that's in use, or buying one, needs your OK) |
 
@@ -83,6 +83,41 @@ to a Telnyx number where a Telnyx AI Assistant answers as Rivet and takes a mess
 
 The assistant reaches the brain at `RIVET_PUBLIC_URL/v1/calls/{session}/{token}/start|message`, where the
 token is an HMAC of the session id under the device token.
+
+## Email (`brain/src/rivet_brain/email_tools.py`)
+
+Without a mailbox, Rivet reads email previews from the phone's notifications and opens drafts for you to send
+(`email_draft`). Give the brain your mailbox and it searches, reads, sends and replies itself, over IMAP and SMTP:
+
+| Variable | |
+|---|---|
+| `RIVET_EMAIL_ADDRESS` | Your email address |
+| `RIVET_EMAIL_PASSWORD` | An app password for it, never your account password |
+| `RIVET_EMAIL_IMAP_HOST`, `RIVET_EMAIL_IMAP_PORT` | Filled in for Gmail, iCloud and Fastmail addresses; the port is 993 |
+| `RIVET_EMAIL_SMTP_HOST`, `RIVET_EMAIL_SMTP_PORT` | Likewise; 465 (TLS) or 587 (STARTTLS) |
+
+The email tools exist only when the address and password are set. Every connection is TLS: the brain refuses to
+start with any other port, and sends nothing to a 587 server that offers no STARTTLS.
+
+- `email_search` and `email_read` run without asking and never mark mail read; what they return marks the turn
+  untrusted.
+- `email_send` and `email_reply` ask first. A remembered approval covers the same `to` and `cc`, or replies to the
+  same sender. A reply names the address it goes to, which must be the email's Reply-To (or its sender), and threads
+  under it (`Re:`, `In-Reply-To`, `References`). Both file a copy in the folder the server marks `\Sent`.
+- `email_mark` (read, unread, archive) asks too. Archive moves the email to the folder marked `\Archive`, or Gmail's
+  All Mail. Nothing deletes mail.
+
+On Fly (`deploy_fly.sh` also stages any `RIVET_EMAIL_*` set in its environment):
+
+```bash
+read -rs RIVET_EMAIL_PASSWORD   # paste the app password; it stays out of your shell history
+fly secrets set -a rivet-brain-hiron RIVET_EMAIL_ADDRESS=you@gmail.com RIVET_EMAIL_PASSWORD="$RIVET_EMAIL_PASSWORD"
+```
+
+Gmail needs an app password: turn on 2-Step Verification, then create one at
+https://myaccount.google.com/apppasswords (a Google Workspace admin can turn app passwords off). For a Workspace
+address on your own domain, also set `RIVET_EMAIL_IMAP_HOST=imap.gmail.com` and `RIVET_EMAIL_SMTP_HOST=smtp.gmail.com`.
+iCloud and Fastmail also require app passwords, created in their account security settings.
 
 ## The Android app (`android/`)
 
