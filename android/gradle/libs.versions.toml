@@ -16,6 +16,7 @@ coroutines = "1.10.2"
 junit = "4.13.2"
 orgJson = "20260814"
 robolectric = "4.16"
+elevenlabs = "0.13.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -40,6 +41,7 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 junit = { module = "junit:junit", version.ref = "junit" }
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+elevenlabs-android = { module = "io.elevenlabs:elevenlabs-android", version.ref = "elevenlabs" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 

@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.compose.material.icons)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.elevenlabs.android)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 

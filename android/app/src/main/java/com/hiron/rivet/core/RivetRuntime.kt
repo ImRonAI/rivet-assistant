@@ -12,8 +12,11 @@ import com.hiron.rivet.device.RivetCallScreening
 import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.service.Notifications
 import com.hiron.rivet.service.RivetService
+import com.hiron.rivet.voice.AgentTools
+import com.hiron.rivet.voice.RivetAgent
 import com.hiron.rivet.voice.Speaker
 import com.hiron.rivet.widget.RivetWidgets
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,10 +27,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class RivetApp : Application() {
@@ -73,6 +78,12 @@ class RivetRuntime(private val app: Context) {
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
     private val gateway = GatewayClient(http, scope, ::onEvent, ::onConnection)
+
+    /** Approvals the ElevenLabs agents are waiting on, answered on this phone instead of by the brain. */
+    private val localApprovals = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+
+    /** The ElevenLabs agents, used instead of the brain's turns when [Settings.elevenLabsAgents] is on. */
+    val agent = RivetAgent(app, http, settings::gateway, tools::run, { approveOnPhone(it) }, ::update, { _robot.tryEmit(it) }, scope)
 
     /** Turns sent but not yet acknowledged with `turn.accepted`; re-sent on reconnect (the brain dedups by id). */
     private val unacked = LinkedHashMap<String, String>()
@@ -121,9 +132,37 @@ class RivetRuntime(private val app: Context) {
 
     /** Answers every approval waiting in [lane]; anything not in [answers] is denied by the brain. */
     fun answer(lane: String, answers: Map<String, Protocol.Answer>) {
+        if (lane == AgentTools.LANE) {
+            answers.forEach { (id, answer) -> localApprovals[id]?.complete(answer.approved) }
+            return
+        }
         gateway.send(Protocol.approvalResponse(lane, answers))
         answers.keys.forEach { Notifications.clearApproval(app, it) }
         update { RivetStore.answered(it, answers.keys).let { s -> RivetStore.note(s, now(), "approval", describe(answers)) } }
+    }
+
+    /**
+     * Shows [request] on the approval sheet (and as a notification while Rivet is in the background) and waits for
+     * the user. Anything but Approve within [timeoutMs] is a no.
+     */
+    suspend fun approveOnPhone(request: ApprovalRequest, timeoutMs: Long = AgentTools.APPROVAL_TIMEOUT_MS): Boolean {
+        val answer = CompletableDeferred<Boolean>()
+        localApprovals[request.id] = answer
+        var approved = false
+        return try {
+            update { it.copy(approvals = it.approvals + request, activity = Activity.Waiting) }
+            if (!visible) Notifications.approval(app, request)
+            approved = withTimeoutOrNull(timeoutMs) { answer.await() } == true
+            approved
+        } finally {
+            localApprovals.remove(request.id)
+            Notifications.clearApproval(app, request.id)
+            update { s ->
+                val approvals = s.approvals.filterNot { it.id == request.id }
+                val activity = if (s.activity == Activity.Waiting && approvals.isEmpty()) Activity.Working else s.activity
+                RivetStore.note(s.copy(approvals = approvals, activity = activity), now(), "approval", if (approved) "1 approved" else "1 denied")
+            }
+        }
     }
 
     /** From a notification action: only offered when [id] is the lane's only pending approval. */

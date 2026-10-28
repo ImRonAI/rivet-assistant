@@ -137,7 +137,13 @@ fun HomeScreen(
             keyboard = keyboard,
             listening = state.activity == Activity.Listening,
             focusRequests = focusRequests,
-            onSend = { text, asTask -> if (asTask) runtime.startTask(text) else runtime.send(text) },
+            onSend = { text, asTask ->
+                when {
+                    asTask -> runtime.startTask(text)
+                    runtime.settings.elevenLabsAgents -> runtime.agent.sendText(text)
+                    else -> runtime.send(text)
+                }
+            },
             onListen = onListen,
         )
     }

@@ -10,6 +10,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // LiveKit (under the ElevenLabs SDK) needs audioswitch, published only on JitPack.
+        exclusiveContent {
+            forRepository { maven("https://jitpack.io") }
+            filter { includeGroup("com.github.davidliu") }
+        }
     }
 }
 rootProject.name = "rivet"

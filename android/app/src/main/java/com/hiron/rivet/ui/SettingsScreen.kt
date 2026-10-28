@@ -68,6 +68,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
     var speak by remember { mutableStateOf(s.speakReplies) }
     var auto by remember { mutableStateOf(s.autoConnect) }
     var offer by remember { mutableStateOf(s.offerReplies) }
+    var agents by remember { mutableStateOf(s.elevenLabsAgents) }
     var refresh by remember { mutableIntStateOf(0) }
     LifecycleResumeEffect(Unit) {
         refresh++
@@ -132,6 +133,11 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
             Toggle("Read replies aloud", speak) { speak = it; s.speakReplies = it }
             Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
             Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
+            Toggle("Use ElevenLabs agents", agents) {
+                agents = it
+                s.elevenLabsAgents = it
+                if (!it) runtime.agent.stop()
+            }
         }
 
         CallAnswering(runtime, refresh)

@@ -61,6 +61,7 @@ import com.hiron.rivet.ui.RivetTheme
 import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.SettingsScreen
 import com.hiron.rivet.ui.VoiceSetup
+import com.hiron.rivet.voice.AgentMode
 import com.hiron.rivet.voice.LocalVoiceStudio
 import com.hiron.rivet.voice.PhoneVoiceStudio
 import com.hiron.rivet.voice.RivetVoiceService
@@ -109,6 +110,7 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         rivet.visible = false
         rivet.stopSpeaking()
+        if (rivet.agent.mode == AgentMode.Voice) rivet.agent.stop()
         super.onStop()
     }
 
@@ -149,8 +151,12 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
         val heard = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!heard.isNullOrBlank()) runtime.send(heard)
     }
-    val listen = {
+    val listen = listen@{
         runtime.stopSpeaking()
+        if (runtime.settings.elevenLabsAgents) {
+            if (runtime.agent.mode == AgentMode.Voice) runtime.agent.stop() else runtime.agent.switchMode(AgentMode.Voice)
+            return@listen
+        }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask Rivet")
