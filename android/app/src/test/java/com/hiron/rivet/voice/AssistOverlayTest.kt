@@ -48,6 +48,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
@@ -68,6 +69,8 @@ class AssistOverlayTest {
     private val mine = AssistLocal(turnId = "t1", asked = asked)
     private val sent = RivetStore.userSent(RivetStore.connection(RivetState(), Connection.Online), "t1", asked)
 
+    private val speech = listOf(0.08f, 0.22f, 0.41f, 0.66f, 0.52f, 0.31f, 0.74f, 0.88f, 0.61f, 0.37f, 0.18f, 0.29f, 0.57f, 0.81f, 0.69f, 0.44f, 0.26f, 0.12f, 0.35f, 0.58f, 0.47f, 0.63f, 0.39f, 0.62f)
+
     private fun RivetState.then(vararg events: ServerEvent) = events.fold(this) { s, e -> RivetStore.reduce(s, e, 1) }
 
     private fun shot(name: String) {
@@ -84,6 +87,11 @@ class AssistOverlayTest {
         var ui by mutableStateOf(AssistModel.ui(AssistLocal(listening = true, partial = "What's on my calendar tomorrow aft", level = 0.62f), sent))
         compose.setContent { RivetTheme { Box(Modifier.fillMaxSize()) { SomeOtherApp(); AssistOverlay(ui) } } }
 
+        // A second of speech, so the meter has a history to show.
+        speech.forEach { level ->
+            ui = AssistModel.ui(AssistLocal(listening = true, partial = "What's on my calendar tomorrow aft", level = level), sent)
+            compose.waitForIdle()
+        }
         compose.onNodeWithContentDescription("Stop listening").assertIsDisplayed()
         compose.onNodeWithText("What's on my calendar tomorrow aft", substring = true).assertIsDisplayed()
         shot("assist-listening")
@@ -167,6 +175,34 @@ class AssistOverlayTest {
         compose.onNodeWithTag(ASSIST_FIELD_TAG).performTextInput("Remind me to stretch at 3")
         compose.onNodeWithContentDescription("Send").performClick()
         assertEquals(listOf("send:Remind me to stretch at 3"), calls)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h740dp-xxhdpi")
+    fun nothingClipsOnANarrowPhoneWithLargeText() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val approval = ApprovalRequest(
+            "a1", "default", "t2", "sms_send", "send", false, "Text Dana: Friday at 9 works!", "", true, false, emptyList(), null,
+        )
+        val waiting = RivetStore.userSent(RivetStore.connection(RivetState(), Connection.Offline), "t2", "Text Dana that Friday at 9 works")
+            .then(ServerEvent.ApprovalsRequested("t2", "default", listOf(approval), false))
+        var ui by mutableStateOf(AssistModel.ui(AssistLocal(listening = true, partial = "Text Dana that Friday at 9", level = 0.5f), RivetState()))
+        compose.setContent { RivetTheme { Box(Modifier.fillMaxSize()) { SomeOtherApp(); AssistOverlay(ui) } } }
+        speech.forEach { level ->
+            ui = AssistModel.ui(AssistLocal(listening = true, partial = "Text Dana that Friday at 9", level = level), RivetState())
+            compose.waitForIdle()
+        }
+        compose.onNodeWithText("Open Rivet").assertIsDisplayed()
+        shot("assist-narrow-listening")
+
+        ui = AssistModel.ui(AssistLocal(turnId = "t2", asked = "Text Dana that Friday at 9 works"), waiting)
+        compose.onNodeWithText("Review").assertIsDisplayed()
+        shot("assist-narrow-waiting")
+
+        ui = AssistModel.ui(AssistLocal(needsMic = true), RivetState())
+        compose.onNodeWithText("Allow mic").assertIsDisplayed()
+        compose.onNodeWithText("Open Rivet").assertIsDisplayed()
+        shot("assist-narrow-mic")
     }
 
     @Test

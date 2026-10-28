@@ -1,23 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The panel: a machined plate with a hairline outline and a rivet in each corner. -->
+<!-- The panel: graphite lit from the top centre, a hairline outline and light along its top edge. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
             <corners android:radius="@dimen/widget_radius" />
-            <gradient android:angle="270" android:startColor="#FA161B22" android:endColor="#FA0D1116" />
-            <stroke android:width="1dp" android:color="#24E8ECF0" />
+            <gradient
+                android:type="radial"
+                android:centerX="0.5"
+                android:centerY="0"
+                android:gradientRadius="120%"
+                android:startColor="@color/rivet_raised"
+                android:endColor="@color/rivet_bg" />
+            <stroke android:width="1dp" android:color="@color/rivet_edge" />
         </shape>
     </item>
-    <item android:width="4dp" android:height="4dp" android:gravity="top|start" android:top="11dp" android:start="11dp">
-        <shape android:shape="oval"><solid android:color="#33E8ECF0" /></shape>
-    </item>
-    <item android:width="4dp" android:height="4dp" android:gravity="top|end" android:top="11dp" android:end="11dp">
-        <shape android:shape="oval"><solid android:color="#33E8ECF0" /></shape>
-    </item>
-    <item android:width="4dp" android:height="4dp" android:gravity="bottom|start" android:bottom="11dp" android:start="11dp">
-        <shape android:shape="oval"><solid android:color="#33E8ECF0" /></shape>
-    </item>
-    <item android:width="4dp" android:height="4dp" android:gravity="bottom|end" android:bottom="11dp" android:end="11dp">
-        <shape android:shape="oval"><solid android:color="#33E8ECF0" /></shape>
+    <item android:left="32dp" android:right="32dp" android:top="1dp" android:height="1dp" android:gravity="top">
+        <shape android:shape="rectangle"><solid android:color="@color/rivet_highlight" /></shape>
     </item>
 </layer-list>

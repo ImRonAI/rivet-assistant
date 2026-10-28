@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The talk key: safety orange with a lit top edge and a lip. -->
+<!-- The talk key: a safety-orange disc inside two soft halo rings. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:top="1.5dp">
-        <shape android:shape="rectangle">
-            <corners android:radius="22dp" />
-            <solid android:color="#99000000" />
-        </shape>
+    <item>
+        <shape android:shape="oval"><solid android:color="@color/rivet_halo_outer" /></shape>
     </item>
-    <item android:bottom="1.5dp">
-        <shape android:shape="rectangle">
-            <corners android:radius="22dp" />
-            <gradient android:angle="270" android:startColor="#FFFF6D38" android:endColor="#FFFF5A1F" />
+    <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
+        <shape android:shape="oval"><solid android:color="@color/rivet_halo" /></shape>
+    </item>
+    <item android:left="6dp" android:top="6dp" android:right="6dp" android:bottom="6dp">
+        <shape android:shape="oval">
+            <gradient android:angle="270" android:startColor="@color/rivet_accent_hi" android:endColor="@color/rivet_accent" />
         </shape>
     </item>
 </layer-list>

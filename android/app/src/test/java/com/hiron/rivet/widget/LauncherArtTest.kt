@@ -95,6 +95,17 @@ class LauncherArtTest {
     }
 
     @Test
+    fun theSmallestSizesStillFitAndSayTheStatusPlainly() {
+        val snap = WidgetSnapshot(Connection.Connecting, "", 0)
+        render(RivetWidgets.views(context, snap, panel = false), 250f, 64f, "widget-search-narrow")
+        val panel = render(RivetWidgets.views(context, snap, panel = true), 250f, 200f, "widget-panel-narrow")
+        assertEquals("CONNECTING…", panel.findViewById<TextView>(R.id.status_text).text.toString())
+        assertEquals(context.getString(R.string.widget_waiting), panel.findViewById<TextView>(R.id.last).text.toString())
+        val offline = render(RivetWidgets.views(context, snap.copy(connection = Connection.Offline), panel = true), 250f, 200f, "widget-panel-offline")
+        assertEquals("OFFLINE", offline.findViewById<TextView>(R.id.status_text).text.toString())
+    }
+
+    @Test
     fun quickKeysOnlyResolveTheirOwnNames() {
         assertEquals(Quick.CatchUp, Quick.of("CatchUp"))
         assertEquals(Quick.MyDay, Quick.of("myday"))
