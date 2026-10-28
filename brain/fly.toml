@@ -1,12 +1,12 @@
 # Fly.io deployment for the Rivet brain: scripts/deploy_fly.sh does the whole thing.
 # Secrets go through `fly secrets`, never here: PERPLEXITY_API_KEY, HORIZON_API_KEY, RIVET_DEVICE_TOKEN, and for
 # email RIVET_EMAIL_ADDRESS and RIVET_EMAIL_PASSWORD.
-app = "rivet-brain-hiron"
+app = "rivet-assistant"
 primary_region = "sjc"
 
 [env]
   # Where Telnyx's answering assistant reaches the brain (call answering webhooks).
-  RIVET_PUBLIC_URL = "https://rivet-brain-hiron.fly.dev"
+  RIVET_PUBLIC_URL = "https://rivet-assistant.fly.dev"
 
 [[vm]]
   size = "shared-cpu-1x"
