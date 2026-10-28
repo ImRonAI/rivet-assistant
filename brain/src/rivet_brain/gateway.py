@@ -17,6 +17,9 @@ callback_number, message, urgent, hung_up_early, at}, ``call.ended`` {call_id, f
 ended_at, duration, summary, outcome, taken_over}, ``session.ready``, ``pong``, ``error``. Times are Unix seconds;
 ``started_at`` and ``duration`` are null for a call that began before the brain did.
 
+``GET /v1/agent/session?mode=voice|text`` (same bearer) returns a credential for one ElevenLabs agent session:
+``{mode, agent_id, conversation_token}`` for voice (WebRTC), ``{mode, agent_id, signed_url}`` for text (WebSocket).
+
 Telnyx's answering assistant posts to ``/v1/calls/{session_id}/{token}/start|message|summary`` (see ``calls.py``
 and ``live_calls.py``).
 
@@ -38,6 +41,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -72,6 +76,26 @@ MIN_TOKEN_LENGTH = 24
 BUFFER_LIMIT = 1000
 TURN_MEMORY = 256
 CALL_BODY_LIMIT = 64 * 1024
+ELEVENLABS_API = "https://api.elevenlabs.io"
+ELEVENLABS_KEY_ENV = "ELEVENLABS_API_KEY"
+# mode: (agent id env var, default agent id, credential endpoint, response field, field returned to the phone).
+# The Android SDK starts private voice agents with a conversation token and text-only ones with a signed URL.
+ELEVENLABS_AGENTS = {
+    "voice": (
+        "RIVET_ELEVENLABS_VOICE_AGENT_ID",
+        "agent_2901m620nzwrev2r7ekqpydcxe25",
+        "token",
+        "token",
+        "conversation_token",
+    ),
+    "text": (
+        "RIVET_ELEVENLABS_TEXT_AGENT_ID",
+        "agent_9601m623qa72ffs9cyy3ezc0p6tb",
+        "get-signed-url",
+        "signed_url",
+        "signed_url",
+    ),
+}
 _SESSION_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 
 ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
@@ -303,6 +327,7 @@ def create_app(
     follow_up_calls: bool = True,
     call_telnyx: TelnyxRunner | None = None,
     call_poll: float = POLL_SECONDS,
+    elevenlabs_transport: httpx.AsyncBaseTransport | None = None,
 ) -> Starlette:
     """The gateway ASGI app.
 
@@ -317,6 +342,7 @@ def create_app(
         follow_up_calls: Start a task for each message a caller leaves, to propose the next step.
         call_telnyx: Telnyx connection for live calls (transcript and take-over); closed with the app.
         call_poll: Seconds between live transcript reads.
+        elevenlabs_transport: HTTP transport for ElevenLabs credential requests (tests inject a fake here).
     """
     token = device_token or os.environ.get(DEVICE_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_LENGTH:
@@ -357,6 +383,34 @@ def create_app(
             pass
         finally:
             session.detach(socket)
+
+    async def agent_session(request: Request) -> JSONResponse:
+        """A credential for one ElevenLabs agent session; the ElevenLabs API key never leaves the brain."""
+        if not hmac.compare_digest(request.headers.get("authorization", "").encode(), expected):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        mode = request.query_params.get("mode", "")
+        if mode not in ELEVENLABS_AGENTS:
+            return JSONResponse({"error": "mode must be voice or text"}, status_code=400)
+        key = os.environ.get(ELEVENLABS_KEY_ENV, "").strip()
+        if not key:
+            return JSONResponse({"error": "ElevenLabs agents are not set up on the brain"}, status_code=503)
+        env_var, default_agent, endpoint, field, returned = ELEVENLABS_AGENTS[mode]
+        agent_id = os.environ.get(env_var, "").strip() or default_agent
+        try:
+            async with httpx.AsyncClient(base_url=ELEVENLABS_API, transport=elevenlabs_transport, timeout=15) as http:
+                response = await http.get(
+                    f"/v1/convai/conversation/{endpoint}", params={"agent_id": agent_id}, headers={"xi-api-key": key}
+                )
+            response.raise_for_status()
+            credential = response.json()[field]
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+            logger.warning("mode=<%s>, error=<%s> | elevenlabs credential request failed", mode, type(error).__name__)
+            return JSONResponse({"error": "ElevenLabs did not issue a session"}, status_code=502)
+        if not isinstance(credential, str) or not credential:
+            return JSONResponse({"error": "ElevenLabs did not issue a session"}, status_code=502)
+        return JSONResponse(
+            {"mode": mode, "agent_id": agent_id, returned: credential}, headers={"Cache-Control": "no-store"}
+        )
 
     async def call_webhook(request: Request) -> JSONResponse:
         """Telnyx's answering assistant: ``start`` when it picks up a call, ``message`` when it took one,
@@ -405,6 +459,7 @@ def create_app(
         routes=[
             Route("/healthz", healthz),
             WebSocketRoute("/v1/sessions/{session_id}", session_socket),
+            Route("/v1/agent/session", agent_session),
             Route("/v1/calls/{session_id}/{token}/{kind}", call_webhook, methods=["POST"]),
         ],
         lifespan=lifespan,
