@@ -2,9 +2,16 @@ package com.hiron.rivet.voice
 
 import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.GatewayConfig
+import com.hiron.rivet.device.ScreenOperator
 import com.hiron.rivet.device.ToolResult
 import io.elevenlabs.ClientToolResult
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -38,6 +45,7 @@ class AgentToolsTest {
         val built = AgentTools.build(
             run = { name, input -> calls.ran += name to input; result },
             approve = { calls.asked += it; answer(it) },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
         )
         return calls to built
     }
@@ -111,6 +119,41 @@ class AgentToolsTest {
         built.getValue("screen_act").execute(mapOf("action" to "type", "node" to 2, "label" to "Search", "text" to "pizza"))
         assertEquals(4, calls.ran.size)
         assertTrue(calls.asked.isEmpty())
+    }
+
+    @Test
+    fun everyToolHasTheBrainsTier() {
+        val tiers = Regex("""DeviceToolSpec\(\s*"([a-z_]+)".*?ToolPolicy\("([a-z]+)"(.*?)\)""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(brain).map { it.groupValues }.toList()
+        assertEquals(AgentTools.NAMES.toSet(), tiers.map { it[1] }.toSet())
+        for ((_, name, tier, rest) in tiers) {
+            if ("assess=screen_act_tier" in rest) continue
+            assertEquals(name, tier, AgentTools.tier(name, JSONObject()).first)
+        }
+    }
+
+    @Test
+    fun aSlowActionKeepsRunningAndTheAgentIsToldNotToRepeatIt() = runBlocking {
+        val finished = CompletableDeferred<String>()
+        val built = AgentTools.build(
+            run = { name, _ -> delay(200); finished.complete(name); ToolResult.ok("sent") },
+            approve = { true },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            budgetMs = 50,
+        )
+        val answer = built.getValue("sms_send").execute(mapOf("to" to "+18015550100", "body" to "hi"))
+        assertEquals(ClientToolResult.success(AgentTools.STILL_RUNNING), answer)
+        assertEquals("sms_send", withTimeout(5_000) { finished.await() })
+    }
+
+    @Test
+    fun theTappedLabelMustBeTheWholeLabelThatWasJudged() {
+        assertTrue(ScreenOperator.sameLabel("Place order · $23.10", " place order · $23.10 "))
+        assertFalse(ScreenOperator.sameLabel("Place order · $23.10", "Place"))
+        assertFalse(ScreenOperator.sameLabel("Send", "S"))
+        assertFalse(ScreenOperator.sameLabel("Pay $23.10", "$23.10"))
+        assertFalse(ScreenOperator.sameLabel("Send", null))
+        assertEquals("read", AgentTools.screenActTier(JSONObject().put("action", "tap").put("label", "Place")).first)
     }
 
     @Test

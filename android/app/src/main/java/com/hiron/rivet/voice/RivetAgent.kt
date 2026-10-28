@@ -21,12 +21,17 @@ import io.elevenlabs.ConversationSession
 import io.elevenlabs.models.ConversationMode
 import io.elevenlabs.models.ConversationStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -55,8 +60,14 @@ class RivetAgent(
     private val scope: CoroutineScope,
 ) {
     private val http = http.newBuilder().readTimeout(20, TimeUnit.SECONDS).build()
+
+    // Main thread only. Every start and stop moves [generation] on, so a stale start or callback can tell.
+    private var generation = 0
     private var session: ConversationSession? = null
     private var starting: Job? = null
+    private var queued = mutableListOf<String>()
+    private var lips = Job()
+    private var lastChunk: Job? = null
 
     /** The mode of the session that is starting or running; null when there is none. */
     @Volatile
@@ -65,29 +76,50 @@ class RivetAgent(
 
     fun start(mode: AgentMode, firstMessage: String? = null) {
         stop()
+        val gen = generation
+        val messages = mutableListOf<String>().also { queued = it }
+        firstMessage?.let(messages::add)
         this.mode = mode
-        starting = scope.launch {
+        starting = scope.launch(Dispatchers.Main) {
+            var started: ConversationSession? = null
             try {
                 if (mode == AgentMode.Voice && !hasMicrophone()) {
-                    fail("Rivet needs the microphone for voice. Allow it in Settings › Permissions.")
+                    fail(gen, "Rivet needs the microphone for voice. Allow it in Settings › Permissions.")
                     return@launch
                 }
                 val credential = fetchAgentCredential(http, gateway(), mode)
-                val started = withContext(Dispatchers.Main) { ConversationClient.startSession(config(credential), context) }
+                val connected = CompletableDeferred<Unit>()
+                // Not cancellable, so a session that did start is always handed over or ended below.
+                started = withContext(NonCancellable) { ConversationClient.startSession(config(credential, gen, connected), context) }
+                ensureActive()
+                if (messages.isNotEmpty()) {
+                    checkNotNull(withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() }) { "the agent did not connect" }
+                    messages.forEach(started::sendUserMessage)
+                    messages.clear()
+                }
                 session = started
-                firstMessage?.let(started::sendUserMessage)
-            } catch (e: CancellationException) {
-                throw e
+                started = null
             } catch (e: Exception) {
-                fail("Couldn't start the ElevenLabs agent: ${e.message ?: e.javaClass.simpleName}")
+                started?.let(::end)
+                if (e is CancellationException) throw e
+                fail(gen, "Couldn't start the ElevenLabs agent: ${e.message ?: e.javaClass.simpleName}")
             }
         }
     }
 
     fun sendText(text: String) {
         say(fromUser = true, text)
+        if (mode == AgentMode.Text && starting?.isActive == true) {
+            queued += text
+            return
+        }
         val live = session
-        if (mode == AgentMode.Text && live != null) live.sendUserMessage(text) else start(AgentMode.Text, firstMessage = text)
+        if (mode != AgentMode.Text || live == null) return start(AgentMode.Text, firstMessage = text)
+        try {
+            live.sendUserMessage(text)
+        } catch (e: IllegalStateException) {
+            start(AgentMode.Text, firstMessage = text)
+        }
     }
 
     fun switchMode(mode: AgentMode) {
@@ -95,35 +127,57 @@ class RivetAgent(
     }
 
     fun stop() {
+        generation++
         starting?.cancel()
         starting = null
+        hush()
         val ending = session
         session = null
         mode = null
-        robot(RobotCommand("quiet", emptyList()))
-        if (ending != null) scope.launch(Dispatchers.Main) { runCatching { ending.endSession() } }
+        ending?.let(::end)
         update { if (it.activity == Activity.Listening) it.copy(activity = Activity.Idle) else it }
     }
 
-    private fun config(credential: AgentCredential): ConversationConfig {
+    private fun end(ending: ConversationSession) {
+        scope.launch(Dispatchers.Main) { runCatching { ending.endSession() } }
+    }
+
+    private fun config(credential: AgentCredential, gen: Int, connected: CompletableDeferred<Unit>): ConversationConfig {
         val voice = credential.mode == AgentMode.Voice
+        var heard: ConversationMode? = null
         return ConversationConfig(
             conversationToken = credential.credential.takeIf { voice },
             signedUrl = credential.credential.takeUnless { voice },
             textOnly = !voice,
-            clientTools = AgentTools.build(::runOnPhone, approve),
+            clientTools = AgentTools.build(::runOnPhone, approve, scope),
+            onConnect = { connected.complete(Unit) },
+            onDisconnect = {
+                connected.completeExceptionally(IllegalStateException("the agent ended the session"))
+                onMain(gen) { if (session != null) stop() }
+            },
+            // The SDK reports a mode with every data packet; only changes matter.
             onModeChange = { mode ->
-                if (mode == ConversationMode.LISTENING) robot(RobotCommand("quiet", emptyList()))
-                activity(if (mode == ConversationMode.LISTENING) Activity.Listening else Activity.Idle)
+                onMain(gen) {
+                    if (mode != heard) {
+                        heard = mode
+                        if (mode == ConversationMode.LISTENING) robot(RobotCommand("quiet", emptyList()))
+                        activity(if (mode == ConversationMode.LISTENING) Activity.Listening else Activity.Idle)
+                    }
+                }
             },
             onStatusChange = { status ->
-                if (status == ConversationStatus.DISCONNECTED || status == ConversationStatus.ERROR) activity(Activity.Idle)
+                if (status == ConversationStatus.DISCONNECTED || status == ConversationStatus.ERROR) onMain(gen) { activity(Activity.Idle) }
             },
-            onAudioAlignment = { alignment -> scope.launch { mouth(alignment) } },
+            onInterruption = { onMain(gen) { hush() } },
+            onAudioAlignment = { alignment -> onMain(gen) { lipSync(alignment) } },
             onUserTranscriptEvent = { text, _ -> if (voice && text.isNotBlank()) say(fromUser = true, text) },
             onAgentResponseEvent = { text, _ -> if (text.isNotBlank()) say(fromUser = false, text) },
             onError = { code, message -> note("ElevenLabs error $code${message?.let { ": $it" }.orEmpty()}") },
         )
+    }
+
+    private fun onMain(gen: Int, block: () -> Unit) {
+        scope.launch(Dispatchers.Main) { if (gen == generation) block() }
     }
 
     private suspend fun runOnPhone(name: String, input: JSONObject): ToolResult {
@@ -133,13 +187,31 @@ class RivetAgent(
         return result
     }
 
-    private suspend fun mouth(alignment: Map<String, Any>) {
+    /** Mouths each alignment chunk after the one before it has been spoken. */
+    private fun lipSync(alignment: Map<String, Any>) {
+        val before = lastChunk
+        lastChunk = scope.launch(lips + Dispatchers.Main) {
+            before?.join()
+            mouth(AgentTools.words(alignment))
+        }
+    }
+
+    /** Stops the mouth, including chunks still waiting their turn. */
+    private fun hush() {
+        lips.cancel()
+        lips = Job()
+        lastChunk = null
+        robot(RobotCommand("quiet", emptyList()))
+    }
+
+    private suspend fun mouth(words: List<AgentTools.Spoken>) {
         var at = 0.0
-        for (word in AgentTools.words(alignment)) {
+        for (word in words) {
             delay((word.startMs - at).toLong().coerceAtLeast(0))
             at = word.startMs
             robot(RobotCommand("mouth", listOf(word.text, word.seconds)))
         }
+        words.lastOrNull()?.let { delay((it.seconds * 1000).toLong()) }
     }
 
     private fun hasMicrophone() =
@@ -154,7 +226,8 @@ class RivetAgent(
 
     private fun note(text: String, kind: String = "agent") = update { RivetStore.note(it, System.currentTimeMillis(), kind, text) }
 
-    private fun fail(error: String) {
+    private fun fail(gen: Int, error: String) {
+        if (gen != generation) return
         mode = null
         update { RivetStore.note(it.copy(lastError = error, activity = Activity.Failed), System.currentTimeMillis(), "error", error) }
     }
@@ -190,18 +263,34 @@ object AgentTools {
 
     /** The SDK gives a client tool 30 seconds in all; the action itself needs the rest. */
     const val APPROVAL_TIMEOUT_MS = 20_000L
+
+    /** How long a tool waits for its action before answering [STILL_RUNNING], inside the SDK's 30 seconds. */
+    const val TOOL_BUDGET_MS = 27_000L
+    const val CONNECT_TIMEOUT_MS = 15_000L
     const val DECLINED = "The user declined, so it was not done."
+    const val STILL_RUNNING = "This is still running on the phone and may already have happened. Do not do it again; " +
+        "Rivet shows the outcome in its activity log."
     private val HIGH_TIERS = setOf("destructive", "purchase", "unknown")
 
+    /** The action runs in [scope], so it finishes even when the agent has stopped waiting for it. */
     fun build(
         run: suspend (String, JSONObject) -> ToolResult,
         approve: suspend (ApprovalRequest) -> Boolean,
+        scope: CoroutineScope,
+        budgetMs: Long = TOOL_BUDGET_MS,
     ): Map<String, ClientTool> = NAMES.associateWith { name ->
         object : ClientTool {
             override suspend fun execute(parameters: Map<String, Any>): ClientToolResult = try {
+                val deadline = System.currentTimeMillis() + budgetMs
                 val input = json(parameters)
                 val ask = request(name, input)
-                if (ask != null && !approve(ask)) ClientToolResult.failure(DECLINED) else result(run(name, input))
+                if (ask != null && !approve(ask)) {
+                    ClientToolResult.failure(DECLINED)
+                } else {
+                    val action = scope.async { run(name, input) }
+                    withTimeoutOrNull(deadline - System.currentTimeMillis()) { result(action.await()) }
+                        ?: ClientToolResult.success(STILL_RUNNING)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

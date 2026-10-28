@@ -38,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.Protocol
+import com.hiron.rivet.voice.AgentTools
 
 /**
  * Review sheet for one lane's pending approvals. The brain denies any approval in the lane that is not
@@ -84,7 +85,7 @@ fun ApprovalSheet(approvals: List<ApprovalRequest>, onAnswer: (String, Map<Strin
                 Spacer(Modifier.size(4.dp))
                 Text("NEEDS YOUR OK", style = Type.labelSm, color = p.amb, modifier = Modifier.weight(1f))
                 Text(
-                    (if (lane == "default") "" else "TASK $lane · ") + if (batch.size == 1) "1 ACTION" else "${batch.size} ACTIONS",
+                    (if (lane == "default" || lane == AgentTools.LANE) "" else "TASK $lane · ") + if (batch.size == 1) "1 ACTION" else "${batch.size} ACTIONS",
                     style = Type.labelSm, color = p.ink2, maxLines = 1,
                 )
             }
