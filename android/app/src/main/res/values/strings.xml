@@ -7,7 +7,7 @@
     <string name="widget_ask">Ask Rivet anything</string>
     <string name="widget_talk">Talk to Rivet</string>
     <string name="widget_mark">RIVET</string>
-    <string name="widget_unit">R-7 · ASSISTANT</string>
+    <string name="widget_unit">Your assistant</string>
     <string name="widget_waiting">Ask Rivet for anything: your day, your texts, a call back.</string>
     <plurals name="widget_needs_ok">
         <item quantity="one">Rivet is waiting on your OK for %d action. Tap to review it.</item>

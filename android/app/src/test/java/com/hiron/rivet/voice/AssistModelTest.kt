@@ -66,6 +66,7 @@ class AssistModelTest {
         val searching = AssistModel.ui(mine, sent().then(ServerEvent.Searching(listOf("calendar"), "default")))
         assertEquals("SEARCHING", searching.status)
         assertEquals("OFFLINE · QUEUED", AssistModel.ui(mine, RivetStore.connection(sent(), Connection.Offline)).status)
+        assertEquals("CONNECTING", AssistModel.ui(mine, RivetStore.connection(sent(), Connection.Connecting)).status)
     }
 
     @Test
@@ -101,6 +102,7 @@ class AssistModelTest {
         assertEquals(AssistPhase.Failed, before.phase)
         assertEquals("I couldn't finish that: the brain is offline", before.note)
         assertEquals("", before.reply)
+        assertEquals("DIDN'T FINISH", before.status)
 
         val midway = AssistModel.ui(
             mine,
@@ -142,6 +144,7 @@ class AssistModelTest {
         assertEquals(AssistPhase.Failed, ui.phase)
         assertEquals("Text Dana", ui.heard)
         assertEquals(AssistModel.SET_UP_FIRST, ui.note)
+        assertEquals("DIDN'T FINISH", ui.status)
     }
 
     @Test
