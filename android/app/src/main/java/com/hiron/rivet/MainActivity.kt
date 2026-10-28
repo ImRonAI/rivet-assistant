@@ -28,10 +28,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -42,13 +45,14 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
+import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.core.rivet
 import com.hiron.rivet.service.RivetService
 import com.hiron.rivet.ui.ActivityScreen
 import com.hiron.rivet.ui.ApprovalSheet
 import com.hiron.rivet.ui.HomeScreen
 import com.hiron.rivet.ui.HudHeader
-import com.hiron.rivet.ui.CAPABILITIES
+import com.hiron.rivet.ui.LocalOpenVoiceSetup
 import com.hiron.rivet.ui.LocalPalette
 import com.hiron.rivet.ui.Onboarding
 import com.hiron.rivet.ui.PendantTab
@@ -56,6 +60,9 @@ import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
 import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.SettingsScreen
+import com.hiron.rivet.ui.VoiceSetup
+import com.hiron.rivet.voice.LocalVoiceStudio
+import com.hiron.rivet.voice.PhoneVoiceStudio
 import com.hiron.rivet.voice.RivetVoiceService
 import com.hiron.rivet.widget.RivetWidgets
 
@@ -130,13 +137,11 @@ class MainActivity : FragmentActivity() {
 
 private enum class Tab(val label: String) { Rivet("Rivet"), Activity("Activity"), Settings("Settings") }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int) {
     val state by runtime.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Rivet) }
     var reviewing by rememberSaveable { mutableStateOf(false) }
-    val p = LocalPalette.current
     val context = LocalContext.current
 
     val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -169,33 +174,60 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
     LaunchedEffect(state.connection) {
         if (state.connection == Connection.Offline && !runtime.settings.gateway().complete) tab = Tab.Settings
     }
-    // First launch: the power-on screen asks for everything Rivet uses in one go, instead of making the user
-    // hunt through Settings.
+    // First launch: the power-on screens ask for what Rivet uses, instead of making the user hunt through Settings.
     var onboarded by rememberSaveable { mutableStateOf(runtime.settings.onboarded) }
     val finish = {
         runtime.settings.onboarded = true
         onboarded = true
     }
-    val firstRun = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { finish() }
-    if (!onboarded) {
-        Onboarding(runtime, onAllow = { firstRun.launch(CAPABILITIES.flatMap { it.permissions }.toTypedArray()) }, onSkip = finish)
-        return
-    }
+    val studio = remember { PhoneVoiceStudio(context, runtime.settings) }
+    DisposableEffect(studio) { onDispose { studio.stopPreview() } }
+    var voiceSetup by rememberSaveable { mutableStateOf(false) }
 
-    // Header HUD, the screen, and the tab strip; the strip steps aside while the keyboard is up.
+    CompositionLocalProvider(LocalOpenVoiceSetup provides { voiceSetup = true }, LocalVoiceStudio provides studio) {
+        Box(Modifier.fillMaxSize()) {
+            if (onboarded) MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests) else Onboarding(runtime, onFinish = finish)
+            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false })
+        }
+    }
+    if (onboarded && reviewing && state.approvals.isNotEmpty()) {
+        ApprovalSheet(
+            state.approvals,
+            onAnswer = { lane, answers -> runtime.answer(lane, answers) },
+            onDismiss = { reviewing = false },
+        )
+    }
+    LaunchedEffect(state.approvals.size) {
+        reviewing = state.approvals.isNotEmpty()
+    }
+}
+
+/** Header, the screen, and the tab strip; the strip steps aside while the keyboard is up. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MainUi(
+    runtime: RivetRuntime,
+    state: RivetState,
+    tab: Tab,
+    onTab: (Tab) -> Unit,
+    listen: () -> Unit,
+    onReviewApprovals: () -> Unit,
+    focusRequests: Int,
+) {
+    val p = LocalPalette.current
     Column(Modifier.fillMaxSize().background(p.bg).imePadding()) {
         HudHeader(
             state,
             when (tab) {
-                Tab.Rivet -> "R-7 · Assistant"
-                Tab.Activity -> "R-7 · Activity log"
-                Tab.Settings -> "R-7 · Setup"
+                Tab.Rivet -> "Assistant"
+                Tab.Activity -> "Activity"
+                Tab.Settings -> "Settings"
             },
             rule = tab != Tab.Rivet,
         )
         Crossfade(tab, Modifier.weight(1f).fillMaxWidth(), animationSpec = tween(220), label = "tab") { shown ->
             when (shown) {
-                Tab.Rivet -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = { reviewing = true }, focusRequests = focusRequests)
+                Tab.Rivet -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = onReviewApprovals, focusRequests = focusRequests)
                 Tab.Activity -> ActivityScreen(runtime, state)
                 Tab.Settings -> SettingsScreen(runtime, state)
             }
@@ -208,18 +240,8 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
                     PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune),
                 ),
                 tab,
-                { tab = it },
+                onTab,
             )
         }
-    }
-    if (reviewing && state.approvals.isNotEmpty()) {
-        ApprovalSheet(
-            state.approvals,
-            onAnswer = { lane, answers -> runtime.answer(lane, answers) },
-            onDismiss = { reviewing = false },
-        )
-    }
-    LaunchedEffect(state.approvals.size) {
-        reviewing = state.approvals.isNotEmpty()
     }
 }

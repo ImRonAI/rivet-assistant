@@ -73,6 +73,29 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("onboarded", false)
         set(value) = prefs.edit().putBoolean("onboarded", value).apply()
 
+    /** Talk to Rivet out loud (the voice model). Off: Home shows the keyboard and send key only. */
+    var voiceModel: Boolean
+        get() = prefs.getBoolean("voice_model", true)
+        set(value) = prefs.edit().putBoolean("voice_model", value).apply()
+
+    /** What the voice setup saved: "" (nothing yet), "preset", "described", "recorded", "uploaded". */
+    var voiceKind: String
+        get() = prefs.getString("voice_kind", "").orEmpty()
+        set(value) = prefs.edit().putString("voice_kind", value).apply()
+
+    /** The saved voice as the user sees it ("Copper", "Described voice", "Your recording", "Uploaded recording"). */
+    var voiceLabel: String
+        get() = prefs.getString("voice_label", "").orEmpty()
+        set(value) = prefs.edit().putString("voice_label", value).apply()
+
+    var voicePreset: String
+        get() = prefs.getString("voice_preset", "").orEmpty()
+        set(value) = prefs.edit().putString("voice_preset", value).apply()
+
+    var voiceDescription: String
+        get() = prefs.getString("voice_description", "").orEmpty()
+        set(value) = prefs.edit().putString("voice_description", value).apply()
+
     fun gateway(): GatewayConfig = GatewayConfig(gatewayUrl, deviceToken, sessionId)
 }
 

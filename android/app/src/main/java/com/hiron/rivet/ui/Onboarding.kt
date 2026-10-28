@@ -3,6 +3,8 @@ package com.hiron.rivet.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,9 +52,10 @@ val CAPABILITIES = buildList {
  * and why, and one key that asks for all of it at once.
  */
 @Composable
-fun Onboarding(runtime: RivetRuntime, onAllow: () -> Unit, onSkip: () -> Unit) {
+fun Onboarding(runtime: RivetRuntime, onFinish: () -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onFinish() }
     val granted = remember {
         CAPABILITIES.map { c -> c.permissions.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } }
     }
@@ -93,8 +96,8 @@ fun Onboarding(runtime: RivetRuntime, onAllow: () -> Unit, onSkip: () -> Unit) {
                 CAPABILITIES.forEachIndexed { i, c -> ChecklistRow(i + 1, c, granted[i]) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Keycap("Not now", onSkip, Modifier.weight(1f))
-                Keycap("Turn everything on", onAllow, Modifier.weight(2f), tone = KeyTone.Accent)
+                Keycap("Not now", onFinish, Modifier.weight(1f))
+                Keycap("Get Started", { ask.launch(CAPABILITIES.flatMap { it.permissions }.toTypedArray()) }, Modifier.weight(2f), tone = KeyTone.Accent)
             }
         }
     }

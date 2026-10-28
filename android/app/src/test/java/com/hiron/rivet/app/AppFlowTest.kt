@@ -1,10 +1,8 @@
 package com.hiron.rivet.app
 
-import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,8 +13,8 @@ import com.hiron.rivet.MainActivity
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.rivet
 import com.hiron.rivet.testing.FakeAndroidKeyStore
+import com.hiron.rivet.testing.shot
 import com.hiron.rivet.ui.COMPOSER_TAG
-import com.hiron.rivet.ui.STAGE_TAG
 import com.hiron.rivet.ui.TAB_TAG_PREFIX
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -33,8 +31,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.io.File
-import java.io.FileOutputStream
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -64,36 +60,7 @@ class AppFlowTest {
 
     private val brainSockets = mutableListOf<WebSocket>()
 
-    private fun shot(name: String) {
-        compose.waitForIdle()
-        val dir = File(System.getProperty("rivet.screenshots") ?: "build/screens").apply { mkdirs() }
-        val decor = compose.activity.window.decorView
-        val bitmap = Bitmap.createBitmap(decor.width, decor.height, Bitmap.Config.ARGB_8888)
-        compose.runOnUiThread {
-            // Every window in z-order: the activity, then sheets and dialogs on top of it.
-            val canvas = android.graphics.Canvas(bitmap)
-            for (view in windowRoots()) {
-                val at = IntArray(2).also { view.getLocationOnScreen(it) }
-                canvas.save()
-                canvas.translate(at[0].toFloat(), at[1].toFloat())
-                view.draw(canvas)
-                canvas.restore()
-            }
-        }
-        FileOutputStream(File(dir, "$name.png")).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        // The robot WebView draws nothing under Robolectric; record where its stage is so a review can place it.
-        compose.onAllNodesWithTag(STAGE_TAG).fetchSemanticsNodes().firstOrNull()?.boundsInWindow?.let { b ->
-            File(dir, "$name.stage.json").writeText("""{"left":${b.left},"top":${b.top},"right":${b.right},"bottom":${b.bottom}}""")
-        }
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun windowRoots(): List<android.view.View> {
-        val global = Class.forName("android.view.WindowManagerGlobal")
-        val instance = global.getMethod("getInstance").invoke(null)
-        val views = global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<android.view.View>
-        return views.filter { it.isShown && it.width > 0 }
-    }
+    private fun shot(name: String) = shot(compose, compose.activity, name)
 
     private fun next(type: String): JSONObject {
         while (true) {
@@ -117,7 +84,7 @@ class AppFlowTest {
     @Test
     fun theWholeAppWorksAgainstABrain() {
         // First run: the power-on screen, then straight into the app.
-        compose.onNodeWithText("Turn everything on").assertIsDisplayed()
+        compose.onNodeWithText("Get Started").assertIsDisplayed()
         shot("00-onboarding")
         compose.onNodeWithText("Not now").performClick()
         compose.waitForIdle()
