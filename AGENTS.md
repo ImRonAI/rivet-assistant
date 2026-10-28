@@ -230,9 +230,63 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   - Pinning widgets: https://developer.android.com/develop/ui/views/appwidgets/configuration#pin
   - OpenSearch description format: https://github.com/dewitt/opensearch
 
-### 6. Keep this file honest
+### 6. Storage on Telnyx KV, through the Telnyx MCP (decided)
+- **Decision (owner, 2026-10-28):** the brain's sessions, memory and action journal move from the Fly volume (`LocalFileStorage`)
+  to a Telnyx KV namespace, reached through the Telnyx MCP server that is already wired. No new secrets.
+- **Build:**
+  - `brain/src/rivet_brain/storage/telnyx_kv.py`, implementing the Strands `Storage` protocol (`write`, `read`, `delete`, `list`, `search`) over `PutKvKey`, `GetKvKey`, `ListKvKeys` (with `prefix` and `cursor`) and `DeleteKvKey`.
+  - Run them through `live_calls.TelnyxRunner`, as fixed code with no model-written code.
+  - Keep `FencedStorage` wrapped around it.
+- **Constraints, from the Telnyx schema in OubliTelnyxMCP `docs/reference/telnyx/openapi.json`:**
+  - A value holds at most 1 MiB. Split larger snapshots into `key/part-N` entries plus a manifest.
+  - Key names may use only `a-z A-Z 0-9 - _ / = .`, up to 256 characters, with no leading `_`. Encode Strands keys to fit.
+  - A namespace is created asynchronously (`CreateKvNamespace`, then wait for `provision_ok`). That is a one-time Telnyx write and needs the owner's approval.
+  - The namespace id goes in `RIVET_TELNYX_KV_NAMESPACE`.
+- **Tradeoffs:**
+  - Each save becomes a Horizon round trip, so turns get slower; measure it.
+  - Tenancy is one namespace with a prefix per session. Per-user namespaces come later.
+- **References:**
+  - `strands-py/src/strands/storage/storage.py`, the protocol (https://github.com/ImRonAI/strands-harness-sdk-python)
+  - OubliTelnyxMCP `docs/reference/telnyx/domains/storage.md` and its KV end-to-end tests
+  - Rivet's `brain/src/rivet_brain/storage/fenced.py` and `factory.py`
+
+### 7. Scheduled routines (decided: a scheduler inside the brain)
+- **Why not Strands:** Strands has no scheduler. The strands-agents-tools `cron` tool is deprecated (0.8.10, `strands_tools/cron.py`);
+  its note recommends a hosted scheduler such as EventBridge, or the shell tool. Rivet has no shell tool, by design.
+- **Build:** `brain/src/rivet_brain/routines.py`.
+  - Store routines in the KV storage from task 6.
+  - Repeat rules use RFC 5545 RRULE with a time zone (`dateutil.rrule`), plus triggers on incoming notifications.
+  - An asyncio loop in the gateway starts due routines as GoalLoop tasks with `_Session.run_task`, so approvals, taint and notifications all apply.
+  - Tools: `routine_create`, `routine_list` and `routine_cancel`. Create is write tier. A routine can never buy or delete; its runs still ask before sending unless a standing rule from task 3 allows it.
+  - App: a "Routines" plate in Activity or Settings.
+- **One-off timed actions** use Telnyx's own scheduling through the MCP:
+  - `ScheduleMessage` (SMS);
+  - `create_scheduled_event` (an AI-assistant call or text);
+  - the email `/schedule` operations.
+- **References:**
+  - https://dateutil.readthedocs.io/en/stable/rrule.html
+  - https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10
+  - the Telnyx schema operations named above
+
+### 8. Keep this file honest
 When a feature lands, update "Everything Rivet can do today" and the status table in the same change. When something is
 built but unverified on a real phone or live service, say so.
+
+## Before launch (checklist)
+1. Tasks 3 (plain alerts and "Don't ask again"), 4 (recommended settings) and 5 (the real search widget) above; task 1 (ElevenLabs voice) if voice is part of the launch.
+2. Task 6 (Telnyx KV storage) and task 7 (routines).
+3. **On-device pass** on a real phone. See "Verification gaps" below and the checklist in `android/README.md`.
+4. **Live services:**
+   - re-run call answering setup (it asks for approval) and place one real forwarded call;
+   - set `RIVET_EMAIL_*` as Fly secrets and test one real mailbox.
+5. **Release signing:** the APK is signed with the debug key (`android/app/build.gradle.kts`). Create a release keystore and sign with it before any public distribution. See https://developer.android.com/studio/publish/app-signing.
+6. **Secrets hygiene:** rotate the Fly token and the API keys that were pasted into chat sessions.
+7. **CI:** confirm `.github/workflows/brain.yml` and `android.yml` pass on `main`.
+8. **Store compliance (Play Store, if used):**
+   - SMS and call-log permissions need a declared default-handler or permitted use case;
+   - Accessibility use needs a disclosure;
+   - see https://support.google.com/googleplay/android-developer/answer/10208820 and https://support.google.com/googleplay/android-developer/answer/10964491.
+   - Sideloading avoids this.
 
 ## Verification gaps to close on a real phone
 - **Widgets:** both widgets on a real launcher.

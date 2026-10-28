@@ -12,7 +12,10 @@ anything. In short:
   3. Plain-language, formatted alerts with "Don't ask again" for both approve and deny.
   4. Recommended settings.
   5. The home-screen search widget, backed by Ron's browser search engine and user-selectable engines.
-  6. Keep the docs honest.
+  6. Storage on Telnyx KV through the MCP (decided).
+  7. Scheduled routines: a scheduler inside the brain plus Telnyx's scheduling operations (decided).
+  8. Keep the docs honest.
+- **Before launch:** see the checklist in `AGENTS.md`.
 - **Never:**
   - use Claude or Anthropic models in the product;
   - commit secrets (`android/rivet.local.properties` stays gitignored);
