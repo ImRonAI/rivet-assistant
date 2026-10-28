@@ -5,7 +5,7 @@
 `AGENTS.md` is the source of truth for Rivet's status, what it can do, the rules, and the remaining work. Read it before changing
 anything. In short:
 
-- **Version:** app 0.2.0 is on `main`. The Fly brain still runs the pre-0.2.0 code; redeploying it is the first pending step and needs the owner's approval.
+- **Version:** app 0.2.0 is on `main`, and the Fly brain runs the matching 0.2.0 code (deployed 2026-10-28).
 - **Remaining work, in order:**
   1. The robot always in view, with an ElevenLabs realtime voice agent or the language model alone.
   2. A VPS workspace: OpenVSCode Server and a virtual desktop.

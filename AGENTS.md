@@ -12,9 +12,9 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 | Area | State |
 |---|---|
 | App | **0.2.0** (versionCode 5) on `main`. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. |
-| Brain on Fly | `rivet-brain-hiron` (https://rivet-brain-hiron.fly.dev, region `sjc`) runs the **pre-0.2.0 brain**. Redeploying is the first pending step: it brings email and live calls. Use `brain/scripts/deploy_fly.sh` with `FLY_LOCAL_BUILD=1`; it needs the owner's approval. |
+| Brain on Fly | `rivet-brain-hiron` (https://rivet-brain-hiron.fly.dev, region `sjc`) runs the **0.2.0 brain** (deployed 2026-10-28 from `main`; `/healthz` ok, the app's live test passes against it). Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1`. If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
 | Tests | Brain: 227 pass (`-m "not live"`), ruff, format and mypy clean. Android: 79 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
-| Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once, after the redeploy; it asks for approval. |
+| Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
 
 ## Rules that always apply
