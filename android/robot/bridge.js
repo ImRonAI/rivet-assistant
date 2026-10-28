@@ -1,6 +1,6 @@
 /* Rivet app bridge. Loaded after the robot page's own script, so it shares its top-level bindings
-   (play, D, TRACE, EMAIL_LINES, THREAD, H$, emote, body, time).
-   The app drives it with window.rivet.{state,trace,email,thread,say,mouth,quiet,viseme}; the page reports back to
+   (play, D, TRACE, EMAIL_LINES, THREAD, H$, emote, body, time, cam, stage).
+   The app drives it with window.rivet.{state,trace,email,thread,say,mouth,quiet,viseme,theme,focus}; the page reports back to
    the app through the RivetHost web message listener the app installs. */
 (() => {
   D.attract = false; // the robot moves only when the agent does something
@@ -35,6 +35,8 @@
     html[data-mood] .stage::before{opacity:.26;animation:moodbreathe 2.8s ease-in-out infinite}
     html[data-mood="cy"]{--mood-c:var(--cy)} html[data-mood="amb"]{--mood-c:var(--amb)}
     html[data-mood="ok"]{--mood-c:var(--ok)} html[data-mood="rec"]{--mood-c:var(--rec)}
+    html[data-mood] .plate-ring{stroke:var(--mood-c);stroke-opacity:.55;transition:stroke .8s ease}
+    html[data-mood] .plate-tick{stroke:var(--mood-c);stroke-opacity:.45}
     @keyframes moodbreathe{50%{opacity:.14}}
     @media (prefers-reduced-motion: reduce){html[data-mood] .stage::before{animation:none}}`;
   document.head.appendChild(glow);
@@ -106,6 +108,19 @@
     document.documentElement.setAttribute('data-theme', name === 'dark' ? 'dark' : 'light');
   }
 
+  /* camera framing: 'stage' fills a full-height stage, 'card' sits the robot in a short card. The page eases its
+     look-at height back to its own rest every frame, so only the zoom holds; a double tap resets the view to
+     zoom 1 and the framing is put back after it. */
+  const FOCUS = { stage: 1, card: .92 };
+  let focusZoom = 1;
+  function focus(mode) {
+    if (!Object.prototype.hasOwnProperty.call(FOCUS, mode)) return;
+    focusZoom = FOCUS[mode];
+    cam.zoom = focusZoom;
+    cam.dirty = true;
+  }
+  stage.addEventListener('dblclick', () => { cam.zoom = focusZoom; cam.dirty = true; });
+
   function tick() {
     const id = STATE_MOVE[current];
     if (HOLD.has(id) && D.cur.id !== id && D.settle !== id) play(id);
@@ -121,6 +136,6 @@
   }
   setInterval(tick, 250);
 
-  Object.assign(window.rivet, { state, trace, email, thread, say, mouth, quiet, theme, states: () => Object.keys(STATE_MOVE) });
+  Object.assign(window.rivet, { state, trace, email, thread, say, mouth, quiet, theme, focus, states: () => Object.keys(STATE_MOVE) });
   post({ type: 'ready', moves: window.rivet.moves(), states: Object.keys(STATE_MOVE) });
 })();
