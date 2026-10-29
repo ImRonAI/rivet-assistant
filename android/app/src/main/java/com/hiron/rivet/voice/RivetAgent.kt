@@ -14,7 +14,6 @@ import com.hiron.rivet.core.Protocol
 import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.core.RivetStore
 import com.hiron.rivet.core.RobotCommand
-import com.hiron.rivet.core.RobotDirector
 import com.hiron.rivet.core.RuleScope
 import com.hiron.rivet.core.RuleSet
 import com.hiron.rivet.core.RuleTarget
@@ -56,7 +55,7 @@ import java.util.concurrent.TimeUnit
 enum class AgentMode(val wire: String) { Voice("voice"), Text("text") }
 
 /** What the brain's `/v1/agent/session` issued: a conversation token for voice, a signed URL for text. */
-data class AgentCredential(val mode: AgentMode, val agentId: String, val credential: String)
+data class AgentCredential(val mode: AgentMode, val credential: String)
 
 /**
  * Rivet's ElevenLabs agents (brain/src/rivet_brain/gateway.py `ELEVENLABS_AGENTS`): [start] a voice or text
@@ -252,7 +251,6 @@ class RivetAgent(
     }
 
     private suspend fun runOnPhone(name: String, input: JSONObject): ToolResult {
-        RobotDirector.forDeviceCall(name, input).forEach(robot)
         val result = withContext(Dispatchers.Default) { run(name, input) }
         note("$name: ${if (result.ok) "done" else result.data.toString().take(120)}", kind = "device")
         return result
@@ -382,7 +380,7 @@ internal suspend fun fetchAgentCredential(http: OkHttpClient, config: GatewayCon
             }
             val field = if (mode == AgentMode.Voice) "conversation_token" else "signed_url"
             val credential = body.optString(field).ifBlank { throw AgentStartError.NotSetUp }
-            AgentCredential(mode, body.optString("agent_id"), credential)
+            AgentCredential(mode, credential)
         }
     }
 

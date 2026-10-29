@@ -30,7 +30,6 @@ import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -54,7 +53,6 @@ import com.hiron.rivet.ui.ApprovalSheet
 import com.hiron.rivet.ui.HomeScreen
 import com.hiron.rivet.ui.HudHeader
 import com.hiron.rivet.ui.LocalImages
-import com.hiron.rivet.ui.LocalOpenVoiceSetup
 import com.hiron.rivet.ui.LocalPalette
 import com.hiron.rivet.ui.MiniStage
 import com.hiron.rivet.ui.Onboarding
@@ -65,10 +63,7 @@ import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.ResultsRequest
 import com.hiron.rivet.ui.ResultsScreen
 import com.hiron.rivet.ui.SettingsScreen
-import com.hiron.rivet.ui.VoiceSetup
 import com.hiron.rivet.voice.AgentMode
-import com.hiron.rivet.voice.LocalVoiceStudio
-import com.hiron.rivet.voice.PhoneVoiceStudio
 import com.hiron.rivet.voice.RivetVoiceService
 import com.hiron.rivet.widget.RivetWidgets
 
@@ -208,20 +203,13 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
         runtime.settings.onboarded = true
         onboarded = true
     }
-    val studio = remember { PhoneVoiceStudio(context, runtime.settings) }
-    DisposableEffect(studio) { onDispose { studio.stopPreview() } }
-    var voiceSetup by rememberSaveable { mutableStateOf(false) }
     // The results page; its results are in memory only, so it isn't saved across a recreate.
     var results by remember { mutableStateOf<ResultsRequest?>(null) }
     LaunchedEffect(searchRequests) {
         if (searchRequests > 0) results = ResultsRequest.Sheet
     }
 
-    CompositionLocalProvider(
-        LocalOpenVoiceSetup provides { voiceSetup = true },
-        LocalVoiceStudio provides studio,
-        LocalImages provides runtime.images,
-    ) {
+    CompositionLocalProvider(LocalImages provides runtime.images) {
         Box(Modifier.fillMaxSize()) {
             if (onboarded) {
                 MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests) { results = it }
@@ -235,7 +223,6 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
                     onAsk = runtime::ask, onAdd = runtime::addContext, onClose = { results = null },
                 )
             }
-            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state) })
         }
     }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {

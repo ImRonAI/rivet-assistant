@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Icon
@@ -79,35 +78,31 @@ fun Tone.color(): Color {
     }
 }
 
-data class GlowSpec(val color: Color, val radius: Dp, val offsetY: Dp)
+data class GlowSpec(val color: Color, val radius: Dp)
 
 /** The glow presets. Rivet is dark only, so they are fixed colours. */
 object Glows {
     private val accent = DarkPalette.accent
-    val cta = GlowSpec(accent.copy(alpha = 0.35f), 24.dp, 0.dp)
-    val talk = GlowSpec(accent.copy(alpha = 0.45f), 36.dp, 0.dp)
-    val live = GlowSpec(accent.copy(alpha = 0.55f), 36.dp, 0.dp)
-    val peak = GlowSpec(accent.copy(alpha = 0.60f), 12.dp, 0.dp)
-    val selected = GlowSpec(accent.copy(alpha = 0.08f), 24.dp, 0.dp)
-    val disc = GlowSpec(accent.copy(alpha = 0.10f), 15.dp, 10.dp)
+    val cta = GlowSpec(accent.copy(alpha = 0.35f), 24.dp)
+    val live = GlowSpec(accent.copy(alpha = 0.55f), 36.dp)
+    val peak = GlowSpec(accent.copy(alpha = 0.60f), 12.dp)
 }
 
 /** A soft light around [shape] drawn behind the content: ten stacked, fading outlines (works everywhere, Robolectric included). */
-fun Modifier.glow(color: Color, radius: Dp, shape: Shape = CircleShape, offsetY: Dp = 0.dp): Modifier = drawBehind {
+fun Modifier.glow(color: Color, radius: Dp, shape: Shape = CircleShape): Modifier = drawBehind {
     val r = radius.toPx()
-    val dy = offsetY.toPx()
     for (i in 1..10) {
         val grow = r * i / 10f
         val a = color.alpha * 0.22f * (1 - i / 10f).pow(1.6f)
         if (a <= 0f) continue
         val outline = shape.createOutline(Size(size.width + grow * 2, size.height + grow * 2), layoutDirection, this)
-        translate(-grow, -grow + dy) { drawOutline(outline, color.copy(alpha = a)) }
+        translate(-grow, -grow) { drawOutline(outline, color.copy(alpha = a)) }
     }
 }
 
-fun Modifier.glow(spec: GlowSpec, shape: Shape): Modifier = glow(spec.color, spec.radius, shape, spec.offsetY)
+fun Modifier.glow(spec: GlowSpec, shape: Shape): Modifier = glow(spec.color, spec.radius, shape)
 
-/** A 1dp ring [gap] outside [shape], flush against its border by default: the focus halo of fields and the composer card. */
+/** A 1dp ring [gap] outside [shape], flush against its border by default: the focus halo of fields. */
 internal fun Modifier.ring(color: Color, shape: Shape, show: Boolean, gap: Dp = 0.dp): Modifier = drawBehind {
     if (!show) return@drawBehind
     val g = gap.toPx() + 0.5.dp.toPx()
@@ -123,31 +118,25 @@ internal fun pulse(on: Boolean = true, low: Float = 0.5f, periodMs: Int = Motion
     return t.animateFloat(1f, low, infiniteRepeatable(tween(periodMs / 2, easing = Motion.Standard), RepeatMode.Reverse), label = "pulse").value
 }
 
-/** The tag plate behind [StatusTag] and [Tag]. */
+/** The tag plate behind [StatusTag]. */
 @Composable
-internal fun TagPlate(text: String, color: Color, modifier: Modifier = Modifier, outline: Boolean = false, hot: Boolean = false) {
-    val p = LocalPalette.current
+internal fun TagPlate(text: String, color: Color, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(4.dp)
-    val fill = when {
-        hot -> color
-        outline -> Color.Transparent
-        else -> color.copy(alpha = 0.10f)
-    }
     Text(
         text.uppercase(),
         style = Type.tag,
-        color = if (hot) p.accentInk else color,
+        color = color,
         maxLines = 1,
-        modifier = modifier.clip(shape).background(fill)
-            .border(1.dp, color.copy(alpha = if (outline) 0.35f else 0.20f), shape)
+        modifier = modifier.clip(shape).background(color.copy(alpha = 0.10f))
+            .border(1.dp, color.copy(alpha = 0.20f), shape)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
 
-/** 9sp mono uppercase tag: tone at 10% fill, 20% border. [outline] drops the fill for a quieter tag. */
+/** 9sp mono uppercase tag: tone at 10% fill, 20% border. */
 @Composable
-fun StatusTag(text: String, tone: Tone, modifier: Modifier = Modifier, outline: Boolean = false) {
-    TagPlate(text, tone.color(), modifier, outline = outline)
+fun StatusTag(text: String, tone: Tone, modifier: Modifier = Modifier) {
+    TagPlate(text, tone.color(), modifier)
 }
 
 /** A small tone dot and a spaced mono label in the tone's colour. [live] pulses the dot. */
@@ -166,7 +155,7 @@ fun Eyebrow(text: String, modifier: Modifier = Modifier, tone: Tone = Tone.Accen
 
 /** Big Shoulders hero line ending in an accent full stop (the period is appended; do not include it in [text]). */
 @Composable
-fun HeroTitle(text: String, modifier: Modifier = Modifier, style: TextStyle = Type.hero) {
+fun HeroTitle(text: String, modifier: Modifier = Modifier, style: TextStyle) {
     val p = LocalPalette.current
     Text(
         buildAnnotatedString {
@@ -188,24 +177,17 @@ fun StepHeadline(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** A muted mono section label with an optional right-aligned note ("4 WAYS", "OPTIONAL"). */
+/** A muted mono section label. */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: String? = null) {
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, style = Type.eyebrow.copy(fontSize = 10.sp), color = p.ink2, maxLines = 1)
-    }
+    Text(text.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1, modifier = modifier.fillMaxWidth())
 }
 
-/**
- * The card every v3 surface is built from: card fill and a hairline edge; [selected] gives it an accent border
- * and a faint glow. [onClick] makes it pressable.
- */
+/** The card every v3 surface is built from: card fill and a hairline edge. [onClick] makes it pressable. */
 @Composable
 fun RivetCard(
     modifier: Modifier = Modifier,
-    selected: Boolean = false,
     onClick: (() -> Unit)? = null,
     role: Role? = null,
     radius: Dp = 16.dp,
@@ -220,40 +202,37 @@ fun RivetCard(
     Column(
         modifier.fillMaxWidth()
             .graphicsLayer { if (down) { scaleX = 0.99f; scaleY = 0.99f } }
-            .then(if (selected) Modifier.glow(Glows.selected, shape) else Modifier)
             .clip(shape)
             .background(if (down) p.cardHi else p.card)
-            .border(if (selected) 2.dp else 1.dp, if (selected) p.accent else if (down) p.lineHi else p.edge, shape)
+            .border(1.dp, if (down) p.lineHi else p.edge, shape)
             .then(if (onClick != null) Modifier.clickable(interactionSource = source, indication = null, role = role, onClick = onClick) else Modifier)
             .padding(padding),
         content = content,
     )
 }
 
-/** A square icon well. [selected] lights it in the accent. */
+/** A square icon well. */
 @Composable
 fun IconWell(
     icon: ImageVector,
     modifier: Modifier = Modifier,
     tone: Tone = Tone.Neutral,
-    selected: Boolean = false,
     size: Dp = 40.dp,
     iconSize: Dp = 20.dp,
 ) {
     val p = LocalPalette.current
     val shape = RoundedCornerShape(size / 4)
     Box(
-        modifier.size(size).clip(shape).background(if (selected) p.accentSoft else p.tile)
-            .border(1.dp, if (selected) p.accent.copy(alpha = 0.3f) else p.edgeSoft, shape),
+        modifier.size(size).clip(shape).background(p.tile).border(1.dp, p.edgeSoft, shape),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = if (selected) p.accent else tone.color(), modifier = Modifier.size(iconSize))
+        Icon(icon, contentDescription = null, tint = tone.color(), modifier = Modifier.size(iconSize))
     }
 }
 
 /**
- * Icon well, title (with an optional tag beside it) and one line of body, with [trailing] on the right (toggle,
- * radio, arrow, play). [nested] renders under a divider. Used by every onboarding and voice card.
+ * Icon well, title (with an optional tag beside it) and one line of body, with [trailing] on the right (a toggle
+ * or a key). [nested] renders under a divider. Used by the onboarding and settings cards.
  */
 @Composable
 fun FeatureCard(
@@ -263,16 +242,15 @@ fun FeatureCard(
     modifier: Modifier = Modifier,
     tone: Tone = Tone.Cyan,
     tag: Pair<String, Tone>? = null,
-    selected: Boolean = false,
     onClick: (() -> Unit)? = null,
     role: Role? = null,
     trailing: (@Composable () -> Unit)? = null,
     nested: (@Composable () -> Unit)? = null,
 ) {
     val p = LocalPalette.current
-    RivetCard(modifier, selected = selected, onClick = onClick, role = role) {
+    RivetCard(modifier, onClick = onClick, role = role) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(icon, tone = tone, selected = selected)
+            IconWell(icon, tone = tone)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -338,45 +316,6 @@ fun TrustFooter(lines: String, modifier: Modifier = Modifier, icon: ImageVector 
         Icon(icon, contentDescription = null, tint = tone.color(), modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(lines, style = Type.labelMd.copy(lineHeight = 17.sp), color = p.ink2, modifier = Modifier.widthIn(max = 280.dp))
-    }
-}
-
-/** A requirement that is met: green check, title and body, and a tag on the right. */
-@Composable
-fun CheckCard(title: String, body: String, tag: String, tagTone: Tone, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    RivetCard(modifier, padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(p.ok.copy(alpha = 0.12f)).border(1.dp, p.ok.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.Check, contentDescription = null, tint = p.ok, modifier = Modifier.size(16.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = Type.cardTitle, color = p.ink)
-                Text(body, style = Type.cardBody, color = p.ink2)
-            }
-            Spacer(Modifier.width(8.dp))
-            StatusTag(tag, tagTone, outline = true)
-        }
-    }
-}
-
-/** A one-line status: tone dot and mono caps, with an optional four-bar level glyph on the right. */
-@Composable
-fun StatusLine(text: String, tone: Tone, modifier: Modifier = Modifier, bars: Boolean = false) {
-    val p = LocalPalette.current
-    val c = tone.color()
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(c))
-        Spacer(Modifier.width(8.dp))
-        Text(text.uppercase(), style = Type.labelMd, color = c, maxLines = 1, modifier = Modifier.weight(1f))
-        if (bars) {
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
-                listOf(p.accent to 14.dp, p.ok to 18.dp, p.cy to 12.dp, p.accent to 6.dp).forEach { (color, h) ->
-                    Box(Modifier.width(4.dp).height(h).clip(RoundedCornerShape(1.dp)).background(color))
-                }
-            }
-        }
     }
 }
 

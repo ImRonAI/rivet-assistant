@@ -65,7 +65,7 @@ fun LiveCallCard(call: LiveCall, onTakeOver: () -> Unit, onDismiss: () -> Unit, 
             StatusTag(tag, tone)
             Spacer(Modifier.weight(1f))
             if (!ended) {
-                TimerPill(elapsed.toInt(), 0)
+                TimerPill(elapsed.toInt())
             } else {
                 call.durationSeconds?.let { Text(CallText.duration(it), style = Type.labelMd, color = p.ink2, maxLines = 1) }
             }

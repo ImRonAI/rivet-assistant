@@ -30,21 +30,9 @@ class RivetNotificationListener : NotificationListenerService() {
         super.onDestroy()
     }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification) {
-        if (sbn.packageName == packageName) return
-        val record = record(this, sbn) ?: return
-        if (record.optBoolean("can_reply") && sbn.notification.category == Notification.CATEGORY_MESSAGE) {
-            onMessage?.invoke(record)
-        }
-    }
-
     companion object {
         @Volatile
         private var instance: RivetNotificationListener? = null
-
-        /** Called for each new message notification that can be replied to (the runtime may offer a reply). */
-        @Volatile
-        var onMessage: ((JSONObject) -> Unit)? = null
 
         val connected: Boolean get() = instance != null
 

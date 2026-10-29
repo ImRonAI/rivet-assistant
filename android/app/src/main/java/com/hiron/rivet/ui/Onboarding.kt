@@ -33,9 +33,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,13 +44,10 @@ import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.GppGood
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.ScreenSearchDesktop
 import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Swipe
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,7 +69,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
@@ -240,7 +234,7 @@ private fun MeetStep(runtime: RivetRuntime, next: () -> Unit, onFinish: () -> Un
             Modifier.enter(0), tone = Tone.Cyan,
         )
         FeatureCard(
-            Icons.Outlined.GppGood, "Asks before it acts", "Always confirms before sending messages, booking, or taking actions.",
+            Icons.Outlined.GppGood, "Asks before it acts", "Confirms before sending messages, booking, or taking actions.",
             Modifier.enter(1), tone = Tone.Accent,
         )
         FeatureCard(
@@ -256,7 +250,6 @@ private fun ModelsStep(runtime: RivetRuntime, next: () -> Unit) {
     val settings = runtime.settings
     var agents by remember { mutableStateOf(settings.elevenLabsAgents) }
     var voice by remember { mutableStateOf(settings.voiceModel) }
-    var speak by remember { mutableStateOf(settings.speakReplies) }
     val setAgents = { on: Boolean ->
         agents = on
         runtime.useAgents(on)
@@ -265,14 +258,10 @@ private fun ModelsStep(runtime: RivetRuntime, next: () -> Unit) {
         voice = on
         settings.voiceModel = on
     }
-    val openVoice = LocalOpenVoiceSetup.current
     StepScaffold(
         "TALK OR TYPE",
         "Rivet's ElevenLabs agents answer you, or Rivet's own brain when they're off.",
-        keys = {
-            PrimaryKey("Save & Continue", next)
-            FooterLink("Choose Rivet's voice", openVoice, leading = Icons.Outlined.GraphicEq, tone = Tone.Cyan)
-        },
+        keys = { PrimaryKey("Save & Continue", next) },
     ) {
         FeatureCard(
             Icons.Outlined.RecordVoiceOver, "ElevenLabs agents", "Talk and type with Rivet's ElevenLabs agents. Off: Rivet's own brain answers.",
@@ -290,22 +279,13 @@ private fun ModelsStep(runtime: RivetRuntime, next: () -> Unit) {
             tone = Tone.Accent, tag = "WHEN YOU TALK" to Tone.Accent,
             onClick = { setVoice(!voice) }, role = Role.Switch,
             trailing = { RivetToggle(voice, null) },
-            nested = {
-                NestedRow("Read replies aloud when I type", speak, {
-                    speak = it
-                    settings.speakReplies = it
-                })
-            },
         )
     }
 }
 
-private enum class Summon { Power, Corner }
-
 @Composable
 private fun AssistantStep(next: () -> Unit) {
     val context = LocalContext.current
-    var summon by rememberSaveable { mutableStateOf(Summon.Power) }
     val held = remember { context.holdsAssistantRole() }
     StepScaffold(
         "DEFAULT ASSISTANT",
@@ -326,45 +306,13 @@ private fun AssistantStep(next: () -> Unit) {
             }
         },
     ) {
-        SummonCard(
-            Summon.Power, summon, { summon = it }, 0, Icons.Outlined.PowerSettingsNew, Tone.Accent,
-            "Long-press power button", "Hold the power button to call Rivet from anywhere.", tag = "PRIMARY" to Tone.Accent,
-        )
-        SummonCard(
-            Summon.Corner, summon, { summon = it }, 1, Icons.Outlined.Swipe, Tone.Cyan,
-            "Corner swipe", "Swipe up from a bottom corner, on phones that use gesture navigation.",
-        )
-        val strip = Modifier.enter(2)
-        when {
-            held -> InfoStrip("Rivet is already your assistant.", strip, icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
-            summon == Summon.Power -> InfoStrip(
-                "Tapping below will open Android Assistant settings to select Rivet. Then hold the power button to call it.", strip,
-            )
-            else -> InfoStrip(
-                "Tapping below will open Android Assistant settings to select Rivet. Then swipe up from a bottom corner to call it.", strip,
-            )
+        val strip = Modifier.enter(0)
+        if (held) {
+            InfoStrip("Rivet is already your assistant.", strip, icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
+        } else {
+            InfoStrip("Tapping below will open Android Assistant settings to select Rivet. Then hold the power button to call it.", strip)
         }
     }
-}
-
-@Composable
-private fun SummonCard(
-    value: Summon,
-    chosen: Summon,
-    onChoose: (Summon) -> Unit,
-    index: Int,
-    icon: ImageVector,
-    tone: Tone,
-    title: String,
-    body: String,
-    tag: Pair<String, Tone>? = null,
-) {
-    val on = value == chosen
-    FeatureCard(
-        icon, title, body, Modifier.enter(index).semantics { selected = on },
-        tone = tone, tag = tag, selected = on, onClick = { onChoose(value) }, role = Role.RadioButton,
-        trailing = { RadioDot(on) },
-    )
 }
 
 @Composable
@@ -402,13 +350,13 @@ private fun AccessStep(onFinish: () -> Unit) {
                 trailing = { RivetToggle(on, null, enabled = !granted[i]) },
             )
         }
-        TrustFooter("REVOCABLE ANY TIME IN ANDROID SETTINGS\nNOTHING GOES OUT WITHOUT YOUR OK", Modifier.enter(ACCESS_GROUPS.size))
+        TrustFooter("REVOCABLE ANY TIME IN ANDROID SETTINGS", Modifier.enter(ACCESS_GROUPS.size))
     }
 }
 
 /** [TextKey]'s look, but the caps label wraps instead of clipping on narrow screens with large text. */
 @Composable
-private fun FooterLink(text: String, onClick: () -> Unit, leading: ImageVector? = null, tone: Tone = Tone.Neutral) {
+private fun FooterLink(text: String, onClick: () -> Unit) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
@@ -422,10 +370,6 @@ private fun FooterLink(text: String, onClick: () -> Unit, leading: ImageVector? 
             .alpha(if (pressed) 0.6f else 1f).padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (leading != null) {
-            Icon(leading, contentDescription = null, tint = tone.color(), modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
-        }
         CapsText(text, Type.monoKey, p.ink2, textAlign = TextAlign.Center)
     }
 }

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,10 +33,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.hiron.rivet.core.LogEntry
 import com.hiron.rivet.core.RivetRuntime
@@ -50,8 +47,8 @@ import java.util.Calendar
 import java.util.Date
 
 /**
- * What Rivet did and what it has scheduled: today's counters, pending reminders, then the activity log as a
- * trace grouped by day (newest first).
+ * What Rivet did and what it has scheduled: pending reminders, then the activity log as a trace grouped by day
+ * (newest first).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -63,19 +60,11 @@ fun ActivityScreen(runtime: RivetRuntime, state: RivetState) {
     }
     val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val days = remember(state.log) { state.log.asReversed().groupBy { dayOf(it.at) } }
-    val today = state.log.filter { dayOf(it.at) == dayOf(System.currentTimeMillis()) }
     val newest = state.log.lastOrNull()
     LazyColumn(Modifier.fillMaxSize().background(p.bg), contentPadding = PaddingValues(bottom = 32.dp)) {
-        item(key = "stats") {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CountTile(today.count { it.kind in setOf("device", "tool", "task", "turn") }, "Things done", p.cy, Modifier.weight(1f).enter(0))
-                CountTile(today.count { it.kind == "approval" }, "Approvals", p.amb, Modifier.weight(1f).enter(1))
-                CountTile(today.count { it.kind == "call" }, "Calls", p.accent, Modifier.weight(1f).enter(2))
-            }
-        }
         if (reminders.length() > 0) {
             item(key = "reminders") {
-                Reminders(reminders, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp).enter(3)) { id ->
+                Reminders(reminders, Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp).enter(0)) { id ->
                     runtime.reminders.cancel(id)
                     reminders = (runtime.reminders.list().data as? JSONObject)?.optJSONArray("reminders") ?: JSONArray()
                 }
@@ -108,24 +97,6 @@ fun ActivityScreen(runtime: RivetRuntime, state: RivetState) {
                 )
             }
         }
-    }
-}
-
-/**
- * A counter tile: a tone bar and label over a big display numeral. The label wraps to two lines so three tiles
- * fit side by side on a narrow phone.
- */
-@Composable
-private fun CountTile(value: Int, label: String, color: Color, modifier: Modifier) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
-    Column(
-        modifier.clip(shape).background(p.card).border(1.dp, p.edge, shape).padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(Modifier.size(width = 16.dp, height = 3.dp).glow(color.copy(alpha = 0.6f), 4.dp, RoundedCornerShape(2.dp)).clip(RoundedCornerShape(2.dp)).background(color))
-        Text(label.uppercase(), style = Type.labelSm.copy(letterSpacing = 0.06.em), color = p.ink2, maxLines = 2, minLines = 2)
-        Odometer("$value", Type.stat, p.ink)
     }
 }
 

@@ -1,6 +1,5 @@
 package com.hiron.rivet.core
 
-import com.hiron.rivet.device.ForwardMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -10,30 +9,28 @@ class RecommendedTest {
     private class Prefs : RecommendedPrefs {
         override var autoConnect = false
         override var speakInOverlay = true
-        override var offerReplies = false
-        override var answeringMode = ForwardMode.Always
         override var recommendedUndo: RecommendedUndo? = null
     }
 
     private val eve = DenyCandidate(RuleTarget("sms_send", mapOf("to" to "+15550000000")), "Texts to +15550000000", 3)
 
     private fun current(prefs: Prefs, candidates: List<DenyCandidate> = emptyList(), missing: List<PermissionGroup> = emptyList(), assistant: Boolean = true) =
-        Current(prefs.autoConnect, prefs.speakInOverlay, prefs.offerReplies, prefs.answeringMode, true, missing, assistant, candidates)
+        Current(prefs.autoConnect, prefs.speakInOverlay, missing, assistant, candidates)
 
     @Test
     fun onlyWhatWouldChangeIsListed() {
         val prefs = Prefs()
         val all = Recommended.list(current(prefs, listOf(eve), PermissionGroups.ALL.take(1), assistant = false))
+        assertEquals(listOf(SettingId.AutoConnect, SettingId.QuietOverlay), all.filterIsInstance<Recommendation.Setting>().map { it.setting })
         assertEquals(
-            listOf(RecId.AutoConnect, RecId.QuietOverlay, RecId.OfferReplies, RecId.UnansweredCalls, RecId.Permissions, RecId.Assistant, RecId.StopAsking),
-            all.map { it.id },
+            listOf(Recommendation.AskPermissions(PermissionGroups.ALL.take(1)), Recommendation.OpenAssistantSettings, Recommendation.StopAsking(eve)),
+            all.drop(2),
         )
         assertEquals("Stop asking about Texts to +15550000000", all.last().title)
         assertEquals("You said no 3 times in the last 30 days. Rivet will always decline it.", all.last().change)
-        assertEquals("Android asks you once for: Texts", all[4].change)
-        assertTrue(all[3].change.endsWith("until you turn call answering on again in Settings › Call answering."))
+        assertEquals("Android asks you once for: Texts", all[2].change)
 
-        val done = Prefs().apply { autoConnect = true; speakInOverlay = false; offerReplies = true; answeringMode = ForwardMode.Unanswered }
+        val done = Prefs().apply { autoConnect = true; speakInOverlay = false }
         assertTrue(Recommended.list(current(done)).isEmpty())
     }
 
@@ -41,17 +38,14 @@ class RecommendedTest {
     fun applyThenUndoPutsEverythingBack() {
         val prefs = Prefs()
         val items = Recommended.list(current(prefs, listOf(eve)))
-        val undo = Recommended.apply(items, prefs, now = 7)
-        assertEquals(listOf(true, false, true, ForwardMode.Unanswered), listOf(prefs.autoConnect, prefs.speakInOverlay, prefs.offerReplies, prefs.answeringMode))
-        assertEquals(setOf(eve.target), undo.ruleTargets)
-        assertEquals(undo, prefs.recommendedUndo)
-        assertEquals(
-            listOf("Connect automatically", "Quiet assistant overlay", "Offer replies to new messages", "Answer only calls you miss", "1 rule"),
-            undo.titles(),
-        )
+        Recommended.apply(items, prefs)
+        assertEquals(listOf(true, false), listOf(prefs.autoConnect, prefs.speakInOverlay))
+        val undo = prefs.recommendedUndo
+        assertEquals(setOf(eve.target), undo?.ruleTargets)
+        assertEquals(listOf("Connect automatically", "Quiet assistant overlay", "1 rule"), undo?.titles())
 
         assertEquals(undo, Recommended.undo(prefs))
-        assertEquals(listOf(false, true, false, ForwardMode.Always), listOf(prefs.autoConnect, prefs.speakInOverlay, prefs.offerReplies, prefs.answeringMode))
+        assertEquals(listOf(false, true), listOf(prefs.autoConnect, prefs.speakInOverlay))
         assertNull(prefs.recommendedUndo)
         assertNull(Recommended.undo(prefs))
     }
@@ -59,12 +53,12 @@ class RecommendedTest {
     @Test
     fun onlyAppliedItemsAreRecorded() {
         val prefs = Prefs()
-        val items = Recommended.list(current(prefs)).filter { it.id == RecId.OfferReplies }
-        val undo = Recommended.apply(items, prefs, now = 1)
-        assertEquals(RecommendedUndo(offerReplies = false, at = 1), undo)
-        assertEquals(false, prefs.autoConnect)
+        val items = Recommended.list(current(prefs)).filter { (it as? Recommendation.Setting)?.setting == SettingId.AutoConnect }
+        Recommended.apply(items, prefs)
+        assertEquals(RecommendedUndo(autoConnect = false), prefs.recommendedUndo)
+        assertEquals(true, prefs.speakInOverlay)
         val nothing = Prefs()
-        Recommended.apply(listOf(Recommendation.OpenAssistantSettings), nothing, now = 1)
+        Recommended.apply(listOf(Recommendation.OpenAssistantSettings), nothing)
         assertNull(nothing.recommendedUndo)
     }
 

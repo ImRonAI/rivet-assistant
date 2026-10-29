@@ -16,6 +16,7 @@ import com.hiron.rivet.R
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.core.rivet
 import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.Rich
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +36,7 @@ class PanelWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = RivetWidgets.render(context, manager, ids, panel = true)
 }
 
-/** What the widgets show; kept in preferences so a widget drawn in a fresh process still has Rivet's last word. */
+/** What the widgets show. */
 data class WidgetSnapshot(val connection: Connection, val lastReply: String, val waiting: Int)
 
 object RivetWidgets {
@@ -45,16 +46,12 @@ object RivetWidgets {
 
     /** Opens the search sheet: widgets can't take typing, so the field is in the app. */
     const val ACTION_SEARCH = "com.hiron.rivet.action.SEARCH"
-    private const val PREFS = "rivet_widgets"
 
     /** Keeps every placed widget in step with the runtime. Streaming text is skipped; finished replies count. */
     fun follow(context: Context, runtime: RivetRuntime) {
         val app = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            runtime.state.map(::snapshotOf).distinctUntilChanged().collect { snap ->
-                save(app, snap)
-                refresh(app)
-            }
+            runtime.state.map(::snapshotOf).distinctUntilChanged().collect { refresh(app) }
         }
     }
 
@@ -72,7 +69,7 @@ object RivetWidgets {
 
     fun render(context: Context, manager: AppWidgetManager, ids: IntArray, panel: Boolean) {
         if (ids.isEmpty()) return
-        val views = views(context, load(context), panel)
+        val views = views(context, snapshotOf(context.rivet.state.value), panel)
         ids.forEach { manager.updateAppWidget(it, views) }
     }
 
@@ -118,20 +115,5 @@ object RivetWidgets {
         val intent = Intent(context, MainActivity::class.java).setAction(action).setData(data)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(context, code, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
-
-    private fun save(context: Context, snap: WidgetSnapshot) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString("connection", snap.connection.name).putString("last", snap.lastReply.take(400)).putInt("waiting", snap.waiting)
-            .apply()
-    }
-
-    private fun load(context: Context): WidgetSnapshot {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return WidgetSnapshot(
-            connection = runCatching { Connection.valueOf(prefs.getString("connection", null) ?: "") }.getOrDefault(Connection.Offline),
-            lastReply = prefs.getString("last", "").orEmpty(),
-            waiting = prefs.getInt("waiting", 0),
-        )
     }
 }

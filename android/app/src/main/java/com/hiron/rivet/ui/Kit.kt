@@ -31,9 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -71,8 +69,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** How a keycap reads: a plain key, the one primary action (safety orange), or a destructive one. */
-enum class KeyTone { Plain, Accent, Danger }
+/** How a keycap reads: a plain key or the one primary action (safety orange). */
+enum class KeyTone { Plain, Accent }
 
 private val KeyShape = RoundedCornerShape(12.dp)
 
@@ -175,7 +173,6 @@ private data class KeyColors(val fill: Color, val pressed: Color, val line: Colo
 private fun keyColors(p: Palette, tone: KeyTone) = when (tone) {
     KeyTone.Plain -> KeyColors(p.card, p.cardHi, p.edge, p.ink, Color.White.copy(alpha = 0.06f))
     KeyTone.Accent -> KeyColors(p.accent, p.accentHi, p.accent, p.accentInk, Color.White.copy(alpha = 0.28f))
-    KeyTone.Danger -> KeyColors(p.card, p.cardHi, p.rec.copy(alpha = 0.6f), p.rec, Color.White.copy(alpha = 0.06f))
 }
 
 @Composable
@@ -244,75 +241,6 @@ fun Pip(color: Color, modifier: Modifier = Modifier, live: Boolean = false, size
     }
 }
 
-/** A tag plate in the [StatusTag] style for any colour: tinted fill, mono caps. [hot] fills it solid. */
-@Composable
-fun Tag(text: String, color: Color, modifier: Modifier = Modifier, hot: Boolean = false) {
-    TagPlate(text, color, modifier, hot = hot)
-}
-
-/** Four rivet heads in the corners of a plate: Rivet's signature, and how a machined panel is held on. */
-fun Modifier.rivets(color: Color, inset: Dp = 7.dp, radius: Dp = 1.6.dp) = drawBehind {
-    val i = inset.toPx()
-    val r = radius.toPx()
-    listOf(Offset(i, i), Offset(size.width - i, i), Offset(i, size.height - i), Offset(size.width - i, size.height - i)).forEach {
-        drawCircle(color, r, it)
-        drawCircle(Color.White.copy(alpha = 0.10f), r * 0.45f, it + Offset(-r * 0.3f, -r * 0.3f))
-    }
-}
-
-/**
- * A HUD card: card fill and hairline edge, an uppercase mono header with an optional index, LED and right-hand
- * meta, a divider, then the body.
- */
-@Composable
-fun HudCard(
-    title: String,
-    modifier: Modifier = Modifier,
-    index: String? = null,
-    pip: Color? = null,
-    live: Boolean = false,
-    meta: String? = null,
-    metaColor: Color? = null,
-    outline: Color? = null,
-    content: @Composable () -> Unit,
-) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
-    Column(modifier.fillMaxWidth().clip(shape).background(p.card).border(1.dp, outline ?: p.edge, shape)) {
-        HudHeaderRow(title, index = index, pip = pip, live = live, meta = meta, metaColor = metaColor)
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
-    }
-}
-
-/** The header strip of a HUD card, also used on its own above full-bleed lists. */
-@Composable
-fun HudHeaderRow(
-    title: String,
-    modifier: Modifier = Modifier,
-    index: String? = null,
-    pip: Color? = null,
-    live: Boolean = false,
-    meta: String? = null,
-    metaColor: Color? = null,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val p = LocalPalette.current
-    Column(modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 38.dp).padding(start = if (pip != null) 8.dp else 16.dp, end = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (pip != null) Pip(pip, live = live)
-            if (pip != null) Spacer(Modifier.size(4.dp))
-            if (index != null) Text(index, style = Type.labelSm, color = p.ink2, modifier = Modifier.padding(end = 10.dp))
-            Text(title.uppercase(), style = Type.labelSm, color = p.ink, modifier = Modifier.weight(1f), maxLines = 1)
-            if (meta != null) Odometer(meta.uppercase(), Type.labelSm, metaColor ?: p.ink2)
-            trailing?.invoke()
-        }
-        Rule(color = p.line)
-    }
-}
-
 @Composable
 fun Rule(modifier: Modifier = Modifier, color: Color = LocalPalette.current.rule) {
     Box(modifier.fillMaxWidth().height(1.dp).background(color))
@@ -333,19 +261,6 @@ fun Odometer(text: String, style: TextStyle, color: Color, modifier: Modifier = 
         modifier = modifier,
         label = "odometer",
     ) { value -> Text(value, style = style, color = color, maxLines = 1) }
-}
-
-/** A choice of a few options: [FilterChip]s in a pill track; the chosen one is white. */
-@Composable
-fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    val track = RoundedCornerShape(50)
-    Row(
-        modifier.fillMaxWidth().clip(track).background(p.field).border(1.dp, p.edge, track).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEach { (value, label) -> Chip(label, value == selected, { onSelect(value) }, Modifier.weight(1f).height(40.dp), outlined = false) }
-    }
 }
 
 /** A recessed well: a dark line along the inside top edge, as if the surface were milled down. */
@@ -406,10 +321,6 @@ fun RecessedField(
     }
 }
 
-/** A switch in Rivet's colours: the [RivetToggle]. */
-@Composable
-fun RivetSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) = RivetToggle(checked, onCheckedChange, modifier)
-
 /** A label/value row in mono, like the header telemetry. */
 @Composable
 fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color? = null) {
@@ -418,23 +329,5 @@ fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueCo
         Text(label.uppercase(), style = Type.labelSm, color = p.ink2, modifier = Modifier.padding(end = 12.dp))
         Spacer(Modifier.weight(1f))
         Text(value, style = Type.mono, color = valueColor ?: p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-/** A counter plate: a big display numeral over a mono caption, for the activity summary. */
-@Composable
-fun StatTile(value: Int, label: String, color: Color, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
-    Column(
-        modifier.clip(shape).background(p.card).border(1.dp, p.edge, shape).padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.size(6.dp))
-            Text(label.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1)
-        }
-        Odometer("$value", Type.stat, p.ink)
     }
 }

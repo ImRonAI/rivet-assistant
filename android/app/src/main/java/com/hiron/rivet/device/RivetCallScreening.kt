@@ -4,8 +4,8 @@ import android.telecom.Call
 import android.telecom.CallScreeningService
 
 /**
- * Sees each incoming call (with the call-screening role) and tells the runtime, which logs it and offers a
- * text-back. Rivet never blocks or silences a call on its own; the call always rings through.
+ * Sees each incoming call (with the call-screening role) and tells the runtime, which logs it. Rivet never blocks
+ * or silences a call on its own; the call always rings through.
  */
 class RivetCallScreening : CallScreeningService() {
     override fun onScreenCall(details: Call.Details) {

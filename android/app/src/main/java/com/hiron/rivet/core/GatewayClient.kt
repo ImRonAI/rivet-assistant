@@ -47,8 +47,6 @@ class GatewayClient(
     private var reconnect: Job? = null
     private var config: GatewayConfig? = null
 
-    val queued: Int get() = synchronized(lock) { outbox.size }
-
     fun connect(config: GatewayConfig) {
         synchronized(lock) {
             this.config = config

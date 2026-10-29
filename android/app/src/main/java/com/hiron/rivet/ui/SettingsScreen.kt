@@ -5,7 +5,6 @@ import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
@@ -60,12 +59,9 @@ import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WarningAmber
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -106,7 +102,6 @@ import com.hiron.rivet.device.ForwardMode
 import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.device.ScreenOperator
 import com.hiron.rivet.service.RivetService
-import com.hiron.rivet.voice.LocalVoiceStudio
 import java.time.Instant
 import java.time.ZoneId
 
@@ -122,13 +117,6 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
     LifecycleResumeEffect(Unit) {
         refresh++
         onPauseOrDispose { }
-    }
-    // The voice setup draws over this screen and saves into the same preferences; follow its changes.
-    DisposableEffect(context) {
-        val prefs = context.getSharedPreferences("rivet", Context.MODE_PRIVATE)
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> if (key?.startsWith("voice_") == true) refresh++ }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     val hasToken = remember(refresh, token) { s.deviceToken.isNotBlank() }
     // A ready-to-use build hides the connection details; they open only when something needs changing.
@@ -260,23 +248,8 @@ private fun ConnectionCard(
 
 @Composable
 private fun Voice(runtime: RivetRuntime, refresh: Int) {
-    val p = LocalPalette.current
     val s = runtime.settings
-    val studio = LocalVoiceStudio.current
-    val openVoiceSetup = LocalOpenVoiceSetup.current
-    val current = remember(refresh, studio) { studio?.current() }
     var voiceModel by remember(refresh) { mutableStateOf(s.voiceModel) }
-    RivetCard(onClick = openVoiceSetup, role = Role.Button) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(Icons.Outlined.GraphicEq, tone = Tone.Accent, size = 48.dp, iconSize = 22.dp)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Rivet's voice", style = Type.title, color = p.ink)
-                Text(current ?: "Not chosen yet", style = Type.mono, color = if (current != null) p.accent else p.ink2, maxLines = 1)
-            }
-            Icon(Icons.Outlined.UnfoldMore, contentDescription = null, tint = p.ink2, modifier = Modifier.size(22.dp))
-        }
-    }
     FeatureCard(
         Icons.Outlined.GraphicEq, "Talk key", "Shows the mic key, so you can talk to Rivet out loud.",
         tone = Tone.Accent,
@@ -298,7 +271,6 @@ private fun Behaviour(runtime: RivetRuntime, state: RivetState, onChanged: () ->
     var speak by remember(version) { mutableStateOf(s.speakReplies) }
     var overlay by remember(version) { mutableStateOf(s.speakInOverlay) }
     var auto by remember(version) { mutableStateOf(s.autoConnect) }
-    var offer by remember(version) { mutableStateOf(s.offerReplies) }
     var agents by remember { mutableStateOf(s.elevenLabsAgents) }
     var suggest by remember { mutableStateOf(s.searchSuggestions) }
     var undo by remember(version) { mutableStateOf(s.recommendedUndo) }
@@ -340,8 +312,6 @@ private fun Behaviour(runtime: RivetRuntime, state: RivetState, onChanged: () ->
         Toggle("Read replies aloud in the assistant overlay", overlay) { overlay = it; s.speakInOverlay = it }
         Rule(color = p.line)
         Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
-        Rule(color = p.line)
-        Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
         Rule(color = p.line)
         Toggle("Use ElevenLabs agents", agents, detail = "Talk and type with Rivet's ElevenLabs agents. Off: Rivet's own brain.") {
             agents = it
@@ -648,7 +618,7 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
     }
     val roles = context.getSystemService(RoleManager::class.java)
     val screening = remember(refresh) { roles?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true }
-    PermissionRow(Access(Icons.Outlined.PhoneInTalk, "Call screening", "See who's calling so Rivet can text back"), screening) {
+    PermissionRow(Access(Icons.Outlined.PhoneInTalk, "Call screening", "See who's calling"), screening) {
         roles?.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)?.let { role.launch(it) }
     }
     val assistant = remember(refresh) { roles?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true }

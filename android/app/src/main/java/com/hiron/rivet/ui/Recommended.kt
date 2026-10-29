@@ -45,7 +45,6 @@ import com.hiron.rivet.core.PermissionGroups
 import com.hiron.rivet.core.Recommendation
 import com.hiron.rivet.core.Recommended
 import com.hiron.rivet.core.RivetRuntime
-import com.hiron.rivet.device.ForwardMode
 
 /**
  * Rivet's suggested settings: one card per change with its own switch (all on), what it changes and, for settings,
@@ -132,9 +131,6 @@ fun currentFor(runtime: RivetRuntime, context: Context): Current {
     return Current(
         autoConnect = s.autoConnect,
         speakInOverlay = s.speakInOverlay,
-        offerReplies = s.offerReplies,
-        answeringMode = s.answeringMode,
-        forwardingAllCalls = s.answeringMode == ForwardMode.Always && s.forwardedTo.isNotBlank(),
         missingPermissions = missing,
         assistantHeld = context.holdsAssistantRole(),
         denyCandidates = runtime.decisions.denyCandidates(runtime.state.value.rules),

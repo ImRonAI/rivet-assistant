@@ -63,8 +63,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-enum class CtaStyle { Sans, Display }
-
 private val CtaShape = RoundedCornerShape(16.dp)
 
 /** A pressable that dips slightly and ticks under the finger. */
@@ -101,16 +99,12 @@ fun CapsText(
     )
 }
 
-/**
- * The full-width glowing primary key. [CtaStyle.Sans] is the onboarding and sheet key; [CtaStyle.Display] is the
- * voice-setup key in Big Shoulders caps. Both carry dark ink on the orange; a disabled key is a graphite plate.
- */
+/** The full-width glowing primary key: dark ink on the orange; a disabled key is a graphite plate. */
 @Composable
 fun PrimaryKey(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    style: CtaStyle = CtaStyle.Sans,
     enabled: Boolean = true,
     trailingArrow: Boolean = true,
     leading: ImageVector? = null,
@@ -137,11 +131,7 @@ fun PrimaryKey(
             Icon(leading, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
         }
-        if (style == CtaStyle.Display) {
-            CapsText(text, Type.cta, ink, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        } else {
-            Text(text, style = Type.button, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        }
+        Text(text, style = Type.button, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         if (trailingArrow) {
             Spacer(Modifier.width(10.dp))
             Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
@@ -187,7 +177,7 @@ fun SecondaryKey(
 
 /** A mono caps text link. */
 @Composable
-fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null, tone: Tone = Tone.Neutral) {
+fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null) {
     val p = LocalPalette.current
     val (press, pressed) = pressable(true, Role.Button, onClick)
     Row(
@@ -196,7 +186,7 @@ fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, le
         horizontalArrangement = Arrangement.Center,
     ) {
         if (leading != null) {
-            Icon(leading, contentDescription = null, tint = tone.color(), modifier = Modifier.size(16.dp))
+            Icon(leading, contentDescription = null, tint = p.ink2, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
         }
         CapsText(text, Type.monoKey, p.ink2, maxLines = 1)
@@ -205,17 +195,13 @@ fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, le
 
 /** A pill filter chip: white when selected. */
 @Composable
-fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) = Chip(text, selected, onClick, modifier, outlined = true)
-
-/** A [FilterChip]; inside a [Segmented] track it drops its own outline. */
-@Composable
-internal fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier, outlined: Boolean) {
+fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val pill = RoundedCornerShape(50)
     val fill by animateColorAsState(if (selected) p.white else p.field, tween(Motion.QUICK), label = "chip")
     Box(
-        modifier.height(32.dp).clip(pill).background(fill).border(1.dp, if (selected) p.white else if (outlined) p.edge else Color.Transparent, pill)
+        modifier.height(32.dp).clip(pill).background(fill).border(1.dp, if (selected) p.white else p.edge, pill)
             .selectable(selected, role = Role.RadioButton) {
                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 onClick()

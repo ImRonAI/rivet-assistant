@@ -340,12 +340,12 @@ class AgentToolsTest {
             val config = GatewayConfig(server.url("/").toString(), "device-token", "phone-1")
             val http = OkHttpClient()
 
-            assertEquals(AgentCredential(AgentMode.Voice, "agent_v", "lk-1"), fetchAgentCredential(http, config, AgentMode.Voice))
+            assertEquals(AgentCredential(AgentMode.Voice, "lk-1"), fetchAgentCredential(http, config, AgentMode.Voice))
             val first = server.takeRequest()
             assertEquals("/v1/agent/session?mode=voice", first.path)
             assertEquals("Bearer device-token", first.getHeader("Authorization"))
 
-            assertEquals(AgentCredential(AgentMode.Text, "agent_t", "wss://x/y?s=1"), fetchAgentCredential(http, config, AgentMode.Text))
+            assertEquals(AgentCredential(AgentMode.Text, "wss://x/y?s=1"), fetchAgentCredential(http, config, AgentMode.Text))
             assertEquals("/v1/agent/session?mode=text", server.takeRequest().path)
 
             val error = runCatching { fetchAgentCredential(http, config, AgentMode.Voice) }.exceptionOrNull()

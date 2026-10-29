@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -36,17 +35,10 @@ import com.hiron.rivet.core.RuleTarget
 import com.hiron.rivet.core.StandingRule
 import com.hiron.rivet.core.Tier
 import com.hiron.rivet.core.rivet
-import com.hiron.rivet.device.ForwardMode
 import com.hiron.rivet.device.ReminderStore
 import com.hiron.rivet.device.ReminderStoreFile
 import com.hiron.rivet.testing.shot
 import com.hiron.rivet.testing.textApproval
-import com.hiron.rivet.voice.LocalVoiceStudio
-import com.hiron.rivet.voice.SampleRecorder
-import com.hiron.rivet.voice.VoiceChoice
-import com.hiron.rivet.voice.VoicePreset
-import com.hiron.rivet.voice.VoiceSample
-import com.hiron.rivet.voice.VoiceStudio
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -217,7 +209,7 @@ class ReviewScreensTest {
 
     private val recommendations = Recommended.list(
         Current(
-            autoConnect = false, speakInOverlay = true, offerReplies = false, answeringMode = ForwardMode.Always, forwardingAllCalls = true,
+            autoConnect = false, speakInOverlay = true,
             missingPermissions = PermissionGroups.ALL.take(2), assistantHeld = false,
             denyCandidates = listOf(DenyCandidate(RuleTarget("phone_call", mapOf("number" to "+18015550199")), "Calls to +18015550199", 4)),
         ),
@@ -227,12 +219,12 @@ class ReviewScreensTest {
     fun recommendedSettingsSheet() {
         var applied: List<Recommendation>? = null
         page { RecommendedSheet(recommendations, onApply = { applied = it }, onDismiss = {}) }
-        compose.onNodeWithText("Rivet suggests 7 changes:").assertIsDisplayed()
+        compose.onNodeWithText("Rivet suggests 5 changes:").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(600)
         shot(compose, compose.activity, "review-recommended-sheet")
         compose.onNodeWithContentDescription("Quiet assistant overlay").performClick()
-        compose.onNodeWithText("Apply 6 changes").performClick()
-        assertEquals(6, applied?.size)
+        compose.onNodeWithText("Apply 4 changes").performClick()
+        assertEquals(4, applied?.size)
     }
 
     @Test
@@ -265,7 +257,6 @@ class ReviewScreensTest {
                 LogEntry(now - day - 28 * min, "error", "The phone didn't answer in time."),
                 LogEntry(now - 50 * min, "call", "Message from Dana from Wasatch Dental: Confirming Friday at 9."),
                 LogEntry(now - 40 * min, "turn", "Working on it"),
-                LogEntry(now - 39 * min, "tool", "calendar_list"),
                 LogEntry(now - 38 * min, "device", "device_status: done"),
                 LogEntry(now - 37 * min, "backoff", "Model busy; retrying in 8s"),
                 LogEntry(now - 36 * min, "approval", "Text +18015550123"),
@@ -301,46 +292,26 @@ class ReviewScreensTest {
         shot(compose, compose.activity, "review-activity-narrow")
     }
 
-    private class FakeStudio(var label: String?) : VoiceStudio {
-        override val connected = false
-        override fun presets(): List<VoicePreset> = emptyList()
-        override fun preview(text: String, preset: VoicePreset?, onDone: () -> Unit) = Unit
-        override fun play(sample: VoiceSample, onProgress: (Float) -> Unit, onDone: () -> Unit) = Unit
-        override fun stopPreview() = Unit
-        override fun recorder(): SampleRecorder = error("not used")
-        override fun choose(choice: VoiceChoice): String = "Copper"
-        override fun current(): String? = label
-    }
-
-    private fun settings(studio: VoiceStudio, onOpen: () -> Unit) {
+    private fun settings() {
         val runtime = compose.activity.rivet
         val state = RivetState(connection = Connection.Online)
-        page {
-            CompositionLocalProvider(LocalVoiceStudio provides studio, LocalOpenVoiceSetup provides onOpen) {
-                SettingsScreen(runtime, state)
-            }
-        }
+        page { SettingsScreen(runtime, state) }
     }
 
     @Test
     @Config(qualifiers = "w411dp-h3000dp-xxhdpi")
     fun settingsWholePage() {
-        var opened = 0
-        settings(FakeStudio("Copper")) { opened++ }
-        compose.onNodeWithText("Copper").assertIsDisplayed()
+        settings()
         compose.onAllNodesWithText("Turn on").assertCountEquals(1)
         compose.onAllNodesWithText("Open Rivet's app info").assertCountEquals(1)
         compose.mainClock.advanceTimeBy(800)
         shot(compose, compose.activity, "review-settings")
-        compose.onNodeWithText("Rivet's voice").performClick()
-        assertEquals(1, opened)
     }
 
     @Test
     @Config(qualifiers = "w360dp-h3600dp-xxhdpi", fontScale = 1.3f)
     fun settingsOnANarrowPhone() {
-        settings(FakeStudio(null)) {}
-        compose.onNodeWithText("Not chosen yet").assertIsDisplayed()
+        settings()
         compose.onNodeWithText("Talk key").performScrollTo()
         compose.mainClock.advanceTimeBy(800)
         shot(compose, compose.activity, "review-settings-narrow")
