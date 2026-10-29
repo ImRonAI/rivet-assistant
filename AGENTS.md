@@ -16,9 +16,10 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 | Search and models (brain) | The Brave search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`), the brain's `search_*` tools with `search.results` events, turn attachments ("Add to Rivet"), and Groq `qwen/qwen3.8-27b` as a per-session model choice (`model.set`). Tested with fakes; each search route was probed once live against Brave through a local brain (all 200, 2026-10-29), and the streamed answers with citations once more (200 in 2.4 s, 11 citations, 2026-10-29). Deployed on `rivet-assistant` with the four `BRAVE_*` keys and `GROQ_API_KEY` set (2026-10-29); every search, suggest and spellcheck route answered 200 live there, and 401 without the device token. Groq has run only against fakes, never live, and switching models mid-session is covered by fakes only. |
 | Tests | Brain: 403 pass (`-m "not live"`), ruff, format and mypy clean. Android: 278 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
 | Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
-| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. On by default for voice and text; Settings › "Use ElevenLabs agents" off sends everything to Rivet's own brain. The owner attached the 7 search client tools to both agents (q, count 1–20 default 10, freshness; 20 s timeout). The 18 phone tools are not attached to either agent yet, the old Cato demo tools still are, and the voice agent's LLM reads `claude-sonnet-4-5` (read 2026-10-29); those are the owner's to change in ElevenLabs. The agents' `place_search` sends no location and the phone adds none, so Brave searches without a location unless `q` names the place ("coffee in austin tx"); whether Brave reads a place out of `q` is unverified. The conversation carried into a new session (voice to text and back) is tested with fakes only. |
+| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. On by default for voice and text; Settings › "Use ElevenLabs agents" off sends everything to Rivet's own brain. The owner attached the 7 search client tools to both agents (q, count 1–20 default 10, freshness; 20 s timeout). The 18 phone tools are not attached to either agent yet, the old Cato demo tools still are, and the voice agent's LLM reads `claude-sonnet-4-5` (read 2026-10-29); those are the owner's to change in ElevenLabs. Both agents also have `enable_auth` off and carry webhook tools that use the owner's ElevenLabs key (read 2026-10-29; `docs/scaling.md` §2). The agents' `place_search` sends no location and the phone adds none, so Brave searches without a location unless `q` names the place ("coffee in austin tx"); whether Brave reads a place out of `q` is unverified. The conversation carried into a new session (voice to text and back) is tested with fakes only. |
 | Search (app) | The app side of the Brave search UI is built and tested under Robolectric with MockWebServer: client tools, result cards, results page, map, image viewer, inline YouTube, suggestions, Spellcheck and "Add to Rivet". It needs the brain's search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`, `search.results`, `model` events), which is deployed. Not checked on a phone: the WebGL map, YouTube playback and its Referer, sharing into real apps, and the widget sheet's keyboard. |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
+| Workspace VM | Google Cloud `instance-20261029-122759` (zone `us-central1-a`, c4-standard-8: 8 vCPU, 30 GB, Debian 13, 10 GB boot disk), provided by the owner on 2026-10-29 for task 2. **Not yet hardened or used.** It runs as the Compute Engine default service account with "Allow full access to all Cloud APIs", so any code on it can take that account's token; HTTP and HTTPS are open to the internet, its IP is ephemeral and its disk is deleted with it. Cloud sessions have no access to it: the hardening commands in `docs/scaling.md` §5.1 are the owner's to run. |
 
 ## Rules that always apply
 
@@ -44,7 +45,7 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 ```
 brain/    Python 3.12 agent service (Strands harness + Perplexity Agent API + Telnyx MCP on Prefect Horizon)
 android/  Kotlin/Compose app (minSdk 29, targetSdk 36), robot WebView, widgets, assistant overlay
-docs/     calls-live.md: Telnyx schema evidence for live calls
+docs/     calls-live.md: Telnyx schema evidence for live calls; scaling.md: the plan for many users and the workspace VM
 .github/  CI: brain.yml (ruff, format, mypy, pytest, docker build), android.yml (asset check, tests, lint, release)
 ```
 
@@ -192,6 +193,8 @@ documents, not from memory. Record anything that can't be verified as a blocker 
 - **Goal:** Rivet can create and work on projects and documents on a VPS, not on the phone. That means an
   OpenVSCode Server and a browser-reachable Linux desktop, opened from the app (WebView or Custom Tab), with brain tools
   to start a workspace, create files and documents, and share results back to the phone.
+- **Status:** a Google Cloud VM is provided for this (status table), not yet hardened or used. Its hardening, design,
+  role and limits are in `docs/scaling.md` §5. Nothing is built.
 - **Design notes:**
   - Put both behind authentication: Rivet's device token, or an OAuth proxy.
   - Use TLS only.
@@ -281,6 +284,9 @@ documents, not from memory. Record anything that can't be verified as a blocker 
 ### 6. Storage on Telnyx KV, through the Telnyx MCP (decided)
 - **Decision (owner, 2026-10-28):** the brain's sessions, memory and action journal move from the Fly volume (`LocalFileStorage`)
   to a Telnyx KV namespace, reached through the Telnyx MCP server that is already wired. No new secrets.
+- **Under review:** `docs/scaling.md` §6 (decision 2) recommends keeping user data out of Telnyx KV: through Horizon
+  every call's arguments and results are logged and kept indefinitely, KV has no compare-and-swap, and one shared
+  namespace separates users only in code. The owner decides.
 - **Build:**
   - `brain/src/rivet_brain/storage/telnyx_kv.py`, implementing the Strands `Storage` protocol (`write`, `read`, `delete`, `list`, `search`) over `PutKvKey`, `GetKvKey`, `ListKvKeys` (with `prefix` and `cursor`) and `DeleteKvKey`.
   - Run them through `live_calls.TelnyxRunner`, as fixed code with no model-written code.
@@ -320,6 +326,21 @@ documents, not from memory. Record anything that can't be verified as a blocker 
 When a feature lands, update "Everything Rivet can do today" and the status table in the same change. When something is
 built but unverified on a real phone or live service, say so.
 
+### 9. Many users, safely (plan: `docs/scaling.md`)
+- **Goal:** Rivet serves 10, then 100, 1,000, 100,000 and 1,000,000+ people with no loss of speed. No design rules out
+  every breach; this one keeps a breach to one user or one cell, detects it and contains it.
+- **Status:** planned, nothing built. Rivet is single-user today: one shared device token baked into the APK, session
+  ids the phone picks, memory shared across sessions, and the owner's mailbox, Telnyx account and ElevenLabs agents
+  behind every session (`docs/scaling.md` §2).
+- **Next:** the owner's step 0 (no APK hand-outs and a rotated device token, the ElevenLabs agents locked down, the VM
+  hardened, Horizon payload logging off, six decisions), then steps 1-10 to 10 users, starting with no secrets in the
+  APK and per-user sign-in (`docs/scaling.md` §7).
+- **Decisions waiting** (`docs/scaling.md` §6): the sign-in provider; where user data lives (this reopens task 6);
+  Rivet-provided or bring-your-own numbers and agents; Gmail OAuth or app passwords; the ElevenLabs plan; one cloud or
+  Fly.
+- **Start in:** `brain/src/rivet_brain/gateway.py` (identity, sessions, limits), `factory.py` and `storage/` (per-user
+  prefixes), `android/app/build.gradle.kts` and `core/Settings.kt` (nothing baked into release builds).
+
 ## Before launch (checklist)
 1. Task 5 (the real search widget) above; task 1 (ElevenLabs voice) if voice is part of the launch. Tasks 3 and 4 are built; deploy the matching brain and check them on a phone.
 2. Task 6 (Telnyx KV storage) and task 7 (routines).
@@ -335,6 +356,15 @@ built but unverified on a real phone or live service, say so.
    - Accessibility use needs a disclosure;
    - see https://support.google.com/googleplay/android-developer/answer/10208820 and https://support.google.com/googleplay/android-developer/answer/10964491.
    - Sideloading avoids this.
+9. **Owner credentials in the APK:** release builds bake in the brain URL, device token, session id and answering number
+   (`android/app/build.gradle.kts`, `core/Settings.kt`), so whoever holds an APK is the owner's session. Hand none out,
+   rotate `RIVET_DEVICE_TOKEN`, and ship per-user sign-in first (`docs/scaling.md` §2, §7).
+10. **The workspace VM's service account:** the VM runs as the Compute Engine default service account with full Cloud
+    API access, so any code on it can take that account's token. Swap in an account with no roles and finish
+    `docs/scaling.md` §5.1 before anything runs there.
+11. **ElevenLabs agents locked down:** both agents have `enable_auth` off and webhook tools that use the owner's
+    ElevenLabs key. Turn auth on, detach the tools Rivet doesn't use, turn client overrides off and set retention
+    (`docs/scaling.md` §7 step 0).
 
 ## Verification gaps to close on a real phone
 - **Widgets:** both widgets on a real launcher.
@@ -359,5 +389,6 @@ built but unverified on a real phone or live service, say so.
   - Canonical schema: `docs/reference/telnyx/openapi.json`, in that repository
   - Live endpoint: https://oubli-catolabs.fastmcp.app/mcp, on Prefect Horizon
 - **Live-call design and its blockers:** `docs/calls-live.md`
+- **Many users, safely, and the workspace VM:** `docs/scaling.md`
 - **Android app build and on-device checklist:** `android/README.md`
 - **Brain configuration:** `brain/.env.example`. Deploy with `brain/scripts/deploy_fly.sh`; set up call answering with `brain/scripts/setup_call_answering.py`.
