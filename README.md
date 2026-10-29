@@ -120,7 +120,7 @@ On Fly (`deploy_fly.sh` also stages any `RIVET_EMAIL_*` set in its environment):
 
 ```bash
 read -rs RIVET_EMAIL_PASSWORD   # paste the app password; it stays out of your shell history
-fly secrets set -a rivet-brain-hiron RIVET_EMAIL_ADDRESS=you@gmail.com RIVET_EMAIL_PASSWORD="$RIVET_EMAIL_PASSWORD"
+fly secrets set -a rivet-assistant RIVET_EMAIL_ADDRESS=you@gmail.com RIVET_EMAIL_PASSWORD="$RIVET_EMAIL_PASSWORD"
 ```
 
 Gmail needs an app password: turn on 2-Step Verification, then create one at
@@ -162,7 +162,7 @@ export PERPLEXITY_API_KEY=... HORIZON_API_KEY=... RIVET_DEVICE_TOKEN=$(python -c
 uv run rivet-brain            # serves :8080, /healthz and /v1/sessions/{session_id}
 ```
 
-Deployed on Fly.io as `rivet-brain-hiron` (https://rivet-brain-hiron.fly.dev, region `sjc`, one machine,
+Deployed on Fly.io as `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, one machine,
 1 GB volume): `brain/scripts/deploy_fly.sh` creates or updates it (`FLY_LOCAL_BUILD=1` builds with local
 Docker when Fly's remote builder is unreachable). `brain/scripts/setup_call_answering.py` sets up call
 answering for a session from outside the phone.

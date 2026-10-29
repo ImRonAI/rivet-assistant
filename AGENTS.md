@@ -11,10 +11,11 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 
 | Area | State |
 |---|---|
-| App | **0.2.0** (versionCode 5) on `main`. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. |
-| Brain on Fly | `rivet-brain-hiron` (https://rivet-brain-hiron.fly.dev, region `sjc`) runs the **0.2.0 brain** (deployed 2026-10-28 from `main`; `/healthz` ok, the app's live test passes against it). Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1`. If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
-| Tests | Brain: 227 pass (`-m "not live"`), ruff, format and mypy clean. Android: 79 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
+| App | **0.3.0** (versionCode 6) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the interface redesigned from the owner's 11 Stitch screens (4 onboarding steps, 7 voice setup screens) plus the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. |
+| Brain on Fly | `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, the owner's personal Fly organization) runs the brain with the ElevenLabs session endpoint (deployed 2026-10-28; `/healthz` ok, both agent credentials verified live). `RIVET_DEVICE_TOKEN` and `ELEVENLABS_API_KEY` are set; **`PERPLEXITY_API_KEY` and `HORIZON_API_KEY` are not yet**, so chat and Telnyx don't work there until the owner sets them. Call answering still points at the old app `rivet-brain-hiron`, which keeps running until the owner shuts it down. Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1` (Fly's remote builder isn't reachable from cloud sessions). If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
+| Tests | Brain: 239 pass (`-m "not live"`), ruff, format and mypy clean. Android: 89 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
 | Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
+| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. Off until the user turns on Settings › "Use ElevenLabs agents". |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
 
 ## Rules that always apply
@@ -87,6 +88,7 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
   - The user can take the call over (Call Control `TransferCall` to the user's own number).
   - An end-of-call summary arrives, and a background follow-up task proposes next steps.
 - **Gateway** (`gateway.py`): one WebSocket per session, a device token, and events buffered while the phone is away. Call webhooks are protected by an HMAC token.
+  - `GET /v1/agent/session?mode=voice|text`, behind the device token, returns an ElevenLabs conversation token (voice) or signed URL (text) for the owner's agents (`ELEVENLABS_AGENTS`). The ElevenLabs API key stays on the brain.
 
 ### Android app (`android/app/src/main/java/com/hiron/rivet/`)
 - **Interface (`ui/`)**: the Rivet design system — dark graphite, safety orange, and cyan/green/amber/crimson status; Big Shoulders, IBM Plex Sans and Plex Mono. The shared kit is in `Theme.kt`, `Kit.kt` and `Chrome.kt`.
@@ -117,6 +119,11 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
   - **The search bar currently opens Rivet. It is not yet a web search** (see task 5).
 - **Default assistant** (`voice/`): a `VoiceInteractionService` overlay over any app, with live speech-to-text through `SpeechRecognizer`, a keyboard fallback and "Open Rivet". It is locked out on a secured lock screen.
 - **Voice**: speech input through `RecognizerIntent` / `SpeechRecognizer`, and replies spoken with Android TextToSpeech (`voice/Speaker.kt`).
+- **ElevenLabs agents** (`voice/RivetAgent.kt`), behind Settings › "Use ElevenLabs agents" (off by default):
+  - the talk key starts or stops a voice session; the composer sends text to the text agent;
+  - the agents call the 18 phone tools as client tools; sends, calls, message replies, calendar writes and commit-point taps wait for the approval sheet, and a deny or a 20-second timeout refuses;
+  - agent speech moves the robot's mouth, and messages land in the transcript;
+  - built and unit-tested only, not verified against a live agent or on a phone.
 - **Service**: a foreground WebSocket client with resume and an offline queue (`service/RivetService.kt`, `core/GatewayClient.kt`).
   - The action ledger never repeats a device action.
   - Notifications cover approvals (with Approve/Deny that need the phone unlocked), live calls (Take over), call summaries and reminders.
@@ -132,6 +139,11 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   ElevenLabs' realtime conversational model. A setting switches between:
   - **ElevenLabs realtime voice:** speech in and speech out through the ElevenLabs agent. The agent's "LLM" is Rivet's brain.
   - **Language model only:** today's path, text in and out, with optional Android TTS.
+- **Status:** a minimal first cut is built but unverified live (see "ElevenLabs agents" above). It follows the owner's
+  agent design: two platform agents (voice `agent_2901m620nzwrev2r7ekqpydcxe25`, text
+  `agent_9601m623qa72ffs9cyy3ezc0p6tb`) with the phone tools as client tools. Approvals for those tools run on the
+  phone, not in the brain. Which model the agents run on is the owner's call in the ElevenLabs platform settings
+  (never an Anthropic model). The persistent robot stage is not built.
 - **Design notes:**
   - Keep the brain as the single decision-maker and keep approvals intact. The ElevenLabs agent should call the brain as a custom LLM or through server or client tools, never act on its own.
   - Get private-agent conversation tokens from the brain; the ElevenLabs API key never goes on the phone.

@@ -96,6 +96,11 @@ class Settings(context: Context) {
         get() = prefs.getString("voice_description", "").orEmpty()
         set(value) = prefs.edit().putString("voice_description", value).apply()
 
+    /** Talk and type through the ElevenLabs agents (the brain needs `ELEVENLABS_API_KEY`). Off: the brain's own turns. */
+    var elevenLabsAgents: Boolean
+        get() = prefs.getBoolean("elevenlabs_agents", false)
+        set(value) = prefs.edit().putBoolean("elevenlabs_agents", value).apply()
+
     fun gateway(): GatewayConfig = GatewayConfig(gatewayUrl, deviceToken, sessionId)
 }
 

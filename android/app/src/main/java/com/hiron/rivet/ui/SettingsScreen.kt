@@ -287,11 +287,18 @@ private fun Behaviour(runtime: RivetRuntime) {
     var speak by remember { mutableStateOf(s.speakReplies) }
     var auto by remember { mutableStateOf(s.autoConnect) }
     var offer by remember { mutableStateOf(s.offerReplies) }
+    var agents by remember { mutableStateOf(s.elevenLabsAgents) }
     Toggle("Read replies aloud", speak) { speak = it; s.speakReplies = it }
     Rule(color = p.line)
     Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
     Rule(color = p.line)
     Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
+    Rule(color = p.line)
+    Toggle("Use ElevenLabs agents", agents) {
+        agents = it
+        s.elevenLabsAgents = it
+        if (!it) runtime.agent.stop()
+    }
 }
 
 /** Who made this, which build it is, and where to get help. */
