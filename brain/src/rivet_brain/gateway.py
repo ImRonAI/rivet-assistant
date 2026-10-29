@@ -2,13 +2,20 @@
 
 Protocol (JSON messages on ``/v1/sessions/{session_id}``, ``Authorization: Bearer <RIVET_DEVICE_TOKEN>``):
 
-Phone to brain: ``turn`` {text, turn_id?}, ``approval.response`` {answers: {interrupt_id: response}, lane?},
-``task`` {goal, task_id?, max_attempts?, timeout?}, ``device.result`` {action_id, result}, ``call.take_over``
-{call_id, to} (transfer a live call to ``to``, the user's own E.164 number; the tap is the approval), ``resume``,
-``ping``.
+Phone to brain: ``turn`` {text, turn_id?}, ``approval.response`` {answers: {interrupt_id: {approved, standing?:
+allow|deny}}, lane?} (``standing`` makes the answer a standing rule when the sheet offered it; the rule is stored
+before the turn resumes), ``task`` {goal, task_id?, max_attempts?, timeout?, reason?} (``reason``, at most 140
+characters, is why the task exists; its approvals show it), ``rules.list``, ``rules.set`` {decision: allow|deny,
+tool, scope} (a rule the phone makes for its own approvals; the brain recomputes the offer and refuses what it
+would not offer), ``rules.revoke`` {key}, ``device.result`` {action_id, result}, ``call.take_over`` {call_id, to}
+(transfer a live call to ``to``, the user's own E.164 number; the tap is the approval), ``resume``, ``ping``.
 
 Brain to phone: ``turn.accepted``, ``turn.started``, the agent's UI events (``text``, ``thinking``,
-``searching``, ``sources``, ``tool``, ...), ``approval.request``, ``approval.expired``, ``restart``,
+``searching``, ``sources``, ``tool``, ...), ``approval.request`` (each approval is {id, name, request, because?},
+``request`` being the v2 prompt of ``approvals.Assessment.prompt``), ``approval.expired``, ``rules`` {revision,
+rules: [{key, tool, scope, decision, label, created_at}]} (on every ``resume``, before ``session.ready``, and after
+every change), ``rules.refused`` {request: set|revoke, error} (plain text), ``rules.applied`` {decision, key, label,
+tool} (a standing rule decided a call without asking), ``restart``,
 ``turn.completed``, ``turn.failed``, ``device.call``, ``call.answering`` {call_id, from, verified}, ``call.live``
 {call_id, from, verified, started_at, status: answering|transferring, lines: [{speaker: caller|rivet, text}],
 snapshot} (``lines`` are new since the last one, or all of them when ``snapshot``; a snapshot of each live call
@@ -35,6 +42,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
@@ -50,6 +58,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from strands.storage import LocalFileStorage, Storage
 
 from . import calls, device_tools, email_tools
+from .alerts import task_reason
 from .approvals import RivetApprovals
 from .calls import (
     CALL_ID_VARIABLE,
@@ -67,6 +76,7 @@ from .config import BrainSettings
 from .device import DeviceBridge
 from .factory import Wiring, build_agent, build_telnyx_client
 from .live_calls import POLL_SECONDS, LiveCalls, TelnyxRunner
+from .rules import RuleRefusedError, StandingRules, admit, apply_answers
 from .supervisor import BuildFn, NoPendingApprovalError, SessionLockedError, SessionSupervisor
 
 logger = logging.getLogger(__name__)
@@ -97,21 +107,25 @@ ELEVENLABS_AGENTS = {
     ),
 }
 _SESSION_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+FOLLOW_UP_REASON = "A caller left you a message."
+CANT_MAKE_RULE = "Rivet can't make a rule for this."
 
 ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
 
 
 class _Session:
-    """One session's supervisor, device bridge, live calls, and the phone socket attached to it."""
+    """One session's supervisor, device bridge, live calls, standing rules, and the phone socket attached to it."""
 
     def __init__(
         self,
         session_id: str,
         supervisor_factory: Callable[[_Session], SessionSupervisor],
         *,
+        rules: StandingRules,
         telnyx: TelnyxRunner | None = None,
         call_poll: float = POLL_SECONDS,
     ) -> None:
+        self.rules = rules
         self.bridge = DeviceBridge(session_id)
         self.socket: WebSocket | None = None
         self.buffer: deque[dict[str, Any]] = deque(maxlen=BUFFER_LIMIT)
@@ -183,7 +197,11 @@ class _Session:
             self.spawn(self._guard(self.supervisor.send(message["text"], turn_id=turn_id), turn_id))
         elif kind == "approval.response" and isinstance(message.get("answers"), dict):
             lane = str(message.get("lane") or "default")
-            self.spawn(self._guard(self.supervisor.respond(message["answers"], lane_id=lane), None))
+            answers: dict[str, object] = message["answers"]
+            pending = self.supervisor.pending_approvals(lane)
+            if await apply_answers(self.rules, pending, answers, now=time.time(), on_refused=self._refused("set")):
+                self.emit(dict(self.rules.event()))
+            self.spawn(self._guard(self.supervisor.respond(answers, lane_id=lane), None))
         elif kind == "task" and isinstance(message.get("goal"), str):
             self.spawn(
                 self._guard(
@@ -192,11 +210,20 @@ class _Session:
                         task_id=message.get("task_id"),
                         max_attempts=int(message.get("max_attempts", 5)),
                         timeout=float(message.get("timeout", 1800)),
+                        reason=task_reason(message.get("reason")),
                     ),
                     message.get("task_id"),
                 )
             )
+        elif kind == "rules.list":
+            self.emit(dict(self.rules.event()))
+        elif kind == "rules.set":
+            await self._set_rule(message.get("decision"), message.get("tool"), message.get("scope"))
+        elif kind == "rules.revoke" and isinstance(message.get("key"), str):
+            await self.rules.revoke(message["key"])
+            self.emit(dict(self.rules.event()))
         elif kind == "resume":
+            self.emit(dict(self.rules.event()))
             for lane in self.supervisor.lanes:
                 approvals = self.supervisor.pending_approvals(lane)
                 if approvals:
@@ -206,6 +233,25 @@ class _Session:
             self.emit({"type": "session.ready"})
         else:
             self.emit({"type": "error", "error": f"unsupported message: {kind!r}"})
+
+    async def _set_rule(self, decision: object, tool: object, scope: object) -> None:
+        """A rule the phone makes for an approval it asked itself; the brain decides what may be a rule."""
+        fields = _str_fields(scope)
+        offer = None
+        if isinstance(tool, str) and fields is not None:
+            offer = self.supervisor.approvals.offer_for(tool, fields)
+        if offer is None or (decision != "allow" and decision != "deny"):
+            self._refused("set")(CANT_MAKE_RULE)
+            return
+        try:
+            await self.rules.put(admit(offer, decision, now=time.time()))
+        except RuleRefusedError as error:
+            self._refused("set")(str(error))
+            return
+        self.emit(dict(self.rules.event()))
+
+    def _refused(self, request: str) -> Callable[[str], None]:
+        return lambda error: self.emit({"type": "rules.refused", "request": request, "error": error})
 
     def follow_up_call(self, received_at: float) -> None:
         """Start a background task that works out what to do about a message Rivet took on a call."""
@@ -217,7 +263,11 @@ class _Session:
         if self.failed is not None:
             return
         task = self.supervisor.run_task(
-            FOLLOW_UP_GOAL, task_id=task_id, max_attempts=FOLLOW_UP_ATTEMPTS, timeout=FOLLOW_UP_TIMEOUT
+            FOLLOW_UP_GOAL,
+            task_id=task_id,
+            max_attempts=FOLLOW_UP_ATTEMPTS,
+            timeout=FOLLOW_UP_TIMEOUT,
+            reason=FOLLOW_UP_REASON,
         )
         await self._guard(task, task_id)
 
@@ -231,6 +281,7 @@ class _Session:
 
     async def _start(self) -> None:
         try:
+            await self.rules.load()
             await self.supervisor.start()
         except SessionLockedError as error:
             self.failed = str(error)
@@ -266,8 +317,18 @@ class _Session:
                     self.detach(socket)
 
 
+def _str_fields(value: object) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    fields = {k: v for k, v in value.items() if isinstance(k, str) and isinstance(v, str)}
+    return fields if len(fields) == len(value) else None
+
+
 class SessionHub:
-    """Creates one supervisor per session on first connect and keeps it for the process lifetime."""
+    """Creates one supervisor per session on first connect and keeps it for the process lifetime.
+
+    ``approvals`` is the template policy; each session gets it bound to that session's standing rules.
+    """
 
     def __init__(
         self,
@@ -292,6 +353,7 @@ class SessionHub:
     def get(self, session_id: str) -> _Session:
         session = self.sessions.get(session_id)
         if session is None:
+            rules = StandingRules(self.backend, session_id)
 
             def factory(owner: _Session) -> SessionSupervisor:
                 tools = self.tools_for(owner.bridge) if self.tools_for else ()
@@ -299,13 +361,13 @@ class SessionHub:
                     self.settings,
                     session_id,
                     backend=self.backend,
-                    approvals=self.approvals,
+                    approvals=self.approvals.bound(rules, on_rule=lambda applied: owner.emit(dict(applied))),
                     tools=tools,
                     sink=owner.emit,
                     build=self.build,
                 )
 
-            session = _Session(session_id, factory, telnyx=self.telnyx, call_poll=self.call_poll)
+            session = _Session(session_id, factory, rules=rules, telnyx=self.telnyx, call_poll=self.call_poll)
             self.sessions[session_id] = session
         return session
 
@@ -336,7 +398,7 @@ def create_app(
         backend: Session storage; defaults to ``LocalFileStorage(settings.session_dir)``.
         build: Generation factory (tests inject scripted models here).
         tools_for: Local tools for a session, given its device bridge.
-        approvals: Approval policy shared by every session (device tool policies go here).
+        approvals: Approval policy template (device tool policies go here); each session binds it to its own rules.
         device_token: The phone's bearer token; defaults to ``$RIVET_DEVICE_TOKEN``. Required.
         call_inbox: Where answered calls and messages are kept; defaults to ``calls/`` beside the sessions.
         follow_up_calls: Start a task for each message a caller leaves, to propose the next step.

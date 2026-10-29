@@ -491,32 +491,44 @@ async def test_without_move_or_uidplus_nothing_is_moved(tls: tuple[ssl.SSLContex
     [
         ("email_search", {"query": "from:ada"}, "read", True, "Search email"),
         ("email_read", {"uid": 7}, "read", True, "Read an email"),
-        ("email_send", {"to": "ada@example.com", "subject": "Hi", "body": "x"}, "send", False, "Email ada@example.com"),
+        (
+            "email_send",
+            {"to": "ada@example.com", "subject": "Hi", "body": "x"},
+            "send",
+            False,
+            "Email ada@example.com: “Hi”",
+        ),
         (
             "email_send",
             {"to": "ada@example.com", "cc": "bob@example.com", "subject": "Hi", "body": "x"},
             "send",
             False,
-            "Email ada@example.com, cc bob@example.com",
+            "Email ada@example.com: “Hi”",
         ),
-        ("email_reply", {"uid": 7, "to": "ada@example.com", "body": "Yes"}, "send", True, "Reply to ada@example.com"),
+        (
+            "email_reply",
+            {"uid": 7, "to": "ada@example.com", "body": "Yes"},
+            "send",
+            True,
+            "Reply to ada@example.com: “Yes”",
+        ),
         (
             "email_reply",
             {"uid": 7, "to": "ada@example.com", "body": "Yes", "reply_all": True},
             "send",
             True,
-            "Reply to ada@example.com and everyone else on the email",
+            "Reply to ada@example.com and everyone on the email: “Yes”",
         ),
-        ("email_mark", {"uid": 7, "action": "read"}, "write", False, "Mark email 7 in INBOX as read"),
+        ("email_mark", {"uid": 7, "action": "read"}, "write", False, "Mark an email as read"),
+        ("email_mark", {"uid": 7, "action": "unread", "folder": "Work"}, "write", False, "Mark an email as unread"),
+        ("email_mark", {"uid": 7, "action": "archive"}, "write", False, "Archive an email"),
         (
             "email_mark",
-            {"uid": 7, "action": "unread", "folder": "Work"},
-            "write",
+            {"uid": 7, "action": "delete"},
+            "unknown",
             False,
-            "Mark email 7 in Work as unread",
+            "Do something Rivet doesn't recognise with an email",
         ),
-        ("email_mark", {"uid": 7, "action": "archive"}, "write", False, "Archive email 7 from INBOX"),
-        ("email_mark", {"uid": 7, "action": "delete"}, "unknown", False, "Unrecognised email action 'delete'"),
     ],
 )
 def test_policy_tiers_taint_and_summaries(
@@ -524,15 +536,18 @@ def test_policy_tiers_taint_and_summaries(
 ) -> None:
     assessment = RivetApprovals(POLICIES).assess(tool, tool_input)
     assert (assessment.tier, assessment.untrusted_output, assessment.summary) == (tier, untrusted, summary)
-    sheet = json.loads(assessment.prompt(tainted=False))
-    assert sheet["remember"] is (tier == "send") and json.loads(sheet["preview"]) == tool_input
+    offer = RivetApprovals(POLICIES).offer(assessment, tainted=False)
+    sheet = json.loads(assessment.prompt(tainted=False, offer=offer))
+    assert json.loads(sheet["preview"]) == tool_input and sheet["headline"] == summary
+    assert ("offer" in sheet) is (tier in ("send", "write"))
 
 
-def test_remembered_sends_cover_the_same_recipients_and_replies_the_same_sender() -> None:
+def test_email_rules_cover_the_same_recipients_and_replies_the_same_sender() -> None:
     approvals = RivetApprovals(POLICIES)
 
     def scope(tool: str, **tool_input: Any) -> str:
-        return approvals.assess(tool, tool_input).scope
+        target = approvals.assess(tool, tool_input).target
+        return target.key if target is not None else ""
 
     ada = scope("email_reply", uid=7, to="ada@example.com", body="Yes")
     assert ada == scope("email_reply", uid=9, to="ada@example.com", body="Another email from her")
@@ -541,7 +556,28 @@ def test_remembered_sends_cover_the_same_recipients_and_replies_the_same_sender(
     send = scope("email_send", to="ada@example.com", subject="Hi", body="x")
     assert send == scope("email_send", to="ada@example.com", subject="Other", body="y")
     assert send != scope("email_send", to="ada@example.com", cc="eve@example.com", subject="Hi", body="x")
-    assert scope("email_mark", uid=7, action="read") == ""
+    assert send == scope("email_send", to=" ADA@example.com ", subject="Hi", body="x")
+    assert scope("email_mark", uid=7, action="read") == "email_mark?action=read"
+    assert scope("email_mark", uid=7, action="delete") == ""
+
+    def label(tool: str, data: dict[str, Any]) -> str:
+        offer = approvals.offer(approvals.assess(tool, data), tainted=False)
+        assert offer is not None
+        return offer.label
+
+    labels = {
+        label(tool, data)
+        for tool, data in [
+            ("email_send", {"to": "b@x.com, a@x.com", "cc": "c@x.com", "subject": "s", "body": "b"}),
+            ("email_reply", {"uid": 1, "to": "a@x.com", "body": "b", "reply_all": True}),
+            ("email_mark", {"uid": 1, "action": "archive"}),
+        ]
+    }
+    assert labels == {
+        "Emails to a@x.com,b@x.com with a copy to c@x.com",
+        "Replies to a@x.com that go to everyone on the email",
+        "Archiving emails",
+    }
 
 
 def _until(socket: Any, kind: str, limit: int = 300) -> dict[str, Any]:
@@ -552,7 +588,7 @@ def _until(socket: Any, kind: str, limit: int = 300) -> dict[str, Any]:
     raise AssertionError(f"no {kind}")
 
 
-def test_reading_mail_taints_the_turn_so_the_reply_asks_and_cannot_be_remembered(
+def test_reading_mail_taints_the_turn_so_the_reply_asks_and_cannot_be_always_allowed(
     tls: tuple[ssl.SSLContext, ssl.SSLContext], tmp_path: Path
 ) -> None:
     with _rig(tls) as rig:
@@ -580,8 +616,9 @@ def test_reading_mail_taints_the_turn_so_the_reply_asks_and_cannot_be_remembered
             request = _until(socket, "approval.request")
             sheet = request["approvals"][0]["request"]
             assert sheet["tool"] == "email_reply" and sheet["tier"] == "send"
-            assert sheet["summary"] == "Reply to ada@example.com" and json.loads(sheet["preview"]) == reply
-            assert sheet["untrusted_turn"] is True and sheet["remember"] is False
+            assert sheet["headline"] == "Reply to ada@example.com: “Friday works.”"
+            assert json.loads(sheet["preview"]) == reply
+            assert sheet["untrusted_turn"] is True and sheet["offer"]["no_allow"] == "untrusted"
             assert rig.smtp.received == []
             answer = {request["approvals"][0]["id"]: {"approved": True}}
             socket.send_json({"type": "approval.response", "answers": answer})

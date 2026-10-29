@@ -169,7 +169,9 @@ def test_setup_asks_and_moving_a_number_needs_the_strongest_approval() -> None:
     approvals = RivetApprovals(POLICIES)
     plain = approvals.assess("call_answering_setup", {"number": NUMBER, "owner_name": "Tim"})
     moved = approvals.assess("call_answering_setup", {"number": NUMBER, "owner_name": "Tim", "reassign": True})
-    assert plain.tier == "write" and NUMBER in plain.summary
+    assert plain.tier == "write" and plain.summary == f"Set up call answering on {NUMBER}"
+    assert moved.summary == f"Move {NUMBER} to Rivet's call answering"
+    assert plain.target is None
     assert moved.tier == "destructive" and moved.high
     messages = approvals.assess("call_messages", {})
     assert messages.tier == "read" and messages.untrusted_output
@@ -347,7 +349,9 @@ def test_a_call_message_starts_a_follow_up_that_asks_before_texting_back(tmp_pat
         request = _until(socket, "approval.request")
         sheet = request["approvals"][0]["request"]
         assert sheet["tool"] == "sms_send" and sheet["tier"] == "send"
-        assert sheet["untrusted_turn"] is True and sheet["remember"] is False
+        assert sheet["untrusted_turn"] is True and sheet["offer"]["allow"] is False
+        assert sheet["offer"]["no_allow"] == "untrusted"
+        assert request["approvals"][0]["because"] == "A caller left you a message."
         socket.send_json(
             {"type": "approval.response", "lane": request["lane"], "answers": {request["approvals"][0]["id"]: False}}
         )

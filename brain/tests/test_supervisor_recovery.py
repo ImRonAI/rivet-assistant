@@ -20,6 +20,7 @@ from strands import tool
 from strands.storage import LocalFileStorage
 
 from rivet_brain.approvals import ToolPolicy
+from rivet_brain.device_tools import SMS_STANDING
 from rivet_brain.factory import Generation
 from rivet_brain.supervisor import BuildTimeoutError, SessionLockedError, latest_snapshot_key
 from tests.chaos import FAST, Aux, fast_settings, make_build, make_supervisor, roles, user_texts
@@ -27,7 +28,7 @@ from tests.sse import SSE, FakePerplexity, error_response
 from tests.telnyx_server import FakeTelnyxServer
 
 BRAIN = Path(__file__).resolve().parents[1]
-SEND_POLICY = {"send_sms": ToolPolicy("send", "Send an SMS", scope_arg="to")}
+SEND_POLICY = {"send_sms": ToolPolicy("send", "Send an SMS", standing=SMS_STANDING)}
 sent: list[str] = []
 
 
@@ -120,6 +121,9 @@ async def test_pending_approval_survives_a_process_restart(tmp_path: Path) -> No
         assert restored is not None and restored.status == "awaiting_approval"
         assert [a["id"] for a in restored.approvals] == [approval_id]
         assert second.pending_approvals()[0]["id"] == approval_id
+        because = "You asked: “text Ada I'm late”"
+        assert paused.approvals[0]["because"] == because
+        assert restored.approvals[0]["because"] == because and second.pending_approvals()[0]["because"] == because
         outcome = await second.respond({approval_id: {"approved": True}})
         assert outcome.status == "completed" and outcome.text == "Texted Ada." and sent == ["+15551234"]
     finally:

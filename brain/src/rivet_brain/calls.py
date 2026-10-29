@@ -34,6 +34,7 @@ from typing import Any
 
 from strands.tools import PythonAgentTool
 
+from .alerts import alert_for
 from .approvals import Tier, ToolPolicy
 from .device import DeviceBridge, DeviceUnavailableError
 
@@ -309,12 +310,10 @@ def caller_of(body: Any) -> tuple[str, bool]:
     return caller, payload.get("telnyx_end_user_target_verified") is True
 
 
-def _setup_policy(tool_input: Any) -> tuple[Tier, str]:
+def _setup_policy(tool_input: object) -> tuple[Tier, str]:
     data = tool_input if isinstance(tool_input, Mapping) else {}
-    number = data.get("number") or "a Telnyx number"
-    if data.get("reassign") is True:
-        return "destructive", f"Move {number} off its current Telnyx connection so Rivet answers calls to it"
-    return "write", f"Create Rivet's Telnyx answering assistant and route {number} to it"
+    tier: Tier = "destructive" if data.get("reassign") is True else "write"
+    return tier, alert_for("call_answering_setup", tool_input, tier, ()).headline
 
 
 POLICIES: dict[str, ToolPolicy] = {
