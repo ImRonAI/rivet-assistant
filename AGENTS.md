@@ -19,7 +19,7 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 | ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. On by default for voice and text; Settings › "Use ElevenLabs agents" off sends everything to Rivet's own brain. The owner attached the 7 search client tools to both agents (q, count 1–20 default 10, freshness; 20 s timeout). The 18 phone tools are not attached to either agent yet, the old Cato demo tools still are, and the voice agent's LLM reads `claude-sonnet-4-5` (read 2026-10-29); those are the owner's to change in ElevenLabs. Both agents also have `enable_auth` off and carry webhook tools that use the owner's ElevenLabs key (read 2026-10-29; `docs/scaling.md` §2). The agents' `place_search` sends no location and the phone adds none, so Brave searches without a location unless `q` names the place ("coffee in austin tx"); whether Brave reads a place out of `q` is unverified. The conversation carried into a new session (voice to text and back) is tested with fakes only. |
 | Search (app) | The app side of the Brave search UI is built and tested under Robolectric with MockWebServer: client tools, result cards, results page, map, image viewer, inline YouTube, suggestions, Spellcheck and "Add to Rivet". It needs the brain's search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`, `search.results`, `model` events), which is deployed. Not checked on a phone: the WebGL map, YouTube playback and its Referer, sharing into real apps, and the widget sheet's keyboard. |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
-| Workspace VM | Google Cloud `instance-20261029-122759` (zone `us-central1-a`, c4-standard-8: 8 vCPU, 30 GB, Debian 13, 10 GB boot disk), provided by the owner on 2026-10-29 for task 2. **Not yet hardened or used.** It runs as the Compute Engine default service account with "Allow full access to all Cloud APIs", so any code on it can take that account's token; HTTP and HTTPS are open to the internet, its IP is ephemeral and its disk is deleted with it. Cloud sessions have no access to it: the hardening commands in `docs/scaling.md` §5.1 are the owner's to run. |
+| Workspace VM | Google Cloud `instance-20261029-122759` (zone `us-central1-a`, c4-standard-8: 8 vCPU, 30 GB, Debian 13, 10 GB boot disk), provided by the owner on 2026-10-29 for task 2. **Not yet hardened or used.** It runs as the Compute Engine default service account with "Allow full access to all Cloud APIs", so any code on it can take that account's token; its `http-server` and `https-server` tags allow HTTP and HTTPS (the firewall rules themselves weren't listed), its IP is ephemeral and its disk is deleted with it. Cloud sessions have no access to it: the hardening commands in `docs/scaling.md` §5.1 are the owner's to run. |
 
 ## Rules that always apply
 
@@ -285,7 +285,7 @@ documents, not from memory. Record anything that can't be verified as a blocker 
 - **Decision (owner, 2026-10-28):** the brain's sessions, memory and action journal move from the Fly volume (`LocalFileStorage`)
   to a Telnyx KV namespace, reached through the Telnyx MCP server that is already wired. No new secrets.
 - **Under review:** `docs/scaling.md` §6 (decision 2) recommends keeping user data out of Telnyx KV: through Horizon
-  every call's arguments and results are logged and kept indefinitely, KV has no compare-and-swap, and one shared
+  every call's arguments and results are logged by default and kept indefinitely, KV has no compare-and-swap, and one shared
   namespace separates users only in code. The owner decides.
 - **Build:**
   - `brain/src/rivet_brain/storage/telnyx_kv.py`, implementing the Strands `Storage` protocol (`write`, `read`, `delete`, `list`, `search`) over `PutKvKey`, `GetKvKey`, `ListKvKeys` (with `prefix` and `cursor`) and `DeleteKvKey`.
@@ -331,9 +331,13 @@ built but unverified on a real phone or live service, say so.
   every breach; this one keeps a breach to one user or one cell, detects it and contains it.
 - **Status:** planned, nothing built. Rivet is single-user today: one shared device token baked into the APK, session
   ids the phone picks, memory shared across sessions, and the owner's mailbox, Telnyx account and ElevenLabs agents
-  behind every session (`docs/scaling.md` §2).
-- **Next:** the owner's step 0 (no APK hand-outs and a rotated device token, the ElevenLabs agents locked down, the VM
-  hardened, Horizon payload logging off, six decisions), then steps 1-10 to 10 users, starting with no secrets in the
+  behind every session. Text Rivet reads can also make it send data out unasked, through Perplexity's server-side
+  `fetch_url`, which Rivet's approvals never see (`docs/scaling.md` §2).
+- **Hold:** the repository is public, so `docs/scaling.md` and the rows of this file that name open exposures stay on
+  the local `scaling-plan` branch until the owner confirms step 0 is done. Don't push them before then.
+- **Next:** the owner's step 0 (a read-only check for misuse first, Horizon payload logging off, no APK hand-outs and
+  the device token rotated on every Fly app, `rivet-brain-hiron` included, the ElevenLabs agents locked down,
+  `fetch_url` dropped, the VM hardened, six decisions), then steps 1-10 to 10 users, starting with no secrets in the
   APK and per-user sign-in (`docs/scaling.md` §7).
 - **Decisions waiting** (`docs/scaling.md` §6): the sign-in provider; where user data lives (this reopens task 6);
   Rivet-provided or bring-your-own numbers and agents; Gmail OAuth or app passwords; the ElevenLabs plan; one cloud or
@@ -358,13 +362,17 @@ built but unverified on a real phone or live service, say so.
    - Sideloading avoids this.
 9. **Owner credentials in the APK:** release builds bake in the brain URL, device token, session id and answering number
    (`android/app/build.gradle.kts`, `core/Settings.kt`), so whoever holds an APK is the owner's session. Hand none out,
-   rotate `RIVET_DEVICE_TOKEN`, and ship per-user sign-in first (`docs/scaling.md` §2, §7).
+   rotate `RIVET_DEVICE_TOKEN` on every Fly app (APKs 0.1.2-0.2.0 carry `rivet-brain-hiron`'s), and ship per-user
+   sign-in first (`docs/scaling.md` §2, §7).
 10. **The workspace VM's service account:** the VM runs as the Compute Engine default service account with full Cloud
     API access, so any code on it can take that account's token. Swap in an account with no roles and finish
     `docs/scaling.md` §5.1 before anything runs there.
 11. **ElevenLabs agents locked down:** both agents have `enable_auth` off and webhook tools that use the owner's
     ElevenLabs key. Turn auth on, detach the tools Rivet doesn't use, turn client overrides off and set retention
     (`docs/scaling.md` §7 step 0).
+12. **No silent fetches:** the main model's Perplexity `fetch_url` runs outside Rivet's approvals, so an injected email
+    or page can make Rivet read texts or mail and send them to any URL (not tried live). Drop it from the native tools
+    (`brain/src/rivet_brain/models/perplexity.py`), with a test (`docs/scaling.md` §2 danger 4, §7 step 0).
 
 ## Verification gaps to close on a real phone
 - **Widgets:** both widgets on a real launcher.
