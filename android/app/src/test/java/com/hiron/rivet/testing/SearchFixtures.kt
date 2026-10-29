@@ -1,5 +1,6 @@
 package com.hiron.rivet.testing
 
+import com.hiron.rivet.core.Citation
 import com.hiron.rivet.core.Distance
 import com.hiron.rivet.core.Hours
 import com.hiron.rivet.core.ImageItem
@@ -75,7 +76,14 @@ object SearchFixtures {
         ),
     )
 
-    val answers: JSONObject get() = envelope("answers", JSONArray(), answer = "Pick a shoe with **deep lugs** for mud.")
+    val answers: JSONObject get() = envelope("answers", JSONArray(), answer = "Pick a shoe with **deep lugs** for mud.[1]").put(
+        "citations",
+        JSONArray()
+            .put(JSONObject().put("number", 1).put("url", "https://gear.example.com/lugs").put("snippet", "Lugs of 5 mm or more shed mud."))
+            .put(JSONObject().put("number", 2).put("url", "https://rei.example.com/advice").put("snippet", JSONObject.NULL))
+            .put(JSONObject().put("number", 1).put("url", "https://gear.example.com/again"))
+            .put(JSONObject().put("url", "https://no-number.example.com")),
+    )
 
     // Typed results for the screen tests.
     val webResults = SearchResults(
@@ -128,7 +136,11 @@ object SearchFixtures {
 
     val answerResults = SearchResults(
         SearchKind.Answers, "how deep should trail shoe lugs be", null, emptyList(),
-        "For mud, look for **deep lugs of 5 to 6 mm**. For dry, rocky trails, 3 to 4 mm grips well and feels steadier.\n- Wider spacing sheds mud\n- A rock plate helps on sharp ground",
+        "For mud, look for **deep lugs of 5 to 6 mm**.[1] For dry, rocky trails, 3 to 4 mm grips well and feels steadier.[2]\n- Wider spacing sheds mud\n- A rock plate helps on sharp ground",
         null,
+        listOf(
+            Citation(1, "https://www.gear.example.com/lugs", "Lugs of 5 mm or more shed mud and keep their grip."),
+            Citation(2, "https://rei.example.com/advice", null),
+        ),
     )
 }

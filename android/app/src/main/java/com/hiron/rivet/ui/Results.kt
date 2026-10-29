@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import com.hiron.rivet.core.Citation
 import com.hiron.rivet.core.ContextItem
 import com.hiron.rivet.core.ImageItem
 import com.hiron.rivet.core.PlaceItem
@@ -446,7 +447,7 @@ private fun SeeAll(modifier: Modifier, onClick: () -> Unit) {
     }
 }
 
-/** Brave's answer, formatted. */
+/** Brave's answer, formatted, its `[n]` markers matching the numbered sources under it. */
 @Composable
 fun AnswerCard(results: SearchResults, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
@@ -460,6 +461,31 @@ fun AnswerCard(results: SearchResults, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(4.dp))
         Text(body, style = Type.bodyLg, color = p.ink)
+        if (results.citations.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Eyebrow("SOURCES", tone = Tone.Cyan)
+            results.citations.forEach { source -> SourceRow(source) }
+        }
+    }
+}
+
+/** One cited source: its number, site and snippet; a tap opens it. */
+@Composable
+private fun SourceRow(source: Citation) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    val site = source.url.toUri().host.orEmpty().removePrefix("www.").ifBlank { source.url }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClickLabel = "Open $site", role = Role.Button) { openExternally(context, source.url) }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text("[${source.number}]", style = Type.mono, color = p.cy)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(site, style = Type.labelLg, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            source.snippet?.let { Text(it, style = Type.body, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        }
     }
 }
 

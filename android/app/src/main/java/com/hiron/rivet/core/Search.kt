@@ -106,6 +106,9 @@ data class PlaceItem(
     val distance: Distance?,
 ) : SearchItem
 
+/** A source Brave's answer cites; the answer marks it as `[number]`. */
+data class Citation(val number: Int, val url: String, val snippet: String?)
+
 /** One search as the brain's proxy returned it; [altered] is the query Brave actually ran when it corrected it. */
 data class SearchResults(
     val kind: SearchKind,
@@ -114,6 +117,7 @@ data class SearchResults(
     val items: List<SearchItem>,
     val answer: String?,
     val center: LatLng?,
+    val citations: List<Citation> = emptyList(),
 )
 
 /** Why a search gave no results, in words for the user. */
@@ -198,8 +202,17 @@ internal object SearchCodec {
             items = items,
             answer = o.optStringOrNull("answer")?.takeIf { it.isNotBlank() },
             center = o.optJSONObject("center")?.let(::latLng),
+            citations = citations(o.optJSONArray("citations")),
         )
     }
+
+    private fun citations(list: JSONArray?): List<Citation> =
+        if (list == null) emptyList() else (0 until list.length()).mapNotNull { i ->
+            val c = list.optJSONObject(i) ?: return@mapNotNull null
+            val number = c.optIntOrNull("number") ?: return@mapNotNull null
+            val url = c.optStringOrNull("url")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            Citation(number, url, c.optStringOrNull("snippet")?.takeIf { it.isNotBlank() })
+        }.distinctBy { it.number }
 
     fun suggestions(o: JSONObject): List<String> = o.optJSONArray("suggestions").strings().filter { it.isNotBlank() }.distinct()
 

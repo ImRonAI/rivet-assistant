@@ -83,7 +83,14 @@ class SearchClientTest {
         reply(SearchFixtures.answers)
         val answer = search(SearchKind.Answers).getOrThrow()
         assertTrue(answer.items.isEmpty())
-        assertEquals("Pick a shoe with **deep lugs** for mud.", answer.answer)
+        assertEquals("Pick a shoe with **deep lugs** for mud.[1]", answer.answer)
+        // A repeated number keeps the first; one without a number is dropped.
+        assertEquals(
+            listOf(Citation(1, "https://gear.example.com/lugs", "Lugs of 5 mm or more shed mud."), Citation(2, "https://rei.example.com/advice", null)),
+            answer.citations,
+        )
+        reply(SearchFixtures.web)
+        assertTrue(search(SearchKind.Web).getOrThrow().citations.isEmpty())
     }
 
     @Test

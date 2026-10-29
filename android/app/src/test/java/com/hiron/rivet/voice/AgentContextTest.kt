@@ -2,6 +2,7 @@ package com.hiron.rivet.voice
 
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
+import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.ContextItem
 import com.hiron.rivet.core.GatewayConfig
 import com.hiron.rivet.core.ImageItem
@@ -27,6 +28,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,7 +37,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** "Add to Rivet" on the ElevenLabs path: the contextual update's words, and that it reaches a session started for it. */
+/**
+ * Contextual updates on the ElevenLabs path: "Add to Rivet" and the conversation so far, their words, and that they
+ * reach a session started for them.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AgentContextTest {
@@ -143,5 +148,73 @@ class AgentContextTest {
         // With the session live, a second result goes straight to it.
         agent.addContext(video.copy(title = "Another"))
         assertEquals("update:" + AgentContext.update(video.copy(title = "Another")), session.sent.last())
+    }
+
+    private fun said(id: Int, fromUser: Boolean, text: String) = ChatMessage("agent:$id", fromUser, text)
+
+    @Test
+    fun theRecapKeepsTheLastLinesSaidAndNothingElse() {
+        val messages = listOf(
+            ChatMessage("t-1", true, "A turn sent to Rivet's own brain"),
+            said(1, true, "Find coffee near the park"),
+            ChatMessage("agent-search:1", false, "", search = com.hiron.rivet.testing.SearchFixtures.placeResults),
+            ChatMessage("agent:2", false, "Added to Rivet: Summit Coffee", system = true),
+            said(3, false, "Summit Coffee is\nopen until 7."),
+            said(4, true, "Text Dana the address"),
+        )
+        assertEquals(
+            "Earlier in this conversation by voice, before this session started. It is for context: don't repeat it or answer it again.\n" +
+                "User: Find coffee near the park\nRivet: Summit Coffee is open until 7.",
+            AgentHistory.recap(messages, pending = "Text Dana the address", mode = AgentMode.Voice),
+        )
+        assertNull(AgentHistory.recap(messages.take(1)))
+        assertNull(AgentHistory.recap(listOf(said(1, true, "Hi")), pending = "Hi"))
+
+        val long = (1..30).map { said(it, it % 2 == 1, "line $it " + "x".repeat(300)) }
+        val recap = checkNotNull(AgentHistory.recap(long))
+        val lines = recap.lines().drop(1)
+        assertTrue(lines.size <= AgentHistory.LINES)
+        assertTrue(lines.joinToString("\n").length <= AgentHistory.CHARS)
+        assertTrue(lines.last().startsWith("Rivet: line 30 "))
+    }
+
+    @Test
+    fun aNewSessionHearsTheConversationSoFarBeforeTheFirstMessage() {
+        server.enqueue(MockResponse().setBody(JSONObject().put("agent_id", "agent_text").put("signed_url", "wss://example/signed").toString()))
+        server.enqueue(MockResponse().setBody(JSONObject().put("agent_id", "agent_text").put("signed_url", "wss://example/signed").toString()))
+        server.start()
+        var session = FakeSession()
+        var state = RivetState(messages = listOf(said(1, true, "Find coffee near the park"), said(2, false, "Summit Coffee is open until 7.")))
+        val agent = RivetAgent(
+            ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
+            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            update = { change -> state = change(state) }, robot = {}, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            search = { Result.failure(IllegalStateException("unused")) }, transcript = { state.messages },
+            connect = { config, _ ->
+                config.onConnect?.invoke("conv-1")
+                session
+            },
+        )
+        fun await(count: Int) {
+            val end = System.currentTimeMillis() + 10_000
+            while (session.sent.size < count && System.currentTimeMillis() < end) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(20)
+            }
+        }
+        agent.sendText("And tomorrow?")
+        await(2)
+        val first = AgentHistory.recap(listOf(said(1, true, "Find coffee near the park"), said(2, false, "Summit Coffee is open until 7.")))
+        assertEquals(listOf("update:$first", "message:And tomorrow?"), session.sent)
+        assertFalse(agent.tainted)
+
+        // The next session, after a stop, knows the last one was by text and hears the newest line too.
+        agent.stop()
+        session = FakeSession()
+        agent.switchMode(AgentMode.Text)
+        await(1)
+        val second = session.sent.single()
+        assertTrue(second.startsWith("update:Earlier in this conversation by text,"))
+        assertTrue(second.endsWith("User: And tomorrow?"))
     }
 }

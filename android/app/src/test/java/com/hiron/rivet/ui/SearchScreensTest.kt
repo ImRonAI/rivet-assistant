@@ -170,6 +170,9 @@ open class SearchScreensTest {
     fun answer() {
         conversation(SearchFixtures.answerResults)
         compose.onNodeWithText("ANSWER · BRAVE").assertIsDisplayed()
+        compose.onNodeWithText("SOURCES").assertIsDisplayed()
+        compose.onNodeWithText("gear.example.com").assertIsDisplayed()
+        compose.onNodeWithText("[2]").assertIsDisplayed()
         shot("answer")
     }
 

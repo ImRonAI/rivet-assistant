@@ -123,7 +123,7 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
     /** The ElevenLabs agents, used instead of the brain's turns when [Settings.elevenLabsAgents] is on. */
     val agent = RivetAgent(
         app, http, settings::gateway, tools::run, { approveOnPhone(it) }, { ruleBook.state.value }, ::setRule, ::update,
-        { _robot.tryEmit(it) }, scope, search::search,
+        { _robot.tryEmit(it) }, scope, search::search, transcript = { state.value.messages },
     )
 
     /** Turns sent but not yet acknowledged with `turn.accepted`; re-sent on reconnect (the brain dedups by id). */

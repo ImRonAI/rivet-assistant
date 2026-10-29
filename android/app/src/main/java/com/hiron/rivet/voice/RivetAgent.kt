@@ -63,7 +63,8 @@ data class AgentCredential(val mode: AgentMode, val agentId: String, val credent
  * session, [sendText], [switchMode], [stop]. The agents call the phone tools as client tools; anything the brain
  * would ask about first follows the brain's standing rules ([rules]) or waits for the user's OK on the approval
  * sheet here. A "don't ask again" on that sheet asks the brain for the rule ([setRule]). Their search tools run
- * through [search] and show their results on screen ([SearchTools]).
+ * through [search] and show their results on screen ([SearchTools]). A new session hears the last of the
+ * conversation so far ([transcript], [AgentHistory]), so switching between voice and text keeps the thread.
  */
 class RivetAgent(
     private val context: Context,
@@ -77,6 +78,7 @@ class RivetAgent(
     private val robot: (RobotCommand) -> Unit,
     private val scope: CoroutineScope,
     private val search: suspend (SearchQuery) -> Result<SearchResults>,
+    private val transcript: () -> List<ChatMessage> = { emptyList() },
     private val connect: suspend (ConversationConfig, Context) -> ConversationSession = { config, context -> ConversationClient.startSession(config, context) },
 ) {
     private val http = http.newBuilder().readTimeout(20, TimeUnit.SECONDS).build()
@@ -93,6 +95,7 @@ class RivetAgent(
     private var updates = mutableListOf<String>()
     private var lips = Job()
     private var lastChunk: Job? = null
+    private var lastMode: AgentMode? = null
 
     /** The mode of the session that is starting or running; null when there is none. */
     @Volatile
@@ -102,6 +105,8 @@ class RivetAgent(
     fun start(mode: AgentMode, firstMessage: String? = null, firstUpdate: String? = null) {
         stop()
         taint.reset()
+        val earlier = AgentHistory.recap(transcript(), pending = firstMessage, mode = lastMode)
+        lastMode = mode
         val gen = generation
         val messages = mutableListOf<String>().also { queued = it }
         firstMessage?.let(messages::add)
@@ -120,9 +125,10 @@ class RivetAgent(
                 // Not cancellable, so a session that did start is always handed over or ended below.
                 started = withContext(NonCancellable) { connect(config(credential, gen, connected), context) }
                 ensureActive()
-                if (messages.isNotEmpty() || added.isNotEmpty()) {
+                if (earlier != null || messages.isNotEmpty() || added.isNotEmpty()) {
                     checkNotNull(withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() }) { "the agent did not connect" }
-                    // What the user added goes first, so the first message can refer to it.
+                    // The conversation so far, then what the user added, so the first message can refer to both.
+                    earlier?.let(started::sendContextualUpdate)
                     if (added.isNotEmpty()) taint.mark()
                     added.forEach(started::sendContextualUpdate)
                     added.clear()
@@ -305,6 +311,36 @@ object AgentContext {
         if (item.kind == SearchKind.Videos) item.watchUrl?.let { append("\nwatch_url: $it") }
         if (item.kind == SearchKind.Images) item.imageUrl?.let { append("\nimage_url: $it") }
     }
+}
+
+/**
+ * The contextual update that carries the conversation so far into a new agent session: the last [LINES] things the
+ * user and the agent said (not search cards or app notes), at most [CHARS] characters.
+ */
+object AgentHistory {
+    const val LINES = 10
+    const val CHARS = 2_000
+
+    /** Null when nothing was said yet. [pending] is a first message already in [messages], sent on its own. */
+    fun recap(messages: List<ChatMessage>, pending: String? = null, mode: AgentMode? = null): String? {
+        // The agents' lines are the ones under "agent:" ids.
+        var said = messages.filter { it.id.startsWith("agent:") && it.spoken && it.text.isNotBlank() }
+        if (pending != null && said.lastOrNull()?.let { it.fromUser && it.text == pending } == true) said = said.dropLast(1)
+        val lines = ArrayDeque<String>()
+        var room = CHARS
+        for (message in said.asReversed()) {
+            val line = (if (message.fromUser) "User: " else "Rivet: ") + message.text.trim().replace(Regex("\\s+"), " ")
+            if (lines.size == LINES || room < MIN_LINE) break
+            lines.addFirst(if (line.length > room) line.take(room - 1) + "…" else line)
+            room -= lines.first().length + 1
+        }
+        if (lines.isEmpty()) return null
+        val how = mode?.let { " by ${it.wire}" }.orEmpty()
+        return "Earlier in this conversation$how, before this session started. It is for context: don't repeat it or answer it again.\n" +
+            lines.joinToString("\n")
+    }
+
+    private const val MIN_LINE = 40
 }
 
 /** Why an agent session didn't start, in words for the user. */
