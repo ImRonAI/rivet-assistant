@@ -227,7 +227,7 @@ private fun Header(status: String, led: Led) {
                 },
                 style = Type.brand.copy(fontSize = 20.sp, lineHeight = 20.sp), color = p.ink, maxLines = 1,
             )
-            Text("Assistant", style = Type.labelSm, color = p.ink2, maxLines = 1)
+            CapsText("Assistant", Type.labelSm, p.ink2, maxLines = 1)
         }
         Spacer(Modifier.width(12.dp))
         Capsule(status, led.color, led.live)
@@ -316,7 +316,11 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
                     Thinking()
                 }
                 AssistPhase.Replying -> Eyebrow("RIVET", tone = Tone.Cyan, live = true)
-                AssistPhase.Waiting -> Eyebrow("NEEDS YOUR OK", tone = Tone.Amber, live = true)
+                AssistPhase.Waiting -> {
+                    Eyebrow("NEEDS YOUR OK", Modifier.weight(1f), tone = Tone.Amber, live = true)
+                    Spacer(Modifier.width(12.dp))
+                    Keycap("Review", onReview, tone = KeyTone.Accent)
+                }
                 AssistPhase.Failed -> Eyebrow("RIVET · DIDN'T FINISH", tone = Tone.Red)
                 else -> Eyebrow("RIVET", tone = Tone.Cyan)
             }
@@ -329,18 +333,6 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
         if (body != null) {
             Spacer(Modifier.size(10.dp))
             Text(body, style = Type.bodyLg, color = p.ink, modifier = Modifier.heightIn(max = 220.dp).verticalScroll(scroll))
-        }
-        if (ui.phase == AssistPhase.Waiting) {
-            Spacer(Modifier.size(12.dp))
-            Rule(color = p.line)
-            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (ui.waiting == 1) "Rivet is waiting on 1 action" else "Rivet is waiting on ${ui.waiting} actions",
-                    style = Type.title, color = p.ink, modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(12.dp))
-                Keycap("Review", onReview, tone = KeyTone.Accent)
-            }
         }
         if (ui.phase == AssistPhase.Failed && ui.note != null) {
             Spacer(Modifier.size(10.dp))
@@ -417,8 +409,7 @@ private fun Keys(ui: AssistUi, onMic: () -> Unit, onTyping: (Boolean) -> Unit, o
                     )
                 }
                 SysKey("Type", ui.typing, onTyping)
-                Spacer(Modifier.weight(1f))
-                Keycap("Open Rivet", onOpen, icon = Icons.AutoMirrored.Outlined.OpenInNew)
+                SecondaryKey("Open Rivet", onOpen, Modifier.weight(1f), leading = Icons.AutoMirrored.Outlined.OpenInNew, radius = 24.dp)
             }
         }
     }

@@ -93,7 +93,7 @@ class AssistModelTest {
         val ui = AssistModel.ui(mine, sent().then(ServerEvent.ApprovalsRequested("t2", "default", listOf(approval("t2")), false)))
         assertEquals(AssistPhase.Waiting, ui.phase)
         assertEquals(1, ui.waiting)
-        assertEquals("WAITING", ui.status)
+        assertEquals("NEEDS YOU", ui.status)
     }
 
     @Test

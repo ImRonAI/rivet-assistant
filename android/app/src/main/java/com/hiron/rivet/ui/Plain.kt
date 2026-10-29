@@ -1,12 +1,10 @@
 package com.hiron.rivet.ui
 
-/** Plain words for tool ids, approval tiers and log kinds, so nothing on screen reads like a system code. */
-object Plain {
-    private val TIERS = mapOf(
-        "read" to "READS ONLY", "send" to "SENDS", "write" to "CHANGES", "destructive" to "DELETES",
-        "purchase" to "SPENDS MONEY", "unknown" to "UNFAMILIAR",
-    )
+import android.telephony.PhoneNumberUtils
+import java.util.Locale
 
+/** Plain words for tool ids, approval tiers, log kinds and phone numbers, so nothing on screen reads like a system code. */
+object Plain {
     /** Tool id to (what Rivet wants to do, what Rivet did). */
     private val TOOLS = mapOf(
         "sms_send" to ("Send a text" to "Sent a text"),
@@ -37,17 +35,38 @@ object Plain {
     )
 
     private val KINDS = mapOf(
-        "turn" to ("REQUEST" to Tone.Accent), "search" to ("SEARCH" to Tone.Cyan), "tool" to ("STEP" to Tone.Cyan),
-        "device" to ("PHONE" to Tone.Cyan), "approval" to ("APPROVAL" to Tone.Amber), "backoff" to ("RETRY" to Tone.Amber),
+        "turn" to ("YOU ASKED" to Tone.Accent), "search" to ("SEARCH" to Tone.Cyan), "tool" to ("DID" to Tone.Cyan),
+        "device" to ("PHONE" to Tone.Cyan), "approval" to ("APPROVAL" to Tone.Amber), "backoff" to ("TRYING AGAIN" to Tone.Amber),
         "restart" to ("RESTART" to Tone.Amber), "notice" to ("NOTE" to Tone.Neutral), "error" to ("PROBLEM" to Tone.Red),
         "call" to ("CALL" to Tone.Green), "task" to ("TASK" to Tone.Accent),
     )
 
     private val TOOL_LINE = Regex("""^([a-z_]+)(?::\s*(.*))?$""", RegexOption.DOT_MATCHES_ALL)
     private val BACKOFF = Regex("""^Model busy; retrying in (\d+)s$""")
+    private val NUMBER = Regex("""\+\d{8,15}\b""")
+    private val BARE_NUMBER = Regex("""^\+?\d{7,15}$""")
+    private val NANP = Regex("""^\+1(\d{3})(\d{3})(\d{4})$""")
 
-    /** The tier as a tag: what kind of thing the action does. */
-    fun tier(tier: String): String = TIERS[tier] ?: TIERS.getValue("unknown")
+    /** A phone number grouped the way people write it ("+1 801-555-0123"); anything else is returned as-is. */
+    fun phone(value: String): String {
+        val v = value.trim()
+        if (!BARE_NUMBER.matches(v)) return value
+        NANP.matchEntire(v)?.let { val (area, office, line) = it.destructured; return "+1 $area-$office-$line" }
+        return runCatching { PhoneNumberUtils.formatNumber(v, Locale.getDefault().country) }.getOrNull() ?: value
+    }
+
+    /** [text] with every international number in it grouped by [phone]. */
+    fun numbers(text: String): String = NUMBER.replace(text) { phone(it.value) }
+
+    /** One line on what kind of thing the action does and whether it can be taken back. */
+    fun risk(tier: String, tool: String): String = when (tier) {
+        "read" -> "Only looks · changes nothing"
+        "send" -> if (tool == "phone_call") "Places a call · you can't undo it" else "Sends a message · you can't undo it"
+        "write" -> "Changes something on your phone or account"
+        "destructive" -> "Deletes something · you can't undo it"
+        "purchase" -> "Spends money · you can't undo it"
+        else -> "Something Rivet hasn't done before"
+    }
 
     fun toneFor(tier: String): Tone = when (tier) {
         "read" -> Tone.Cyan
@@ -68,11 +87,11 @@ object Plain {
             if (id in TOOLS) {
                 // "done" repeats what the past tense already says.
                 val rest = m.groupValues[2].trim().takeUnless { it.isEmpty() || it == "done" }
-                return done(id) + (rest?.let { " · $it" } ?: "")
+                return done(id) + (rest?.let { " · ${numbers(it)}" } ?: "")
             }
         }
         if (kind == "backoff") BACKOFF.matchEntire(text)?.let { return "Rivet's model is busy. Trying again in ${it.groupValues[1]}s." }
-        return text
+        return numbers(text)
     }
 
     /** A log kind as a tag word and its tone. */

@@ -125,7 +125,7 @@ private fun CountTile(value: Int, label: String, color: Color, modifier: Modifie
     ) {
         Box(Modifier.size(width = 16.dp, height = 3.dp).glow(color.copy(alpha = 0.6f), 4.dp, RoundedCornerShape(2.dp)).clip(RoundedCornerShape(2.dp)).background(color))
         Text(label.uppercase(), style = Type.labelSm.copy(letterSpacing = 0.06.em), color = p.ink2, maxLines = 2, minLines = 2)
-        Odometer("%02d".format(value), Type.stat, p.ink)
+        Odometer("$value", Type.stat, p.ink)
     }
 }
 
@@ -149,7 +149,7 @@ private fun Reminders(reminders: JSONArray, modifier: Modifier, onCancel: (Strin
                     val due = Times.parse(r.optString("at"))
                     Text(
                         due?.let { android.text.format.DateFormat.format("EEE d MMM", Date(it)).toString() + " · " + time.format(Date(it)) } ?: r.optString("at"),
-                        style = Type.mono, color = p.ink2,
+                        style = Type.body, color = p.ink2,
                     )
                     Text(r.optString("text"), style = Type.bodyLg, color = p.ink)
                 }

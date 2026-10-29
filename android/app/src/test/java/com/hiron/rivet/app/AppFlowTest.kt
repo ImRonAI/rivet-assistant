@@ -168,7 +168,7 @@ class AppFlowTest {
                "tier":"send","high":false,"summary":"Text +18015550123","preview":"{\"to\": \"+18015550123\", \"body\": \"Friday at 9 works!\"}",
                "remember":true}}]}""",
         )
-        until { compose.onAllNodesWithTextCount("Text +18015550123") > 0 }
+        until { compose.onAllNodesWithTextCount("Text +1 801-555-0123") > 0 }
         shot("04-approval-sheet")
         compose.onNodeWithText("Approve").performClick()
         val answer = next("approval.response")
@@ -239,7 +239,7 @@ class AppFlowTest {
         // Settings' Voice section opens the same setup.
         compose.onNodeWithTag(TAB_TAG_PREFIX + "settings").performClick()
         compose.onNodeWithText("Not chosen yet").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Set up Rivet's voice").performScrollTo().performClick()
+        compose.onNodeWithText("Rivet's voice").performScrollTo().performClick()
         compose.onNodeWithText("Choose or make a voice").performClick()
         compose.onNodeWithText("PRESET LIBRARY.").assertIsDisplayed()
         compose.onNodeWithText("Sol").performClick()

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
@@ -84,8 +85,7 @@ data class GlowSpec(val color: Color, val radius: Dp, val offsetY: Dp)
 object Glows {
     private val accent = DarkPalette.accent
     val cta = GlowSpec(accent.copy(alpha = 0.35f), 24.dp, 0.dp)
-    val ctaDrop = GlowSpec(accent.copy(alpha = 0.30f), 15.dp, 10.dp)
-    val talk = GlowSpec(accent.copy(alpha = 0.45f), 36.dp, 12.dp)
+    val talk = GlowSpec(accent.copy(alpha = 0.45f), 36.dp, 0.dp)
     val live = GlowSpec(accent.copy(alpha = 0.55f), 36.dp, 0.dp)
     val peak = GlowSpec(accent.copy(alpha = 0.60f), 12.dp, 0.dp)
     val selected = GlowSpec(accent.copy(alpha = 0.08f), 24.dp, 0.dp)
@@ -107,8 +107,8 @@ fun Modifier.glow(color: Color, radius: Dp, shape: Shape = CircleShape, offsetY:
 
 fun Modifier.glow(spec: GlowSpec, shape: Shape): Modifier = glow(spec.color, spec.radius, shape, spec.offsetY)
 
-/** A 1dp ring [gap] outside [shape]: the focus halo of fields and the composer card. */
-internal fun Modifier.ring(color: Color, shape: Shape, show: Boolean, gap: Dp = 1.dp): Modifier = drawBehind {
+/** A 1dp ring [gap] outside [shape], flush against its border by default: the focus halo of fields and the composer card. */
+internal fun Modifier.ring(color: Color, shape: Shape, show: Boolean, gap: Dp = 0.dp): Modifier = drawBehind {
     if (!show) return@drawBehind
     val g = gap.toPx() + 0.5.dp.toPx()
     val outline = shape.createOutline(Size(size.width + g * 2, size.height + g * 2), layoutDirection, this)
@@ -194,7 +194,7 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: String? 
     val p = LocalPalette.current
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(text.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, style = Type.eyebrow.copy(fontSize = 10.sp), color = p.ink2.copy(alpha = 0.6f), maxLines = 1)
+        if (trailing != null) Text(trailing, style = Type.eyebrow.copy(fontSize = 10.sp), color = p.ink2, maxLines = 1)
     }
 }
 
@@ -322,22 +322,22 @@ fun InfoStrip(text: String, modifier: Modifier = Modifier, icon: ImageVector = I
     ) {
         Icon(icon, contentDescription = null, tint = tone.color(), modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
-        Text(text, style = Type.cardBody, color = p.ink2.copy(alpha = 0.8f))
+        Text(text, style = Type.cardBody, color = p.ink2)
     }
 }
 
-/** The trust line at the foot of a screen: an icon and centred mono lines. */
+/** The trust line at the foot of a screen: an icon and mono lines, centred together as one group. */
 @Composable
 fun TrustFooter(lines: String, modifier: Modifier = Modifier, icon: ImageVector = Icons.Outlined.VerifiedUser, tone: Tone = Tone.Cyan) {
     val p = LocalPalette.current
-    Row(modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = tone.color(), modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(
-            lines, style = Type.labelMd.copy(lineHeight = 17.sp), color = p.ink2, textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(34.dp))
+    Row(
+        modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tone.color(), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(lines, style = Type.labelMd.copy(lineHeight = 17.sp), color = p.ink2, modifier = Modifier.widthIn(max = 280.dp))
     }
 }
 
@@ -347,7 +347,7 @@ fun CheckCard(title: String, body: String, tag: String, tagTone: Tone, modifier:
     val p = LocalPalette.current
     RivetCard(modifier, padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(p.bg).border(1.dp, p.edge, CircleShape), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(p.ok.copy(alpha = 0.12f)).border(1.dp, p.ok.copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
                 Icon(Icons.Outlined.Check, contentDescription = null, tint = p.ok, modifier = Modifier.size(16.dp))
             }
             Spacer(Modifier.width(12.dp))

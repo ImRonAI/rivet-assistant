@@ -95,7 +95,6 @@ fun ApprovalSheet(approvals: List<ApprovalRequest>, onAnswer: (String, Map<Strin
     val density = LocalDensity.current
     val window = LocalWindowInfo.current.containerSize
     val listMax = with(density) { (window.height * 0.58f).toDp() }
-    val narrow = with(density) { window.width.toDp() } < 400.dp
 
     fun submit(approveAll: Boolean?) {
         val answers = batch.associate { a ->
@@ -158,16 +157,16 @@ fun ApprovalSheet(approvals: List<ApprovalRequest>, onAnswer: (String, Map<Strin
                     trailingArrow = false, leading = if (unlock) Icons.Outlined.Fingerprint else null,
                 )
             }
-            // Side by side unless large text or a long label would cut a key short; then the approve key goes on top.
-            if (density.fontScale > 1.15f || (unlock && narrow)) {
+            // Side by side and the same size, unless large text or the long unlock label would cut a key short; then the approve key goes on top.
+            if (density.fontScale > 1.15f || unlock) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     approve(Modifier)
-                    SecondaryKey(denyText, { submit(false) })
+                    SecondaryKey(denyText, { submit(false) }, height = 56.dp)
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SecondaryKey(denyText, { submit(false) }, Modifier.weight(1f))
-                    approve(Modifier.weight(1.6f))
+                    SecondaryKey(denyText, { submit(false) }, Modifier.weight(1f), height = 56.dp)
+                    approve(Modifier.weight(1f))
                 }
             }
         }
@@ -192,7 +191,7 @@ private fun ApprovalCard(
             IconWell(iconFor(a.tool), tone = tone, size = 44.dp, iconSize = 22.dp)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(a.summary, style = Type.title, color = p.ink)
+                Text(Plain.numbers(a.summary), style = Type.title, color = p.ink)
                 Text(Plain.action(a.tool), style = Type.cardBody, color = p.ink2)
             }
             if (onToggle != null) {
@@ -202,11 +201,9 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            StatusTag(Plain.tier(a.tier), tone)
-            Spacer(Modifier.width(10.dp))
             RiskMeter(a.tier, tone)
-            Spacer(Modifier.width(8.dp))
-            Text(riskWords(a.tier), style = Type.labelSm, color = p.ink2, maxLines = 1)
+            Spacer(Modifier.width(10.dp))
+            Text(Plain.risk(a.tier, a.tool), style = Type.cardBody, color = p.ink2, modifier = Modifier.weight(1f))
         }
         if (fields != null) {
             Preview(fields)
@@ -284,7 +281,7 @@ private fun Preview(fields: List<Pair<String, String>>) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Eyebrow(label.uppercase(), tone = Tone.Neutral, dot = false)
-            Text(value, style = Type.quote, color = p.ink, modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()))
+            Text(if (label == "Message") "\u201C$value\u201D" else value, style = Type.quote, color = p.ink, modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()))
         }
     }
 }
@@ -295,12 +292,6 @@ private fun Modifier.fadeBottom(color: Color, show: Boolean) = drawWithContent {
     if (!show) return@drawWithContent
     val h = 36.dp.toPx()
     drawRect(Brush.verticalGradient(listOf(Color.Transparent, color), startY = size.height - h, endY = size.height), Offset(0f, size.height - h), Size(size.width, h))
-}
-
-private fun riskWords(tier: String) = when (tier) {
-    "read" -> "Low risk"
-    "send", "write" -> "Some risk"
-    else -> "High risk"
 }
 
 private fun iconFor(tool: String): ImageVector = when {

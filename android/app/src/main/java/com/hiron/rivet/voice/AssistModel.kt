@@ -59,7 +59,7 @@ object AssistModel {
             reply?.failed == true -> shown.copy(phase = AssistPhase.Failed, reply = "", status = "DIDN'T FINISH", note = reply.text)
             finished && state.activity == Activity.Failed ->
                 shown.copy(phase = AssistPhase.Failed, status = "DIDN'T FINISH", note = "I couldn't finish that: ${state.lastError ?: "the brain stopped"}")
-            waiting > 0 -> shown.copy(phase = AssistPhase.Waiting, status = "WAITING")
+            waiting > 0 -> shown.copy(phase = AssistPhase.Waiting, status = "NEEDS YOU")
             reply?.streaming == true -> shown.copy(phase = AssistPhase.Replying, status = "REPLYING")
             finished -> shown.copy(phase = AssistPhase.Done, status = "DONE")
             else -> shown.copy(phase = AssistPhase.Working, status = working(state))

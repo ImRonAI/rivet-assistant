@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Mic
@@ -110,7 +111,8 @@ fun HaloTalkKey(state: TalkState, onClick: () -> Unit, description: String, modi
             val fill = p.accent.copy(alpha = if (large) 0.10f else 0.15f)
             Box(
                 Modifier.size(base).drawBehind {
-                    val r = size.minDimension / 2 * (1f + ping)
+                    // The large ring stops short of the label under the key.
+                    val r = size.minDimension / 2 * (1f + ping * if (large) 0.25f else 1f)
                     val fade = 0.9f * (1f - ping)
                     drawCircle(fill.copy(alpha = fill.alpha * fade), r)
                     drawCircle(ring.copy(alpha = ring.alpha * fade), r - 0.5.dp.toPx(), style = Stroke(1.dp.toPx()))
@@ -236,7 +238,13 @@ fun PlayKey(playing: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier
                 .clip(CircleShape).background(Color(0xFF171C22)).border(1.dp, p.edge, CircleShape)
                 .clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = p.accent, modifier = Modifier.size(36.dp)) }
+        ) {
+            if (playing) {
+                Box(Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).background(p.accent))
+            } else {
+                Icon(icon, contentDescription = null, tint = p.accent, modifier = Modifier.size(36.dp))
+            }
+        }
         PlayStyle.Square -> Box(Modifier.minimumInteractiveComponentSize().then(modifier), contentAlignment = Alignment.Center) {
             val shape = RoundedCornerShape(12.dp)
             Box(
@@ -301,9 +309,9 @@ fun ComposerCard(
     }
 }
 
-/** A dashed area to tap and pick a file. */
+/** A dashed area to tap and pick a file. [picked] shows a chosen file: an audio mark in green and its name. */
 @Composable
-fun DropZone(title: String, sub: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun DropZone(title: String, sub: String, onClick: () -> Unit, modifier: Modifier = Modifier, picked: Boolean = false) {
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
@@ -321,12 +329,23 @@ fun DropZone(title: String, sub: String, onClick: () -> Unit, modifier: Modifier
             .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier.size(48.dp).glow(Glows.disc, CircleShape).clip(CircleShape).background(p.tile).border(1.dp, p.graphite, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Outlined.CloudUpload, contentDescription = null, tint = p.accent, modifier = Modifier.size(22.dp)) }
+        if (picked) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(p.ok.copy(alpha = 0.12f)).border(1.dp, p.ok.copy(alpha = 0.3f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.AudioFile, contentDescription = null, tint = p.ok, modifier = Modifier.size(22.dp)) }
+        } else {
+            Box(
+                Modifier.size(48.dp).glow(Glows.disc, CircleShape).clip(CircleShape).background(p.tile).border(1.dp, p.graphite, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Outlined.CloudUpload, contentDescription = null, tint = p.accent, modifier = Modifier.size(22.dp)) }
+        }
         Spacer(Modifier.height(12.dp))
-        Text(title, style = Type.monoKey, color = p.ink, textAlign = TextAlign.Center)
+        if (picked) {
+            Text(title, style = Type.title, color = p.ink, textAlign = TextAlign.Center)
+        } else {
+            CapsText(title, Type.monoKey, p.ink, textAlign = TextAlign.Center)
+        }
         Spacer(Modifier.height(4.dp))
         Text(sub, style = Type.cardBody.copy(fontSize = 12.sp), color = p.ink2, textAlign = TextAlign.Center)
     }

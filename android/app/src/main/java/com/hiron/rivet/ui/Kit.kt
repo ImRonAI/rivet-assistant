@@ -70,7 +70,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /** How a keycap reads: a plain key, the one primary action (safety orange), or a destructive one. */
 enum class KeyTone { Plain, Accent, Danger }
@@ -142,29 +141,32 @@ fun IconKey(
     }
 }
 
-/** A latching system key in the filter-chip look: a white pill while it is on. */
+/** A latching key in the secondary-key look, white while it is on; [height] and [radius] match it to the keys beside it. */
 @Composable
-fun SysKey(text: String, on: Boolean, onToggle: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun SysKey(
+    text: String,
+    on: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    height: Dp = 48.dp,
+    radius: Dp = 24.dp,
+) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val pill = RoundedCornerShape(50)
+    val shape = RoundedCornerShape(radius)
     Box(
-        modifier.defaultMinSize(minHeight = 48.dp)
+        modifier.height(height).clip(shape).background(if (on) p.white else if (pressed) p.cardHi else p.raised)
+            .border(1.dp, if (on) p.white else if (pressed) p.lineHi else p.edge, shape)
             .toggleable(on, interactionSource = source, indication = null, role = Role.Switch) {
                 haptics.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
                 onToggle(it)
-            },
+            }
+            .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier.height(36.dp).clip(pill).background(if (on) p.white else if (pressed) p.cardHi else p.field)
-                .border(1.dp, if (on) p.white else p.edge, pill).padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(text, style = Type.monoKey.copy(fontSize = 12.sp), color = if (on) p.bg else p.ink, maxLines = 1)
-        }
+        CapsText(text, Type.monoKey, if (on) p.bg else p.ink, maxLines = 1)
     }
 }
 
@@ -433,6 +435,6 @@ fun StatTile(value: Int, label: String, color: Color, modifier: Modifier = Modif
             Spacer(Modifier.size(6.dp))
             Text(label.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1)
         }
-        Odometer("%02d".format(value), Type.stat, p.ink)
+        Odometer("$value", Type.stat, p.ink)
     }
 }

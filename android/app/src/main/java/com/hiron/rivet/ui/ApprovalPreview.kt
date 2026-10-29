@@ -11,6 +11,8 @@ object ApprovalPreview {
         "end" to "Ends", "owner_name" to "Your name", "reassign" to "Move the number",
     )
 
+    private val NUMBERS = setOf("to", "number", "from", "phone")
+
     /** Null when the preview is not a JSON object (it is then shown as-is). */
     fun fields(preview: String): List<Pair<String, String>>? {
         val obj = try {
@@ -18,7 +20,10 @@ object ApprovalPreview {
         } catch (e: Exception) {
             return null
         }
-        return obj.keys().asSequence().toList().map { key -> label(key) to value(obj.opt(key)) }
+        return obj.keys().asSequence().toList().map { key ->
+            val v = value(obj.opt(key))
+            label(key) to if (key in NUMBERS) Plain.phone(v) else v
+        }
     }
 
     private fun label(key: String) =

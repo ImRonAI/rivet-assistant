@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -55,14 +56,15 @@ val LocalOpenVoiceSetup = staticCompositionLocalOf<() -> Unit> { {} }
 
 /**
  * The strip across the top of every screen: the RIVET mark and the screen's name, and on the right one status
- * capsule in plain words, plus how many actions wait on your OK. On the robot's own screen it drops its rule so
- * the header and the stage read as one surface.
+ * capsule in plain words. On the robot's own screen it drops its rule so the header and the stage read as one
+ * surface.
  */
 @Composable
 fun HudHeader(state: RivetState, unit: String, rule: Boolean = true) {
     val p = LocalPalette.current
     val status = status(state, p)
-    val waiting = state.approvals.size
+    // At large text sizes the screen's name gives the status capsule its room rather than being cut short.
+    val named = LocalDensity.current.fontScale <= 1.15f
     Column(Modifier.fillMaxWidth().background(p.bg).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -74,13 +76,12 @@ fun HudHeader(state: RivetState, unit: String, rule: Boolean = true) {
                     },
                     style = Type.brand.copy(fontSize = 26.sp), color = p.ink,
                 )
-                Spacer(Modifier.size(2.dp))
-                Text(unit, style = Type.labelSm, color = p.ink2, maxLines = 1)
+                if (named) {
+                    Spacer(Modifier.size(2.dp))
+                    CapsText(unit, Type.labelSm, p.ink2, maxLines = 1)
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Capsule(status.text, status.color, status.live)
-                if (waiting > 0) Capsule("$waiting WAITING", p.amb, live = false)
-            }
+            Capsule(status.text, status.color, status.live)
         }
         if (rule) Rule(color = p.line)
     }

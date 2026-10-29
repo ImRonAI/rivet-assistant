@@ -38,9 +38,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.GppGood
@@ -127,7 +129,6 @@ val ACCESS_GROUPS = listOf(
 )
 
 private const val STEPS = 4
-private const val HINT = "Drag to look around · Tap Rivet to say hi"
 
 /**
  * Rivet's first run, in four steps under one robot stage: meet Rivet, its voice and text models, the default
@@ -147,7 +148,7 @@ fun Onboarding(runtime: RivetRuntime, onFinish: () -> Unit) {
         Box(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 20.dp), contentAlignment = Alignment.Center) {
             StepIndicator(step, STEPS)
         }
-        StageFrame(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(stage), caption = "Rivet", hint = if (hintFits()) HINT else null) {
+        StageFrame(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(stage), hint = if (hintFits()) STAGE_HINT else null) {
             RobotView(runtime, p.dark, Modifier.fillMaxSize(), focus = "card")
         }
         AnimatedContent(
@@ -179,9 +180,9 @@ private fun hintFits(): Boolean {
     val density = LocalDensity.current
     val width = with(density) { LocalWindowInfo.current.containerSize.width.toDp() }
     return remember(measurer, density, width) {
-        val text = measurer.measure(HINT.uppercase(), Type.labelSm.copy(letterSpacing = 0.14.em)).size.width
-        // Gutters, the frame's own inset, and the hint's touch icon.
-        text <= with(density) { (width - 40.dp - 24.dp - 19.dp).toPx() }
+        val text = measurer.measure(STAGE_HINT.uppercase(), Type.labelSm.copy(letterSpacing = 0.14.em)).size.width
+        // Gutters, the pill's inset and padding, and the hint's touch icon.
+        text <= with(density) { (width - 40.dp - 24.dp - 24.dp - 19.dp).toPx() }
     }
 }
 
@@ -266,7 +267,11 @@ private fun ModelsStep(runtime: RivetRuntime, next: () -> Unit) {
             Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer, and asks before it acts.",
             Modifier.enter(0).semantics(mergeDescendants = true) { stateDescription = "Always on" },
             tone = Tone.Cyan, tag = "ALWAYS ON" to Tone.Cyan,
-            trailing = { RivetToggle(checked = true, onCheckedChange = null, enabled = false) },
+            trailing = {
+                Box(Modifier.size(24.dp).background(LocalPalette.current.ok.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Outlined.Check, contentDescription = null, tint = LocalPalette.current.ok, modifier = Modifier.size(14.dp))
+                }
+            },
         )
         FeatureCard(
             Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Rivet answers in its own voice, powered by ElevenLabs.",
@@ -390,7 +395,7 @@ private fun AccessStep(onFinish: () -> Unit) {
     }
 }
 
-/** [TextKey]'s look, but the label wraps instead of clipping on narrow screens with large text. */
+/** [TextKey]'s look, but the caps label wraps instead of clipping on narrow screens with large text. */
 @Composable
 private fun FooterLink(text: String, onClick: () -> Unit, leading: ImageVector? = null, tone: Tone = Tone.Neutral) {
     val p = LocalPalette.current
@@ -410,7 +415,7 @@ private fun FooterLink(text: String, onClick: () -> Unit, leading: ImageVector? 
             Icon(leading, contentDescription = null, tint = tone.color(), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, style = Type.monoKey.copy(letterSpacing = 0.15.em), color = p.ink2, textAlign = TextAlign.Center)
+        CapsText(text, Type.monoKey, p.ink2, textAlign = TextAlign.Center)
     }
 }
 

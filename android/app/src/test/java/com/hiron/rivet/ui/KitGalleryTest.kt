@@ -148,9 +148,9 @@ class KitGalleryTest {
         var text by mutableStateOf("")
         page {
             Column(Modifier.fillMaxWidth()) {
-                StickyHeader("2 / 2", onBack = {})
+                StickyHeader("02 / 02", onBack = {})
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    StageFrame(Modifier.fillMaxWidth().height(248.dp), caption = "Rivet", hint = "Drag to look around · Tap Rivet to say hi", mood = LocalPalette.current.cy) {}
+                    StageFrame(Modifier.fillMaxWidth().height(248.dp), hint = STAGE_HINT, mood = LocalPalette.current.cy) {}
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Eyebrow("RECORDING", tone = Tone.Red, live = true)
                         TimerPill(14, 30)

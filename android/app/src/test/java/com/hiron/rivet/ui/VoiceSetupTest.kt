@@ -284,7 +284,7 @@ class VoiceSetupTest {
     fun fitsANarrowPhoneWithLargeText() {
         RuntimeEnvironment.setFontScale(1.3f)
         show(FakeStudio(label = "Copper"), VoiceScreen.Describe)
-        compose.onNodeWithText("2 / 2").assertExists()
+        compose.onNodeWithText("02 / 02").assertExists()
         shot(compose, compose.activity, "v2n-voice-describe-narrow")
     }
 

@@ -47,15 +47,20 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 enum class CtaStyle { Sans, Display }
@@ -76,8 +81,29 @@ private fun pressable(enabled: Boolean, role: Role, onClick: () -> Unit): Pair<M
 }
 
 /**
+ * Mono caps for keys, links and labels. Screen readers and tests get [text] as written, so a key that shows
+ * "NOT NOW" is still announced as "Not now".
+ */
+@Composable
+fun CapsText(
+    text: String,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+) {
+    val locale = LocalConfiguration.current.locales[0]
+    Text(
+        text.uppercase(locale), style = style, color = color, textAlign = textAlign, maxLines = maxLines, overflow = overflow,
+        modifier = modifier.clearAndSetSemantics { this.text = AnnotatedString(text) },
+    )
+}
+
+/**
  * The full-width glowing primary key. [CtaStyle.Sans] is the onboarding and sheet key; [CtaStyle.Display] is the
- * voice-setup key in Big Shoulders.
+ * voice-setup key in Big Shoulders caps. Both carry dark ink on the orange; a disabled key is a graphite plate.
  */
 @Composable
 fun PrimaryKey(
@@ -91,22 +117,17 @@ fun PrimaryKey(
 ) {
     val p = LocalPalette.current
     val (press, pressed) = pressable(enabled, Role.Button, onClick)
-    val ink = when {
-        !enabled -> p.ink.copy(alpha = 0.5f)
-        style == CtaStyle.Display -> p.white
-        else -> p.accentInk
-    }
-    val glow = if (style == CtaStyle.Display) Glows.ctaDrop else Glows.cta
+    val ink = if (enabled) p.accentInk else p.ink2
     Row(
         modifier.fillMaxWidth().height(56.dp)
             .graphicsLayer { if (pressed) { scaleX = 0.985f; scaleY = 0.985f } }
-            .then(if (enabled) Modifier.glow(glow, CtaShape) else Modifier)
+            .then(if (enabled) Modifier.glow(Glows.cta, CtaShape) else Modifier)
             .clip(CtaShape)
             .background(
-                if (!enabled) SolidColor(p.accent.copy(alpha = 0.35f))
+                if (!enabled) SolidColor(p.tile)
                 else Brush.verticalGradient(if (pressed) listOf(p.accentHi, p.accentHi) else listOf(p.accentHi, p.accent)),
             )
-            .topLine(Color.White.copy(alpha = if (enabled) 0.22f else 0f))
+            .then(if (enabled) Modifier.topLine(Color.White.copy(alpha = 0.14f)) else Modifier.border(1.dp, p.edge, CtaShape))
             .then(press)
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -116,10 +137,11 @@ fun PrimaryKey(
             Icon(leading, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
         }
-        Text(
-            text, style = if (style == CtaStyle.Display) Type.cta else Type.button, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
+        if (style == CtaStyle.Display) {
+            CapsText(text, Type.cta, ink, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        } else {
+            Text(text, style = Type.button, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        }
         if (trailingArrow) {
             Spacer(Modifier.width(10.dp))
             Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
@@ -127,23 +149,30 @@ fun PrimaryKey(
     }
 }
 
-/** A hairline of light across the top edge. */
+/** A hairline of light across the flat of the top edge, starting where the corners end. */
 private fun Modifier.topLine(color: Color) = drawWithContent {
     drawContent()
-    if (color.alpha > 0f) {
-        val inset = 14.dp.toPx()
-        drawLine(color, Offset(inset, 0.75.dp.toPx()), Offset(size.width - inset, 0.75.dp.toPx()), strokeWidth = 1.dp.toPx())
-    }
+    val inset = size.height / 2
+    drawLine(color, Offset(inset, 0.75.dp.toPx()), Offset(size.width - inset, 0.75.dp.toPx()), strokeWidth = 1.dp.toPx())
 }
 
-/** The outlined secondary key under a primary key. */
+/** The outlined secondary key under a primary key. [height] 56 pairs it with a primary key in one row; [radius] 12 is the compact card key. */
 @Composable
-fun SecondaryKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null, enabled: Boolean = true) {
+fun SecondaryKey(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    leading: ImageVector? = null,
+    enabled: Boolean = true,
+    height: Dp = 48.dp,
+    radius: Dp = 16.dp,
+) {
     val p = LocalPalette.current
     val (press, pressed) = pressable(enabled, Role.Button, onClick)
+    val shape = RoundedCornerShape(radius)
     Row(
-        modifier.fillMaxWidth().height(48.dp).alpha(if (enabled) 1f else 0.4f).clip(CtaShape)
-            .background(if (pressed) p.cardHi else p.raised).border(1.dp, if (pressed) p.lineHi else p.edge, CtaShape)
+        modifier.fillMaxWidth().height(height).alpha(if (enabled) 1f else 0.4f).clip(shape)
+            .background(if (pressed) p.cardHi else p.raised).border(1.dp, if (pressed) p.lineHi else p.edge, shape)
             .then(press).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -152,11 +181,11 @@ fun SecondaryKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
             Icon(leading, contentDescription = null, tint = p.ink2, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, style = Type.monoKey, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        CapsText(text, Type.monoKey, p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** A mono text link. */
+/** A mono caps text link. */
 @Composable
 fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null, tone: Tone = Tone.Neutral) {
     val p = LocalPalette.current
@@ -170,7 +199,7 @@ fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, le
             Icon(leading, contentDescription = null, tint = tone.color(), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, style = Type.monoKey.copy(letterSpacing = 0.15.em), color = p.ink2, maxLines = 1)
+        CapsText(text, Type.monoKey, p.ink2, maxLines = 1)
     }
 }
 

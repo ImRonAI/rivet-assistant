@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,6 +74,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -81,7 +83,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -217,22 +218,25 @@ fun VoiceSetup(studio: VoiceStudio, onClose: () -> Unit, start: VoiceScreen = Vo
 private fun VoicePage(
     title: String,
     sub: String,
-    counter: String = "2 / 2",
+    counter: String = "02 / 02",
     onBack: (() -> Unit)? = null,
-    onSkipTop: (() -> Unit)? = null,
+    centered: Boolean = false,
     eyebrow: @Composable () -> Unit = { Eyebrow("VOICE CONFIGURATION") },
     footer: @Composable ColumnScope.() -> Unit,
     body: @Composable ColumnScope.() -> Unit,
 ) {
     val p = LocalPalette.current
+    val density = LocalDensity.current
+    // The last of the content clears the footer however tall it grows.
+    var footerHeight by remember { mutableStateOf(160.dp) }
     Column(Modifier.fillMaxSize().background(p.bg)) {
-        // The skip link only fits beside the counter and badge on a roomy header; otherwise it stays in the footer.
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val roomy = maxWidth >= 400.dp * LocalDensity.current.fontScale
-            if (onSkipTop != null && roomy) StickyHeader(counter, startText = SKIP to onSkipTop) else StickyHeader(counter, onBack = onBack)
-        }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        StickyHeader(counter, onBack = onBack)
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
+                    .then(if (centered) Modifier.heightIn(min = maxHeight) else Modifier)
+                    .padding(bottom = footerHeight + 16.dp),
+            ) {
                 Spacer(Modifier.height(24.dp))
                 eyebrow()
                 Spacer(Modifier.height(10.dp))
@@ -240,10 +244,15 @@ private fun VoicePage(
                 Spacer(Modifier.height(12.dp))
                 Text(sub, style = Type.bodyLg, color = p.ink2)
                 Spacer(Modifier.height(28.dp))
+                // A capture screen sits its content in the middle of the room left above the footer.
+                if (centered) Spacer(Modifier.weight(1f))
                 body()
-                Spacer(Modifier.height(180.dp))
+                if (centered) Spacer(Modifier.weight(1f))
             }
-            FadeFooter(Modifier.align(Alignment.BottomCenter), content = footer)
+            FadeFooter(
+                Modifier.align(Alignment.BottomCenter).onSizeChanged { footerHeight = with(density) { it.height.toDp() } },
+                content = footer,
+            )
         }
     }
 }
@@ -311,7 +320,7 @@ private fun SelectorPage(
     VoicePage(
         title = "RIVET'S VOICE",
         sub = "Pick a ready-made voice or make one that's yours.",
-        counter = "1 / 2",
+        counter = "01 / 02",
         onBack = onBack,
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display)
@@ -356,7 +365,6 @@ private fun DescribePage(
         title = "DESCRIBE A VOICE",
         sub = "Describe how Rivet should sound, in plain words.",
         onBack = onBack,
-        onSkipTop = onSkip,
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display, enabled = text.isNotBlank())
             SecondaryKey(SKIP, onSkip)
@@ -385,7 +393,7 @@ private fun DescribePage(
             Spacer(Modifier.height(8.dp))
             Text(
                 "The sample plays in your phone's voice until Rivet's ElevenLabs voice is connected.",
-                style = Type.cardBody, color = p.ink2.copy(alpha = 0.8f),
+                style = Type.cardBody, color = p.ink2,
             )
         }
     }
@@ -510,6 +518,7 @@ private fun RecordPage(
         sub = "Tap the microphone to start recording.",
         onBack = onBack,
         eyebrow = { Eyebrow("VOICE SAMPLE") },
+        centered = true,
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display, enabled = hasSample)
             SecondaryKey(SKIP, onSkip)
@@ -527,7 +536,7 @@ private fun RecordPage(
                 large = true,
             )
             Spacer(Modifier.height(24.dp))
-            Text("TAP TO RECORD", style = Type.monoKey.copy(letterSpacing = 0.15.em), color = p.ink)
+            Text("TAP TO RECORD", style = Type.monoKey, color = p.ink)
             Spacer(Modifier.height(6.dp))
             Text("30-second sample", style = Type.mono, color = p.ink2)
         }
@@ -592,7 +601,7 @@ private fun CapturingPage(recorder: SampleRecorder, onBack: () -> Unit, onFinish
             HaloTalkKey(TalkState.Listening, finish, "Finish recording", Modifier.trimY(36.dp), large = true)
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("RECORDING…", style = Type.monoKey.copy(letterSpacing = 0.15.em), color = p.ink)
+                Text("RECORDING…", style = Type.monoKey, color = p.ink)
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.size(6.dp).alpha(pulse(low = 0.3f, periodMs = 1200)).glow(Glows.peak, CircleShape).clip(CircleShape).background(p.accent))
             }
@@ -617,7 +626,7 @@ private fun CapturingPage(recorder: SampleRecorder, onBack: () -> Unit, onFinish
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.BarChart, contentDescription = null, tint = p.ink, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("SOUND LEVEL", style = Type.monoKey.copy(letterSpacing = 0.15.em), color = p.ink)
+                    Text("SOUND LEVEL", style = Type.monoKey, color = p.ink)
                 }
                 Spacer(Modifier.height(14.dp))
                 Rule(color = p.line)
@@ -653,6 +662,7 @@ private fun ReviewPage(
         title = "SAMPLE REVIEW",
         sub = "Recording done. Listen back, or record it again.",
         onBack = onBack,
+        centered = true,
         footer = {
             PrimaryKey("Use sample", { sample?.let(onUse) }, style = CtaStyle.Display, enabled = sample != null)
             SecondaryKey("Re-record sample", onRerecord, leading = Icons.Outlined.Replay)
@@ -668,7 +678,7 @@ private fun ReviewPage(
             Spacer(Modifier.height(16.dp))
             Rule(color = p.line)
             Spacer(Modifier.height(16.dp))
-            Text("\"$SAMPLE_LINE\"", style = Type.quote, color = p.ink)
+            Text("\u201C$SAMPLE_LINE\u201D", style = Type.quote, color = p.ink)
             Spacer(Modifier.height(28.dp))
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 PlayKey(
@@ -690,7 +700,7 @@ private fun ReviewPage(
                     style = PlayStyle.Ghost,
                 )
                 Spacer(Modifier.height(18.dp))
-                Text(if (playing) "PLAYING" else "TAP TO LISTEN", style = Type.monoKey.copy(letterSpacing = 0.2.em), color = p.ink)
+                Text(if (playing) "PLAYING" else "TAP TO LISTEN", style = Type.monoKey, color = p.ink)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "${clock((progress * length).toInt())} / ${clock(length)}",
@@ -755,7 +765,7 @@ private fun UploadPage(
                 DropZone("CHOOSE AUDIO", "Tap to pick a file from your phone (at least 30 seconds)", { pick.launch(arrayOf("audio/*")) })
             } else {
                 val length = picked.seconds?.let { "${clock(it)} long · " }.orEmpty()
-                DropZone(picked.name, "${length}Tap to choose a different file", { pick.launch(arrayOf("audio/*")) })
+                DropZone(picked.name, "${length}Tap to choose a different file", { pick.launch(arrayOf("audio/*")) }, picked = true)
             }
             Spacer(Modifier.height(16.dp))
             val seconds = picked?.seconds
@@ -773,7 +783,7 @@ private fun UploadPage(
         Spacer(Modifier.height(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             CheckCard("Clean speech", "No heavy background noise or music", "REQUIRED", Tone.Neutral)
-            CheckCard("Best quality", "A .wav or .flac file gives the clearest result", "BEST", Tone.Accent)
+            CheckCard("Best quality", "A .wav or .flac file gives the clearest result", "RECOMMENDED", Tone.Accent)
         }
     }
 }

@@ -72,11 +72,12 @@
             android:ellipsize="end"
             android:fontFamily="@font/ibm_plex_mono_medium"
             android:includeFontPadding="false"
-            android:letterSpacing="0.1"
+            android:letterSpacing="0.14"
             android:maxLines="1"
             android:text="@string/widget_unit"
+            android:textAllCaps="true"
             android:textColor="@color/rivet_ink2"
-            android:textSize="11sp" />
+            android:textSize="10sp" />
     </RelativeLayout>
 
     <TextView

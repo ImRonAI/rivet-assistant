@@ -77,7 +77,8 @@
   }
 
   function say(text) {
-    if (!text) return;
+    // A bubble on a squeezed stage is too small to read.
+    if (!text || stage.clientHeight < 200) return;
     emote(String(text).slice(0, 40), [body.x, 1.95, body.z], { vy: .25, life: 3.2, size: .9 });
   }
 
@@ -108,17 +109,28 @@
     document.documentElement.setAttribute('data-theme', name === 'dark' ? 'dark' : 'light');
   }
 
-  /* camera framing: 'stage' fills a full-height stage, 'card' sits the robot in a short card. The page eases its
-     look-at height back to its own rest every frame, so only the zoom holds; a double tap resets the view to
-     zoom 1 and the framing is put back after it. */
-  const FOCUS = { stage: 1, card: .92 };
+  /* camera framing: 'stage' fills a full-height stage, 'card' sits the robot in a short card, 'greet' stands it
+     in the upper part of the stage so a greeting fits under its feet. ty is the look-at height the page eases
+     back to at rest (a lower one lifts the robot in the frame); a double tap resets the view to zoom 1 and the
+     framing is put back after it. */
+  const FOCUS = { stage: { zoom: 1, ty: 1.1 }, card: { zoom: 1.3, ty: .86 }, greet: { zoom: 1.25, ty: .5 } };
+  /* a short greeting stage (large text, small phones) stands Rivet further back so its feet stay above the words */
+  const GREET_SHORT = { zoom: 1.5, ty: .34 };
+  let focusMode = 'stage';
   let focusZoom = 1;
+  function framing() {
+    return focusMode === 'greet' && stage.clientHeight < 470 ? GREET_SHORT : FOCUS[focusMode];
+  }
   function focus(mode) {
     if (!Object.prototype.hasOwnProperty.call(FOCUS, mode)) return;
-    focusZoom = FOCUS[mode];
+    focusMode = mode;
+    const f = framing();
+    focusZoom = f.zoom;
+    cam.rest = f.ty;
     cam.zoom = focusZoom;
     cam.dirty = true;
   }
+  window.addEventListener('resize', () => { if (focusMode === 'greet') focus(focusMode); });
   stage.addEventListener('dblclick', () => { cam.zoom = focusZoom; cam.dirty = true; });
 
   function tick() {

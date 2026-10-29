@@ -75,9 +75,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -91,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import com.hiron.rivet.core.Activity
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
+import com.hiron.rivet.core.LiveCallStatus
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
 import kotlinx.coroutines.delay
@@ -110,7 +109,7 @@ enum class Quick(val label: String, val tag: String, val prompt: String) {
     }
 }
 
-const val STAGE_HINT = "Drag to look around · Tap Rivet to say hi"
+const val STAGE_HINT = "Drag to look · Tap to say hi"
 
 /**
  * Home: Rivet on its stage with a greeting, the transcript sheet once there is a conversation, and the dock with
@@ -130,9 +129,12 @@ fun HomeScreen(
     val talking = state.messages.isNotEmpty()
     val voice = runtime.settings.voiceModel
     var expanded by rememberSaveable { mutableStateOf(false) }
+    // While a call is live its plate holds the room the transcript would take, so the robot keeps a readable stage.
+    val callLive = state.liveCall.let { it != null && it.status != LiveCallStatus.Ended }
+    val sheet = talking && (!callLive || keyboard)
     // The robot owns the screen until there is a conversation, then shares it with the transcript sheet.
     val target = when {
-        !talking -> 1f
+        !sheet -> 1f
         keyboard -> 0.2f
         expanded -> 0.24f
         state.messages.size == 1 -> 0.62f
@@ -140,22 +142,20 @@ fun HomeScreen(
     }
     val stageShare by animateFloatAsState(target, spring(dampingRatio = 0.85f, stiffness = 300f), label = "stage")
     Column(Modifier.fillMaxSize().background(p.bg)) {
-        val idle = !talking && !keyboard
-        // The one-line hint can't wrap, so it gives way to a large font at phone width.
-        val density = LocalDensity.current
-        val roomy = density.fontScale <= 1.15f || with(density) { LocalWindowInfo.current.containerSize.width.toDp() } >= 400.dp
-        val fade by animateDpAsState(if (idle) 168.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
+        val idle = !talking && !keyboard && !callLive
+        val fade by animateDpAsState(if (idle) 240.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
         StageFrame(
             Modifier.weight(stageShare).fillMaxWidth(),
             framed = false,
-            hint = if (idle && roomy) STAGE_HINT else null,
+            hint = if (idle) STAGE_HINT else null,
             mood = moodColor(state.activity),
         ) {
-            RobotView(runtime, p.dark, Modifier.fillMaxSize())
-            // The stage melts into what sits below it, and the greeting stays legible over Rivet's feet.
+            // While the greeting shows, Rivet stands in the upper part of the stage with the words under its feet.
+            RobotView(runtime, p.dark, Modifier.fillMaxSize(), focus = if (idle) "greet" else "stage")
+            // The stage melts into what sits below it, and the greeting stays legible over the floor.
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(fade)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, p.bg.copy(alpha = 0.94f)))),
+                    .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to p.bg.copy(alpha = 0.72f), 1f to p.bg.copy(alpha = 0.96f))),
             )
             StageGreeting(idle, state, voice)
         }
@@ -167,7 +167,7 @@ fun HomeScreen(
                 LiveCallCard(call, onTakeOver = { runtime.takeOverCall(call.callId) }, onDismiss = runtime::dismissLiveCall)
             }
         }
-        if (talking) {
+        if (sheet) {
             TranscriptSheet(state, expanded || keyboard, { expanded = it }, Modifier.weight((1f - stageShare).coerceAtLeast(0.01f)))
         } else {
             state.lastError?.let { InfoStrip(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), icon = Icons.Outlined.WarningAmber, tone = Tone.Red) }
@@ -206,7 +206,7 @@ private fun BoxScope.StageGreeting(visible: Boolean, state: RivetState, voice: B
         enter = fadeIn(tween(Motion.SLOW)) + slideInVertically(tween(Motion.SLOW, easing = Motion.Emphasized)) { it / 4 },
         exit = fadeOut(tween(Motion.QUICK)),
         // Clears the stage hint under it.
-        modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 20.dp, bottom = 44.dp),
+        modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 20.dp, bottom = 52.dp),
     ) { Greeting(state, voice) }
 }
 

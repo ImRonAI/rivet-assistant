@@ -88,8 +88,7 @@ class ReviewScreensTest {
     @Test
     fun aPurchaseShowsItsRiskAndDetails() {
         sheet(listOf(buy))
-        compose.onNodeWithText("SPENDS MONEY").assertIsDisplayed()
-        compose.onNodeWithText("High risk").assertIsDisplayed()
+        compose.onNodeWithText("Spends money · you can't undo it").assertIsDisplayed()
         compose.onNodeWithText("Approve with unlock").assertIsDisplayed()
         compose.onNodeWithText("Details").performClick()
         compose.onNodeWithText("telnyx_execute").assertIsDisplayed()
@@ -193,9 +192,8 @@ class ReviewScreensTest {
         compose.onAllNodesWithText("Open Rivet's app info").assertCountEquals(1)
         compose.mainClock.advanceTimeBy(800)
         shot(compose, compose.activity, "review-settings")
-        compose.onNodeWithText("Set up Rivet's voice").performClick()
         compose.onNodeWithText("Rivet's voice").performClick()
-        assertEquals(2, opened)
+        assertEquals(1, opened)
     }
 
     @Test

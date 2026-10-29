@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,7 +44,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.PhoneForwarded
 import androidx.compose.material.icons.outlined.Call
@@ -67,6 +67,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +81,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -237,9 +239,9 @@ private fun ConnectionCard(
         if (state.connection == Connection.Offline) {
             Keycap("Connect", { RivetService.start(context) }, tone = KeyTone.Accent)
         } else {
-            Keycap("Disconnect", { RivetService.stop(context) })
+            SecondaryKey("Disconnect", { RivetService.stop(context) }, Modifier.weight(1f), height = 44.dp, radius = 12.dp)
         }
-        SysKey("Details", advanced, onAdvanced)
+        SysKey("Details", advanced, onAdvanced, Modifier.weight(1f), height = 44.dp, radius = 12.dp)
     }
 }
 
@@ -276,7 +278,6 @@ private fun Voice(runtime: RivetRuntime, refresh: Int) {
         Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer.",
         tone = Tone.Cyan, tag = "ALWAYS ON" to Tone.Cyan,
     )
-    TextKey("Set up Rivet's voice", openVoiceSetup, leading = Icons.AutoMirrored.Outlined.ArrowForward, tone = Tone.Accent)
 }
 
 @Composable
@@ -336,6 +337,7 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
     var forwardedTo by remember(refresh) { mutableStateOf(s.forwardedTo) }
     var own by remember(refresh) { mutableStateOf(s.ownNumber) }
     var error by remember { mutableStateOf<String?>(null) }
+    var codes by rememberSaveable { mutableStateOf(false) }
     val detected = remember { CallForwarding.detect(context) }
     val effective = style ?: detected
     val code = CallForwarding.enableCode(number, mode, effective)
@@ -369,8 +371,8 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
     }
     Spacer(Modifier.height(12.dp))
     Text(
-        "Callers still dial your number. When this is on, your carrier forwards calls to Rivet's answering line on " +
-            "Telnyx, Rivet takes a message, and you get it here. (Android doesn't let apps speak on ordinary calls.)",
+        "Callers still dial your number. When this is on, your carrier forwards calls to Rivet's answering line, " +
+            "Rivet takes a message, and you get it here. (Android doesn't let apps speak on ordinary calls.)",
         style = Type.cardBody, color = p.ink2,
     )
     Spacer(Modifier.height(16.dp))
@@ -393,14 +395,6 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
                 listOf(ForwardMode.Unanswered to "Unanswered calls", ForwardMode.Always to "Every call"),
                 mode, { mode = it },
             )
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("CARRIER CODES", style = Type.labelSm, color = p.ink2)
-            Choices(
-                listOf<Pair<CarrierStyle?, String>>(null to "Auto", CarrierStyle.Gsm to "Standard", CarrierStyle.Verizon to "Verizon"),
-                style, { style = it; s.carrierStyle = it },
-            )
-            if (style == null) Text("Detected: ${carrierLabel(detected)} codes", style = Type.mono, color = p.ink2)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Keycap(
@@ -429,20 +423,37 @@ private fun CallAnswering(runtime: RivetRuntime, refresh: Int) {
         }
         error?.let { InfoStrip(it, icon = Icons.Outlined.WarningAmber, tone = Tone.Red) }
         Text(
-            buildAnnotatedString {
-                val mono = SpanStyle(fontFamily = Mono, color = p.ink)
-                if (code != null) {
-                    append("Turn on dials ")
-                    withStyle(mono) { append(code) }
-                } else {
-                    append("Turn on dials your carrier's forwarding code")
-                }
-                append("; turn off dials ")
-                withStyle(mono) { append(CallForwarding.disableCode(effective)) }
-                append(". Your carrier confirms on screen. Forwarded calls may count against your plan; calls Rivet answers use Telnyx minutes.")
-            },
+            "Turn on dials your carrier's forwarding code, and your carrier confirms on screen. Forwarded calls may count " +
+                "against your plan; calls Rivet answers use minutes on Rivet's answering line.",
             style = Type.cardBody, color = p.ink2,
         )
+        // The dial codes are for people who want to check what Rivet dials; most never need them.
+        TextKey(if (codes) "Hide carrier codes" else "Show carrier codes", { codes = !codes }, Modifier.offset { IntOffset(-8.dp.roundToPx(), 0) })
+        if (codes) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("CARRIER", style = Type.labelSm, color = p.ink2)
+                Choices(
+                    listOf<Pair<CarrierStyle?, String>>(null to "Auto", CarrierStyle.Gsm to "Standard", CarrierStyle.Verizon to "Verizon"),
+                    style, { style = it; s.carrierStyle = it },
+                )
+                if (style == null) Text("Detected: ${carrierLabel(detected)} codes", style = Type.mono, color = p.ink2)
+                Text(
+                    buildAnnotatedString {
+                        val mono = SpanStyle(fontFamily = Mono, color = p.ink)
+                        if (code != null) {
+                            append("Turn on dials ")
+                            withStyle(mono) { append(code) }
+                        } else {
+                            append("Turn on dials your carrier's forwarding code")
+                        }
+                        append("; turn off dials ")
+                        withStyle(mono) { append(CallForwarding.disableCode(effective)) }
+                        append(".")
+                    },
+                    style = Type.cardBody, color = p.ink2,
+                )
+            }
+        }
     }
 }
 
