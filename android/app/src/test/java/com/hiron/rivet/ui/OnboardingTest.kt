@@ -12,6 +12,8 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.hiron.rivet.core.rivet
@@ -56,11 +58,12 @@ class OnboardingTest {
     @Test
     fun walksThroughEveryStep() {
         show()
-        compose.onNodeWithText("Get Started").assertIsDisplayed()
+        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
+        compose.onNodeWithText("Set up step by step").assertIsDisplayed()
         compose.onNodeWithText("You stay in control").assertIsDisplayed()
         shot("00a-onboarding-meet")
 
-        tap("Get Started")
+        tap("Set up step by step")
         compose.onNodeWithText("TWO MODELS, ONE RIVET").assertIsDisplayed()
         compose.onNode(hasText("Text model") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Always on")).assertExists()
         shot("00b-onboarding-models")
@@ -87,6 +90,24 @@ class OnboardingTest {
     }
 
     @Test
+    fun recommendedSettingsOpenFromTheFirstScreen() {
+        val settings = compose.activity.rivet.settings
+        settings.autoConnect = false
+        settings.speakInOverlay = true
+        show()
+        tap("Use recommended settings")
+        compose.onNodeWithText("RECOMMENDED").assertIsDisplayed()
+        compose.onNodeWithText("Connect automatically").assertIsDisplayed()
+        compose.mainClock.advanceTimeBy(600)
+        shot("onboarding-recommended")
+        // Dismissing the sheet stays on the first screen.
+        compose.onAllNodesWithText("Not now").onLast().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
+        assertEquals(0, finished)
+    }
+
+    @Test
     fun notNowFinishesInOneTap() {
         show()
         tap("Not now")
@@ -99,7 +120,7 @@ class OnboardingTest {
         settings.voiceModel = true
         settings.speakReplies = false
         show()
-        tap("Get Started")
+        tap("Set up step by step")
 
         val voice = compose.onNode(isToggleable() and hasText("Voice model"))
         voice.assertIsOn().performClick()
@@ -115,7 +136,7 @@ class OnboardingTest {
     @Test
     fun theVoiceLinkOpensVoiceSetup() {
         show()
-        tap("Get Started")
+        tap("Set up step by step")
         tap("Choose Rivet's voice")
         assertEquals(1, voiceSetups)
     }
@@ -123,7 +144,7 @@ class OnboardingTest {
     @Test
     fun openAssistantSettingsGoesToAndroidAndMovesOn() {
         show()
-        tap("Get Started")
+        tap("Set up step by step")
         tap("Save & Continue")
         tap("Open Assistant Settings")
         assertEquals(AndroidSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS, shadowOf(compose.activity).nextStartedActivity.action)
@@ -136,7 +157,7 @@ class OnboardingTest {
             *ACCESS_GROUPS.flatMap { it.permissions }.toTypedArray(),
         )
         show()
-        tap("Get Started")
+        tap("Set up step by step")
         tap("Save & Continue")
         tap("Skip for now")
         compose.onNode(isToggleable() and hasText("Messages & actions")).assertIsOn()
@@ -149,7 +170,7 @@ class OnboardingTest {
     @Test
     fun customizeLaterFinishesWithoutAsking() {
         show()
-        tap("Get Started")
+        tap("Set up step by step")
         tap("Save & Continue")
         tap("Skip for now")
         compose.onNode(isToggleable() and hasText("Screen context")).performClick()

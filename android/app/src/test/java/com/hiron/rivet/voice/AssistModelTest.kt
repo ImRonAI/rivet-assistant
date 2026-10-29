@@ -1,7 +1,7 @@
 package com.hiron.rivet.voice
 
 import android.speech.SpeechRecognizer
-import com.hiron.rivet.core.ApprovalRequest
+import com.hiron.rivet.testing.textApproval
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetState
@@ -28,9 +28,7 @@ class AssistModelTest {
 
     private fun RivetState.then(vararg events: ServerEvent) = events.fold(this) { s, e -> RivetStore.reduce(s, e, 2) }
 
-    private fun approval(turn: String) = ApprovalRequest(
-        "a-$turn", "default", turn, "sms_send", "send", false, "Text Dana", "", true, false, emptyList(), null,
-    )
+    private fun approval(turn: String) = textApproval("a-$turn", turn = turn)
 
     @Test
     fun listeningShowsTheWordsAsTheyAreHeard() {

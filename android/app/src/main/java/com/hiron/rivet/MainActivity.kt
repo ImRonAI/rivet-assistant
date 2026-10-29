@@ -201,6 +201,7 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
             state.approvals,
             onAnswer = { lane, answers -> runtime.answer(lane, answers) },
             onDismiss = { reviewing = false },
+            names = state.names,
         )
     }
     LaunchedEffect(state.approvals.size) {

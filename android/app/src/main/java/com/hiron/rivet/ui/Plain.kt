@@ -1,6 +1,21 @@
 package com.hiron.rivet.ui
 
 import android.telephony.PhoneNumberUtils
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.Dialpad
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.hiron.rivet.core.Tier
 import java.util.Locale
 
 /** Plain words for tool ids, approval tiers, log kinds and phone numbers, so nothing on screen reads like a system code. */
@@ -58,20 +73,32 @@ object Plain {
     /** [text] with every international number in it grouped by [phone]. */
     fun numbers(text: String): String = NUMBER.replace(text) { phone(it.value) }
 
-    /** One line on what kind of thing the action does and whether it can be taken back. */
-    fun risk(tier: String, tool: String): String = when (tier) {
-        "read" -> "Only looks · changes nothing"
-        "send" -> if (tool == "phone_call") "Places a call · you can't undo it" else "Sends a message · you can't undo it"
-        "write" -> "Changes something on your phone or account"
-        "destructive" -> "Deletes something · you can't undo it"
-        "purchase" -> "Spends money · you can't undo it"
-        else -> "Something Rivet hasn't done before"
+    /** The international numbers in [text]. */
+    fun numbersIn(text: String): List<String> = NUMBER.findAll(text).map { it.value }.distinct().toList()
+
+    /**
+     * [text] with each international number replaced by its contact's name from [names] ("Dana"), or with the name
+     * and the grouped number when [withNumber] ("Dana · +1 801-555-0100"); numbers without a name are grouped.
+     */
+    fun people(text: String, names: Map<String, String>, withNumber: Boolean = false): String = NUMBER.replace(text) { m ->
+        val name = names[m.value] ?: return@replace phone(m.value)
+        if (withNumber) "$name · ${phone(m.value)}" else name
     }
 
-    fun toneFor(tier: String): Tone = when (tier) {
-        "read" -> Tone.Cyan
-        "send", "write" -> Tone.Amber
-        else -> Tone.Red
+    /** One line on what kind of thing the action does and whether it can be taken back. */
+    fun risk(tier: Tier, tool: String): String = when (tier) {
+        Tier.Read -> "Only looks · changes nothing"
+        Tier.Send -> if (tool == "phone_call") "Places a call · you can't undo it" else "Sends a message · you can't undo it"
+        Tier.Write -> "Changes something on your phone or account"
+        Tier.Destructive -> "Deletes something · you can't undo it"
+        Tier.Purchase -> "Spends money · you can't undo it"
+        Tier.Unknown -> "Something Rivet hasn't done before"
+    }
+
+    fun toneFor(tier: Tier): Tone = when (tier) {
+        Tier.Read -> Tone.Cyan
+        Tier.Send, Tier.Write -> Tone.Amber
+        Tier.Destructive, Tier.Purchase, Tier.Unknown -> Tone.Red
     }
 
     /** The approval sheet's line for a tool: "Send a text". */
@@ -98,4 +125,20 @@ object Plain {
     fun kind(kind: String): Pair<String, Tone> = KINDS[kind] ?: (kind.uppercase() to Tone.Neutral)
 
     private fun spoken(id: String): String = id.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+/** The icon for a tool, on approval cards and rule rows. */
+internal fun iconFor(tool: String): ImageVector = when {
+    tool.startsWith("sms_") || tool == "notification_reply" -> Icons.AutoMirrored.Outlined.Chat
+    tool.startsWith("email_") -> Icons.Outlined.MailOutline
+    tool == "phone_call" || tool == "calls_recent" -> Icons.Outlined.Call
+    tool.startsWith("calendar_") -> Icons.Outlined.Event
+    tool.startsWith("reminder") -> Icons.Outlined.Alarm
+    tool.startsWith("contacts_") -> Icons.Outlined.Person
+    tool.startsWith("screen_") -> Icons.Outlined.TouchApp
+    tool.startsWith("app") -> Icons.Outlined.Apps
+    tool.startsWith("notifications_") -> Icons.Outlined.Notifications
+    tool.startsWith("telnyx_") || tool.startsWith("call_") -> Icons.Outlined.Dialpad
+    tool == "device_status" -> Icons.Outlined.PhoneAndroid
+    else -> Icons.Outlined.Bolt
 }

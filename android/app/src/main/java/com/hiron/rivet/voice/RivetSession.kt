@@ -131,6 +131,7 @@ class RivetSession(context: Context) :
         // As with the app on screen: replies are read aloud, device tools may open apps directly, and approvals
         // show here instead of as notifications.
         runtime.visible = true
+        runtime.overlayShowing = true
         registry.currentState = Lifecycle.State.RESUMED
         if (runtime.settings.gateway().complete && runtime.state.value.connection == Connection.Offline) RivetService.start(context)
         val locked = context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked == true
@@ -155,13 +156,14 @@ class RivetSession(context: Context) :
         drop()
         if (!showing) return
         showing = false
+        runtime.overlayShowing = false
         runtime.stopSpeaking()
         if (!handedOff) {
             runtime.visible = appWasVisible
             if (!appWasVisible) {
                 val waiting = runtime.state.value.approvals
                 waiting.filter { it.id !in knownApprovals }
-                    .forEach { Notifications.approval(context, it, reviewOnly = it.high || waiting.size > 1) }
+                    .forEach { Notifications.approval(context, it, reviewOnly = it.high || waiting.size > 1, names = runtime.state.value.names) }
             }
         }
         registry.currentState = Lifecycle.State.CREATED

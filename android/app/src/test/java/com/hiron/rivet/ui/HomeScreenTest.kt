@@ -29,7 +29,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.CallLineText
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
@@ -37,6 +36,7 @@ import com.hiron.rivet.core.LiveCall
 import com.hiron.rivet.core.LiveCallStatus
 import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.core.rivet
+import com.hiron.rivet.testing.textApproval
 import com.hiron.rivet.testing.shot
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -55,7 +55,7 @@ class HomeScreenTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val approval = ApprovalRequest("a1", "default", "t1", "sms_send", "send", false, "Text Dana", "{}", true, false, emptyList(), null)
+    private val approval = textApproval()
     private val now = System.currentTimeMillis()
 
     private val lines = listOf(

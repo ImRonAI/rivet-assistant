@@ -1,6 +1,7 @@
 package com.hiron.rivet.service
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -12,13 +13,22 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.hiron.rivet.MainActivity
 import com.hiron.rivet.R
+import com.hiron.rivet.core.AlertBlock
 import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.CallText
 import com.hiron.rivet.core.LiveCall
 import com.hiron.rivet.core.LiveCallStatus
 import com.hiron.rivet.core.ServerEvent
+import com.hiron.rivet.ui.Plain
+import com.hiron.rivet.ui.Rich
 
-/** Rivet's notification channels and the notifications it posts. */
+/** Who a call Rivet is answering is from and the message the caller left, before the brain reports it live. */
+data class CallNote(val from: String, val message: String = "", val urgent: Boolean = false)
+
+/**
+ * Rivet's notification channels and the notifications it posts. Each kind is one group whose summary exists only
+ * while the group has two or more notifications; each call is one notification that changes in place.
+ */
 object Notifications {
     const val SERVICE = "rivet.service"
     const val APPROVALS = "rivet.approvals"
@@ -26,15 +36,33 @@ object Notifications {
     const val ACTIONS = "rivet.actions"
     const val CALLS = "rivet.calls"
     const val SERVICE_ID = 1
+    const val APPROVAL_SUMMARY_ID = 999
+    const val ACTION_SUMMARY_ID = 4999
+    const val REMINDER_SUMMARY_ID = 9999
+    const val CALL_SUMMARY_ID = 19999
     private const val APPROVAL_BASE = 1000
     private const val ACTION_BASE = 5000
     private const val REMINDER_BASE = 9000
-    private const val CALL_ANSWERING_ID = 14000
-    private const val CALL_LIVE_ID = 14001
     private const val CALL_MESSAGE_BASE = 10000
-    private const val CALL_SUMMARY_BASE = 15000
+    private const val CALL_BASE = 20000
+    private const val CALL_ANSWERING_TIMEOUT = 10 * 60_000L
     private const val CALL_LIVE_TIMEOUT = 35 * 60_000L
     private const val TRANSFERRING = "Transferring the call to you…"
+
+    /** A group of notifications and its summary. */
+    enum class Group(val key: String, val summaryId: Int, val channel: String) {
+        Approvals("rivet.group.approvals", APPROVAL_SUMMARY_ID, APPROVALS),
+        Calls("rivet.group.calls", CALL_SUMMARY_ID, CALLS),
+        Reminders("rivet.group.reminders", REMINDER_SUMMARY_ID, REMINDERS),
+        Actions("rivet.group.actions", ACTION_SUMMARY_ID, ACTIONS);
+
+        fun title(count: Int): String = when (this) {
+            Approvals -> "$count things need your OK"
+            Calls -> "$count calls Rivet answered"
+            Reminders -> "$count reminders"
+            Actions -> "$count things ready to open"
+        }
+    }
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -66,17 +94,20 @@ object Notifications {
             .build()
 
     /**
-     * One notification per approval. Lower tiers get Approve/Deny actions that need the phone unlocked;
-     * high tiers (purchases, deletes, anything unclassified) only open the app, where biometrics are required.
+     * One notification per approval, titled with what Rivet wants to do. Lower tiers get Approve/Deny actions that
+     * need the phone unlocked; high tiers (purchases, deletes, anything unclassified) only open the app, where
+     * biometrics are required. [names] maps numbers to contact names.
      */
-    fun approval(context: Context, request: ApprovalRequest, reviewOnly: Boolean = request.high) {
+    fun approval(context: Context, request: ApprovalRequest, reviewOnly: Boolean = request.high, names: Map<String, String> = emptyMap()) {
+        val text = (if (request.high) "High risk · " else "") + (request.because ?: Plain.risk(request.tier, request.tool))
         val builder = NotificationCompat.Builder(context, APPROVALS)
             .setSmallIcon(R.drawable.ic_rivet)
-            .setContentTitle(if (request.high) "Rivet needs your OK (high risk)" else "Rivet needs your OK")
-            .setContentText(request.summary)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(request.summary + "\n" + request.preview.take(300)))
+            .setContentTitle(Plain.people(request.headline, names))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(approvalBody(request, names)))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
             .setContentIntent(openApp(context))
             .setAutoCancel(true)
         if (!reviewOnly) {
@@ -85,11 +116,31 @@ object Notifications {
         } else {
             builder.addAction(NotificationCompat.Action.Builder(0, "Review", openApp(context)).build())
         }
-        post(context, APPROVAL_BASE + request.id.hashCode().mod(4000), builder)
+        post(context, approvalId(request.id), builder, Group.Approvals)
     }
 
-    fun clearApproval(context: Context, id: String) =
-        NotificationManagerCompat.from(context).cancel(APPROVAL_BASE + id.hashCode().mod(4000))
+    /** The approval's body as plain lines: each block, then why Rivet is asking. */
+    fun approvalBody(request: ApprovalRequest, names: Map<String, String> = emptyMap()): String {
+        val lines = request.blocks.map { block ->
+            when (block) {
+                is AlertBlock.Field -> "${block.label}: ${Plain.people(block.value, names, withNumber = true)}"
+                is AlertBlock.Quote -> "${block.label}: ${block.text}"
+                is AlertBlock.Note -> Rich.plain(block.markdown)
+            }
+        }
+        return (lines + listOfNotNull(request.because)).joinToString("\n")
+    }
+
+    fun clearApproval(context: Context, id: String) = clearApprovals(context, listOf(id))
+
+    fun clearApprovals(context: Context, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val manager = NotificationManagerCompat.from(context)
+        ids.forEach { manager.cancel(approvalId(it)) }
+        refresh(context, Group.Approvals)
+    }
+
+    fun approvalId(id: String): Int = APPROVAL_BASE + id.hashCode().mod(4000)
 
     fun reminder(context: Context, id: String, text: String) = post(
         context, REMINDER_BASE + id.hashCode().mod(1000),
@@ -102,47 +153,57 @@ object Notifications {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(openApp(context))
             .setAutoCancel(true),
+        Group.Reminders,
     )
 
-    fun callAnswering(context: Context, from: String) = post(
-        context, CALL_ANSWERING_ID,
-        NotificationCompat.Builder(context, CALLS)
-            .setSmallIcon(R.drawable.ic_rivet)
-            .setContentTitle("Rivet is answering a call")
-            .setContentText("From ${from.ifBlank { "an unknown number" }}")
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setTimeoutAfter(10 * 60_000L)
-            .setContentIntent(openApp(context))
-            .setAutoCancel(true),
-    )
+    /** The id of [callId]'s one notification, which moves from answering to live to its summary. */
+    fun callId(callId: String): Int = CALL_BASE + callId.hashCode().mod(4000)
 
-    fun callMessage(context: Context, event: ServerEvent.CallMessage) {
-        NotificationManagerCompat.from(context).cancel(CALL_ANSWERING_ID)
+    /** The call has just been picked up; [alert] posts it so that it sounds again (an urgent message arrived). */
+    fun callAnswering(context: Context, callId: String, note: CallNote, alert: Boolean = false) {
+        val from = "From ${note.from.ifBlank { "an unknown number" }}"
         post(
-            context, CALL_MESSAGE_BASE + (event.callbackNumber + event.message).hashCode().mod(4000),
+            context, callId(callId),
             NotificationCompat.Builder(context, CALLS)
                 .setSmallIcon(R.drawable.ic_rivet)
-                .setContentTitle((if (event.urgent) "Urgent message from " else "Message from ") + CallText.caller(event))
-                .setContentText(event.message.ifBlank { "(no message)" })
-                .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.describe(event)))
-                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                .setPriority(if (event.urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+                .setContentTitle("Rivet is answering a call")
+                .setContentText(from)
+                .setStyle(NotificationCompat.BigTextStyle().bigText((listOf(from) + messageLines(note.message, note.urgent)).joinToString("\n")))
+                .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOnlyAlertOnce(!alert)
+                .setTimeoutAfter(CALL_ANSWERING_TIMEOUT)
                 .setContentIntent(openApp(context))
                 .setAutoCancel(true),
+            Group.Calls,
         )
     }
 
+    /** A message for a call this phone has no notification for: its own notification in the calls group. */
+    fun callMessage(context: Context, event: ServerEvent.CallMessage) = post(
+        context, CALL_MESSAGE_BASE + (event.callbackNumber + event.message).hashCode().mod(4000),
+        NotificationCompat.Builder(context, CALLS)
+            .setSmallIcon(R.drawable.ic_rivet)
+            .setContentTitle((if (event.urgent) "Urgent message from " else "Message from ") + CallText.caller(event))
+            .setContentText(event.message.ifBlank { "(no message)" })
+            .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.describe(event)))
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(if (event.urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true),
+        Group.Calls,
+    )
+
     /**
-     * The ongoing notification while Rivet is on a call: the latest lines and, while it is answering, "Take over"
-     * (which needs the phone unlocked). It replaces the "answering" one and stays quiet, since that one alerted.
+     * The ongoing notification while Rivet is on a call: the latest lines, the caller's message once there is one
+     * and, while it is answering, "Take over" (which needs the phone unlocked). Quiet, except once for an urgent
+     * message ([alert]).
      */
-    fun callLive(context: Context, call: LiveCall, notice: String? = null) {
+    fun callLive(context: Context, call: LiveCall, notice: String? = null, alert: Boolean = false) {
         if (call.status == LiveCallStatus.Ended) return
-        NotificationManagerCompat.from(context).cancel(CALL_ANSWERING_ID)
         val answering = call.status == LiveCallStatus.Answering
         val status = notice ?: if (answering) null else TRANSFERRING
         val recent = call.lines.takeLast(4).map(CallText::line)
-        val body = (recent + listOfNotNull(status)).joinToString("\n").ifBlank { "Listening…" }
+        val body = (recent + listOfNotNull(status) + messageLines(call.message, call.urgent)).joinToString("\n").ifBlank { "Listening…" }
         val builder = NotificationCompat.Builder(context, CALLS)
             .setSmallIcon(R.drawable.ic_rivet)
             .setContentTitle("Rivet is answering ${call.caller}")
@@ -150,32 +211,34 @@ object Notifications {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setSilent(true)
+            .setOnlyAlertOnce(!alert)
+            .setSilent(!alert)
             .setWhen(call.startedAt)
             .setUsesChronometer(true)
             .setTimeoutAfter(CALL_LIVE_TIMEOUT)
             .setContentIntent(openApp(context))
         if (answering) builder.addAction(takeOver(context, call.callId))
-        post(context, CALL_LIVE_ID, builder)
+        post(context, callId(call.callId), builder, Group.Calls)
     }
 
-    /** Replaces the live notification with the call's summary. */
+    /**
+     * The call's summary, in place of whatever its notification showed. It only sounds when nothing for the call was
+     * showing (`setOnlyAlertOnce`).
+     */
     fun callEnded(context: Context, call: LiveCall) {
-        val manager = NotificationManagerCompat.from(context)
-        manager.cancel(CALL_LIVE_ID)
-        manager.cancel(CALL_ANSWERING_ID)
+        val message = messageLines(call.message, call.urgent)
         post(
-            context, CALL_SUMMARY_BASE + call.callId.hashCode().mod(1000),
+            context, callId(call.callId),
             NotificationCompat.Builder(context, CALLS)
                 .setSmallIcon(R.drawable.ic_rivet)
                 .setContentTitle((if (call.takenOver) "You took over the call from " else "Call from ") + call.caller)
                 .setContentText(call.summary.ifBlank { "Rivet has no summary of this call." })
-                .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.summary(call)))
+                .setStyle(NotificationCompat.BigTextStyle().bigText((listOf(CallText.summary(call)) + message).joinToString("\n")))
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-                .setSilent(true)
+                .setOnlyAlertOnce(true)
                 .setContentIntent(openApp(context))
                 .setAutoCancel(true),
+            Group.Calls,
         )
     }
 
@@ -189,8 +252,36 @@ object Notifications {
                 .setContentText(text)
                 .setContentIntent(PendingIntent.getActivity(context, id, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
                 .setAutoCancel(true),
+            Group.Actions,
         )
     }
+
+    /** Posts, updates or cancels [group]'s summary: it exists only while the group has two or more notifications. */
+    fun refresh(context: Context, group: Group) {
+        val manager = NotificationManagerCompat.from(context)
+        val children = runCatching { manager.activeNotifications }.getOrDefault(emptyList())
+            .filter { it.notification.group == group.key && it.id != group.summaryId }
+        if (children.size < 2) {
+            manager.cancel(group.summaryId)
+            return
+        }
+        val inbox = NotificationCompat.InboxStyle().setBigContentTitle(group.title(children.size))
+        children.mapNotNull { it.notification.extras.getCharSequence(Notification.EXTRA_TITLE) }.forEach { inbox.addLine(it) }
+        val builder = NotificationCompat.Builder(context, group.channel)
+            .setSmallIcon(R.drawable.ic_rivet)
+            .setContentTitle(group.title(children.size))
+            .setStyle(inbox)
+            .setGroup(group.key)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openApp(context))
+            .setAutoCancel(true)
+        notify(context, group.summaryId, builder)
+    }
+
+    private fun messageLines(message: String, urgent: Boolean): List<String> =
+        if (message.isBlank()) emptyList() else listOf((if (urgent) "Urgent message: " else "Message: ") + message)
 
     private fun answer(context: Context, request: ApprovalRequest, approved: Boolean): NotificationCompat.Action {
         val intent = Intent(context, ApprovalActionReceiver::class.java)
@@ -224,12 +315,18 @@ object Notifications {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    private fun post(context: Context, id: Int, builder: NotificationCompat.Builder) {
+    private fun post(context: Context, id: Int, builder: NotificationCompat.Builder, group: Group) {
+        if (!notify(context, id, builder.setGroup(group.key))) return
+        refresh(context, group)
+    }
+
+    private fun notify(context: Context, id: Int, builder: NotificationCompat.Builder): Boolean {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
             android.os.Build.VERSION.SDK_INT >= 33
         ) {
-            return
+            return false
         }
         NotificationManagerCompat.from(context).notify(id, builder.build())
+        return true
     }
 }

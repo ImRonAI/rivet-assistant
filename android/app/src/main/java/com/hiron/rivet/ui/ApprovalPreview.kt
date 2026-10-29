@@ -3,7 +3,7 @@ package com.hiron.rivet.ui
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Turns a tool's JSON input into labelled lines for the approval sheet ("To", "Message", ...). */
+/** Turns a tool's JSON input into labelled lines for the approval sheet's technical details ("To", "Message", ...). */
 object ApprovalPreview {
     private val LABELS = mapOf(
         "to" to "To", "number" to "Number", "body" to "Message", "text" to "Message", "subject" to "Subject",

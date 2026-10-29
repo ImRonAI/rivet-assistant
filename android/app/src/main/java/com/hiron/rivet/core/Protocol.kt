@@ -3,24 +3,6 @@ package com.hiron.rivet.core
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One approval the brain is waiting on, as rendered on the approval sheet. */
-data class ApprovalRequest(
-    val id: String,
-    val lane: String,
-    val turnId: String,
-    val tool: String,
-    val tier: String,
-    val high: Boolean,
-    val summary: String,
-    val preview: String,
-    val canRemember: Boolean,
-    val untrustedTurn: Boolean,
-    val operations: List<Operation>,
-    val expiresAt: Double?,
-) {
-    data class Operation(val name: String, val method: String?, val summary: String)
-}
-
 /** Messages from the brain's gateway (see brain/src/rivet_brain/gateway.py). */
 sealed interface ServerEvent {
     data class TurnAccepted(val turnId: String?) : ServerEvent
@@ -41,13 +23,15 @@ sealed interface ServerEvent {
     data class TurnCompleted(val turnId: String, val lane: String, val text: String, val restarts: Int, val goal: String?) : ServerEvent
     data class TurnFailed(val turnId: String?, val lane: String, val error: String) : ServerEvent
     data class DeviceCall(val actionId: String, val tool: String, val input: JSONObject) : ServerEvent
-    data class CallAnswering(val from: String, val verified: Boolean) : ServerEvent
+    data class CallAnswering(val from: String, val verified: Boolean, val callId: String = "") : ServerEvent
     data class CallMessage(
         val callerName: String,
         val callbackNumber: String,
         val message: String,
         val urgent: Boolean,
         val hungUpEarly: Boolean,
+        /** The call it was taken on; empty when the brain doesn't know it. */
+        val callId: String = "",
     ) : ServerEvent
 
     /** A call Rivet is on: its state and the transcript lines since the last one (all of them when [snapshot]). */
@@ -72,6 +56,14 @@ sealed interface ServerEvent {
         val outcome: String,
         val takenOver: Boolean,
     ) : ServerEvent
+    /** Every standing rule of the session (on `resume` and after every change). */
+    data class Rules(val set: RuleSet) : ServerEvent
+
+    /** The brain refused a `rules.set` or `rules.revoke`; [error] is plain text for the user. */
+    data class RulesRefused(val request: String, val error: String) : ServerEvent
+
+    /** A standing rule decided one of the brain's calls without asking. */
+    data class RulesApplied(val decision: Decision, val key: String, val label: String, val tool: String) : ServerEvent
     data object SessionReady : ServerEvent
     data object Pong : ServerEvent
     data class Error(val message: String) : ServerEvent
@@ -111,10 +103,10 @@ object Protocol {
             "device.call" -> ServerEvent.DeviceCall(
                 o.optString("action_id"), o.optString("tool"), o.optJSONObject("input") ?: JSONObject(),
             )
-            "call.answering" -> ServerEvent.CallAnswering(o.optString("from"), o.optBoolean("verified", false))
+            "call.answering" -> ServerEvent.CallAnswering(o.optString("from"), o.optBoolean("verified", false), o.optString("call_id"))
             "call.message" -> ServerEvent.CallMessage(
                 o.optString("caller_name"), o.optString("callback_number"), o.optString("message"),
-                o.optBoolean("urgent", false), o.optBoolean("hung_up_early", false),
+                o.optBoolean("urgent", false), o.optBoolean("hung_up_early", false), o.optString("call_id"),
             )
             "call.live" -> ServerEvent.CallLive(
                 o.optString("call_id"), o.optString("from"), o.optBoolean("verified", false), o.optDoubleOrNull("started_at"),
@@ -128,6 +120,11 @@ object Protocol {
                 o.optDoubleOrNull("ended_at"), o.optDoubleOrNull("duration")?.toInt(), o.optString("summary"),
                 o.optStringOrNull("outcome") ?: "unknown", o.optBoolean("taken_over", false),
             )
+            "rules" -> ServerEvent.Rules(RuleCodec.set(o))
+            "rules.refused" -> ServerEvent.RulesRefused(o.optString("request"), o.optStringOrNull("error") ?: "Rivet couldn't change that rule.")
+            "rules.applied" -> Decision.of(o.optStringOrNull("decision"))?.let {
+                ServerEvent.RulesApplied(it, o.optString("key"), o.optString("label"), o.optString("tool"))
+            } ?: ServerEvent.Unknown(type)
             "session.ready" -> ServerEvent.SessionReady
             "pong" -> ServerEvent.Pong
             "error" -> ServerEvent.Error(o.optString("error", "error"))
@@ -138,19 +135,32 @@ object Protocol {
     fun turn(text: String, turnId: String): String =
         JSONObject().put("type", "turn").put("text", text).put("turn_id", turnId).toString()
 
-    fun task(goal: String, taskId: String): String =
-        JSONObject().put("type", "task").put("goal", goal).put("task_id", taskId).toString()
+    /** [reason] is why the task exists, in plain words; its approvals show it. */
+    fun task(goal: String, taskId: String, reason: String? = null): String {
+        val body = JSONObject().put("type", "task").put("goal", goal).put("task_id", taskId)
+        if (reason != null) body.put("reason", reason)
+        return body.toString()
+    }
 
-    /** [answers]: interrupt id to `{"approved": bool, "remember_minutes"?: int}`. */
+    /** [answers]: interrupt id to `{"approved": bool, "standing"?: "allow" | "deny"}`. */
     fun approvalResponse(lane: String, answers: Map<String, Answer>): String {
         val body = JSONObject()
         for ((id, answer) in answers) {
             val a = JSONObject().put("approved", answer.approved)
-            if (answer.rememberMinutes > 0) a.put("remember_minutes", answer.rememberMinutes)
+            answer.standing?.let { a.put("standing", it.wire) }
             body.put(id, a)
         }
         return JSONObject().put("type", "approval.response").put("lane", lane).put("answers", body).toString()
     }
+
+    /** Asks the brain for a standing rule about [target] (for an approval the phone asked itself). */
+    fun rulesSet(decision: Decision, target: RuleTarget): String = JSONObject()
+        .put("type", "rules.set").put("decision", decision.wire).put("tool", target.tool).put("scope", JSONObject(target.scope))
+        .toString()
+
+    fun rulesRevoke(key: String): String = JSONObject().put("type", "rules.revoke").put("key", key).toString()
+
+    fun rulesList(): String = JSONObject().put("type", "rules.list").toString()
 
     fun deviceResult(actionId: String, result: JSONObject): String =
         JSONObject().put("type", "device.result").put("action_id", actionId).put("result", result).toString()
@@ -166,31 +176,49 @@ object Protocol {
 
     fun ping(): String = JSONObject().put("type", "ping").toString()
 
-    data class Answer(val approved: Boolean, val rememberMinutes: Int = 0)
+    /** One approval's answer. A [standing] rule goes only with the matching answer: allow with yes, deny with no. */
+    data class Answer(val approved: Boolean, val standing: Decision? = null) {
+        init {
+            require(standing == null || (standing == Decision.Allow) == approved) { "a standing $standing contradicts the answer" }
+        }
+    }
 
+    /** Prompt v2 (`approvals.Assessment.prompt`); a v1 prompt from an older brain falls back to its summary. */
     private fun approvals(o: JSONObject, lane: String): List<ApprovalRequest> {
         val list = o.optJSONArray("approvals") ?: return emptyList()
         val turnId = o.optString("turn_id")
-        val expiresAt = if (o.has("expires_at")) o.optDouble("expires_at") else null
+        val expiresAt = o.optDoubleOrNull("expires_at")
         return (0 until list.length()).mapNotNull { i ->
             val a = list.optJSONObject(i) ?: return@mapNotNull null
-            val r = a.optJSONObject("request") ?: JSONObject().put("summary", a.optString("request"))
+            val r = a.optJSONObject("request") ?: JSONObject().put("headline", a.optString("request"))
             ApprovalRequest(
                 id = a.optString("id"),
                 lane = lane,
                 turnId = turnId,
                 tool = r.optString("tool", a.optString("name")),
-                tier = r.optString("tier", "unknown"),
-                high = r.optBoolean("high", true),
-                summary = r.optString("summary", "Rivet wants to run a tool"),
+                tier = Tier.of(r.optStringOrNull("tier")),
+                headline = r.optStringOrNull("headline") ?: r.optStringOrNull("summary") ?: "Rivet wants to use a tool",
+                blocks = blocks(r.optJSONArray("blocks")),
+                because = a.optStringOrNull("because")?.takeIf { it.isNotBlank() },
                 preview = r.optString("preview"),
-                canRemember = r.optBoolean("remember", false),
                 untrustedTurn = r.optBoolean("untrusted_turn", false),
                 operations = operations(r.optJSONArray("operations")),
+                offer = RuleCodec.offer(r.optJSONObject("offer")),
                 expiresAt = expiresAt,
             )
         }
     }
+
+    private fun blocks(list: JSONArray?): List<AlertBlock> =
+        if (list == null) emptyList() else (0 until list.length()).mapNotNull { i ->
+            val b = list.optJSONObject(i) ?: return@mapNotNull null
+            when (b.optString("kind")) {
+                "field" -> AlertBlock.Field(b.optString("label"), b.optString("value"))
+                "quote" -> AlertBlock.Quote(b.optString("label"), b.optString("text"))
+                "note" -> AlertBlock.Note(b.optString("markdown"))
+                else -> null
+            }
+        }
 
     private fun operations(list: JSONArray?): List<ApprovalRequest.Operation> =
         if (list == null) emptyList() else (0 until list.length()).mapNotNull { i ->

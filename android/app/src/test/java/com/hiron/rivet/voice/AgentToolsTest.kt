@@ -1,7 +1,14 @@
 package com.hiron.rivet.voice
 
 import com.hiron.rivet.core.ApprovalRequest
+import com.hiron.rivet.core.Decision
 import com.hiron.rivet.core.GatewayConfig
+import com.hiron.rivet.core.NoAllow
+import com.hiron.rivet.core.Protocol
+import com.hiron.rivet.core.RuleSet
+import com.hiron.rivet.core.RuleTarget
+import com.hiron.rivet.core.StandingRule
+import com.hiron.rivet.core.Tier
 import com.hiron.rivet.device.ScreenOperator
 import com.hiron.rivet.device.ToolResult
 import io.elevenlabs.ClientToolResult
@@ -38,16 +45,119 @@ class AgentToolsTest {
     private class Calls {
         val ran = mutableListOf<Pair<String, JSONObject>>()
         val asked = mutableListOf<ApprovalRequest>()
+        val rules = mutableListOf<Pair<Decision, RuleTarget>>()
+        val notes = mutableListOf<String>()
     }
 
-    private fun tools(answer: suspend (ApprovalRequest) -> Boolean, result: ToolResult = ToolResult.ok("done")): Pair<Calls, Map<String, io.elevenlabs.ClientTool>> {
+    private val yes: suspend (ApprovalRequest) -> Protocol.Answer = { Protocol.Answer(true) }
+    private val no: suspend (ApprovalRequest) -> Protocol.Answer = { Protocol.Answer(false) }
+
+    private fun tools(
+        answer: suspend (ApprovalRequest) -> Protocol.Answer,
+        result: ToolResult = ToolResult.ok("done"),
+        rules: RuleSet = RuleSet.EMPTY,
+        taint: AgentTaint = AgentTaint(),
+    ): Pair<Calls, Map<String, io.elevenlabs.ClientTool>> {
         val calls = Calls()
         val built = AgentTools.build(
             run = { name, input -> calls.ran += name to input; result },
             approve = { calls.asked += it; answer(it) },
+            rules = { rules },
+            setRule = { decision, target -> calls.rules += decision to target },
+            taint = taint,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            noted = { calls.notes += it },
         )
         return calls to built
+    }
+
+    private val dana = RuleTarget("sms_send", mapOf("to" to "+18015550100"))
+    private val text = mapOf("to" to "+1 (801) 555-0100", "body" to "On my way")
+
+    private fun rule(decision: Decision) = RuleSet(1, listOf(StandingRule("sms_send?to=%2B18015550100", dana, decision, "Texts to +18015550100", 0.0)))
+
+    @Test
+    fun aStandingDenyRefusesWithoutAsking() = runBlocking {
+        val (calls, built) = tools({ fail("asked"); Protocol.Answer(false) }, rules = rule(Decision.Deny))
+        assertEquals(ClientToolResult.failure(AgentTools.standingDeny("Texts to +18015550100")), built.getValue("sms_send").execute(text))
+        assertTrue(calls.ran.isEmpty())
+        assertEquals(listOf("Declined by your rule: Texts to +18015550100"), calls.notes)
+        assertTrue(AgentTools.standingDeny("x").startsWith("The user set Rivet to always decline this (x), so it was not done."))
+    }
+
+    @Test
+    fun aStandingAllowRunsUntilTheTurnReadsSomethingUntrusted() = runBlocking {
+        val taint = AgentTaint()
+        val (calls, built) = tools(no, rules = rule(Decision.Allow), taint = taint)
+        taint.asked("text Dana I'm on my way")
+        assertEquals(ClientToolResult.success("done"), built.getValue("sms_send").execute(text))
+        assertTrue(calls.asked.isEmpty())
+        assertEquals("Allowed by your rule: Texts to +18015550100", calls.notes.single())
+
+        built.getValue("sms_list").execute(emptyMap())
+        assertTrue(taint.tainted)
+        assertEquals(ClientToolResult.failure(AgentTools.DECLINED), built.getValue("sms_send").execute(text))
+        val asked = calls.asked.single()
+        assertTrue(asked.untrustedTurn)
+        assertEquals(NoAllow.Untrusted, asked.offer?.noAllow)
+        assertFalse(asked.offer?.allow ?: true)
+
+        taint.asked("and text her again")
+        assertEquals(ClientToolResult.success("done"), built.getValue("sms_send").execute(text))
+        assertEquals(1, calls.asked.size)
+    }
+
+    @Test
+    fun aTickedAnswerAsksTheBrainForTheRule() = runBlocking {
+        val (allowing, allow) = tools({ Protocol.Answer(true, Decision.Allow) })
+        assertEquals(ClientToolResult.success("done"), allow.getValue("sms_send").execute(text))
+        assertEquals(listOf(Decision.Allow to dana), allowing.rules)
+
+        val (denying, deny) = tools({ Protocol.Answer(false, Decision.Deny) })
+        assertEquals(ClientToolResult.failure(AgentTools.standingDeny("Texts to +18015550100")), deny.getValue("sms_send").execute(text))
+        assertEquals(listOf(Decision.Deny to dana), denying.rules)
+        assertTrue(denying.ran.isEmpty())
+    }
+
+    @Test
+    fun aPaymentTapIsNeverOfferedAsAnAllow() {
+        val pay = requireNotNull(AgentAlerts.request("screen_act", JSONObject().put("action", "tap").put("node", 1).put("label", "Pay now"), false, null))
+        assertEquals(Tier.Purchase, pay.tier)
+        assertEquals("Tap “Pay now” in the app on screen", pay.headline)
+        val offer = requireNotNull(pay.offer)
+        assertFalse(offer.allow)
+        assertEquals(NoAllow.Purchase, offer.noAllow)
+        assertEquals("Tapping “Pay now” in apps", offer.label)
+        val send = requireNotNull(AgentAlerts.request("screen_act", JSONObject().put("action", "tap").put("node", 1).put("label", "Send"), false, null))
+        assertEquals(NoAllow.Kind, send.offer?.noAllow)
+    }
+
+    @Test
+    fun alertsSayWhatTheBrainSays() {
+        val sms = requireNotNull(AgentAlerts.request("sms_send", JSONObject(text), false, "text Dana I'm on my way"))
+        assertEquals("Text +1 (801) 555-0100: “On my way”", sms.headline)
+        assertEquals("You asked: “text Dana I'm on my way”", sms.because)
+        assertEquals("Texts to +18015550100", sms.offer?.label)
+        val call = requireNotNull(AgentAlerts.request("phone_call", JSONObject().put("number", "+18015550100"), false, null))
+        assertEquals("Call +18015550100", call.headline)
+        assertEquals(null, call.because)
+        val event = requireNotNull(AgentAlerts.request("calendar_create", JSONObject().put("title", "Dentist").put("start", "2026-10-27T09:00"), false, null))
+        assertEquals("Add “Dentist” to your calendar", event.headline)
+        assertEquals("Adding events to your calendar", event.offer?.label)
+        val reply = requireNotNull(AgentAlerts.request("notification_reply", JSONObject().put("key", "k").put("text", "ok"), false, null))
+        assertEquals("Reply to a message: “ok”", reply.headline)
+        assertNull(reply.offer)
+        assertEquals("a".repeat(80) + "…", AgentAlerts.clip("a".repeat(100)))
+        assertEquals(("word ".repeat(16)).trimEnd() + "…", AgentAlerts.clip("word ".repeat(30)))
+        // The brain's copy, from brain/src/rivet_brain/alerts.py, so both paths read the same.
+        val alerts = File("../../brain/src/rivet_brain/alerts.py").readText()
+        for (line in listOf(
+            "Your phone places the call now. You do the talking.", "Sent from the app the message came from.",
+            "Rivet checks the button still says this before it taps.", "Rivet can't tell what this does, so it asks first.",
+            "in the app on screen", "to your calendar",
+        )) {
+            assertTrue(line, line in alerts)
+        }
     }
 
     @Test
@@ -55,21 +165,21 @@ class AgentToolsTest {
         val specs = Regex("""DeviceToolSpec\(\s*"([a-z_]+)"""").findAll(brain).map { it.groupValues[1] }.toList()
         assertEquals(18, specs.size)
         assertEquals(specs.toSet(), AgentTools.NAMES.toSet())
-        val (_, built) = tools({ true })
+        val (_, built) = tools(yes)
         assertEquals(AgentTools.NAMES.toSet(), built.keys)
         assertFalse("call_answering_number" in built)
     }
 
     @Test
     fun mapsResultsAndParameters() = runBlocking {
-        val (calls, built) = tools({ true }, ToolResult.ok(JSONObject().put("count", 2)))
+        val (calls, built) = tools(yes, ToolResult.ok(JSONObject().put("count", 2)))
         val ok = built.getValue("sms_list").execute(mapOf("contact" to "Ada", "limit" to java.math.BigDecimal("5")))
         assertEquals(ClientToolResult.success("""{"count":2}"""), ok)
         val input = calls.ran.single().second
         assertEquals("Ada", input.getString("contact"))
         assertEquals(5, input.getInt("limit"))
 
-        val (_, failing) = tools({ true }, ToolResult.error("Rivet doesn't have permission for this on the phone (READ_SMS)."))
+        val (_, failing) = tools(yes, ToolResult.error("Rivet doesn't have permission for this on the phone (READ_SMS)."))
         val failed = failing.getValue("sms_list").execute(emptyMap())
         assertFalse(failed!!.success)
         assertEquals("Rivet doesn't have permission for this on the phone (READ_SMS).", failed.error)
@@ -89,15 +199,15 @@ class AgentToolsTest {
             "screen_act" to mapOf("action" to "tap", "node" to 1, "label" to "Place order"),
         )
         // A deny and a timeout both reach the tool as "no" from RivetRuntime.approveOnPhone.
-        val (denied, deny) = tools({ false })
+        val (denied, deny) = tools(no)
         for ((name, input) in gated) {
             assertEquals(name, ClientToolResult.failure(AgentTools.DECLINED), deny.getValue(name).execute(input))
         }
         assertEquals(gated.keys.toList(), denied.asked.map { it.tool })
         assertTrue(denied.ran.isEmpty())
-        assertTrue(denied.asked.all { it.lane == AgentTools.LANE && !it.canRemember })
-        assertEquals("Text +18015550100", denied.asked.first().summary)
-        assertEquals("send", denied.asked.first().tier)
+        assertTrue(denied.asked.all { it.lane == AgentTools.LANE && !it.untrustedTurn })
+        assertEquals("Text +18015550100: “On my way”", denied.asked.first().headline)
+        assertEquals(Tier.Send, denied.asked.first().tier)
         assertTrue(denied.asked.last().high)
 
         val (broken, failing) = tools({ throw IllegalStateException("sheet gone") })
@@ -105,14 +215,14 @@ class AgentToolsTest {
         assertFalse(result.success)
         assertTrue(broken.ran.isEmpty())
 
-        val (approved, allow) = tools({ true })
+        val (approved, allow) = tools(yes)
         assertEquals(ClientToolResult.success("done"), allow.getValue("sms_send").execute(gated.getValue("sms_send")))
         assertEquals(listOf("sms_send"), approved.ran.map { it.first })
     }
 
     @Test
     fun readToolsNavigationAndTypingRunWithoutAsking() = runBlocking {
-        val (calls, built) = tools({ fail("asked"); false })
+        val (calls, built) = tools({ fail("asked"); Protocol.Answer(false) })
         built.getValue("sms_list").execute(emptyMap())
         built.getValue("app_open").execute(mapOf("app" to "Maps"))
         built.getValue("screen_act").execute(mapOf("action" to "scroll_down"))
@@ -128,7 +238,7 @@ class AgentToolsTest {
         assertEquals(AgentTools.NAMES.toSet(), tiers.map { it[1] }.toSet())
         for ((_, name, tier, rest) in tiers) {
             if ("assess=screen_act_tier" in rest) continue
-            assertEquals(name, tier, AgentTools.tier(name, JSONObject()).first)
+            assertEquals(name, tier, AgentTools.tier(name, JSONObject()).wire)
         }
     }
 
@@ -137,7 +247,10 @@ class AgentToolsTest {
         val finished = CompletableDeferred<String>()
         val built = AgentTools.build(
             run = { name, _ -> delay(200); finished.complete(name); ToolResult.ok("sent") },
-            approve = { true },
+            approve = { Protocol.Answer(true) },
+            rules = { RuleSet.EMPTY },
+            setRule = { _, _ -> },
+            taint = AgentTaint(),
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             budgetMs = 50,
         )
@@ -153,7 +266,7 @@ class AgentToolsTest {
         assertFalse(ScreenOperator.sameLabel("Send", "S"))
         assertFalse(ScreenOperator.sameLabel("Pay $23.10", "$23.10"))
         assertFalse(ScreenOperator.sameLabel("Send", null))
-        assertEquals("read", AgentTools.screenActTier(JSONObject().put("action", "tap").put("label", "Place")).first)
+        assertEquals(Tier.Read, AgentTools.screenActTier(JSONObject().put("action", "tap").put("label", "Place")))
     }
 
     @Test
@@ -181,8 +294,8 @@ class AgentToolsTest {
             JSONObject().put("action", "tap").put("node", 1) to "unknown",
             JSONObject().put("action", "explode") to "unknown",
         )
-        for ((input, tier) in cases) assertEquals(input.toString(), tier, AgentTools.screenActTier(input).first)
-        assertNull(AgentTools.request("screen_act", JSONObject().put("action", "tap").put("label", "Inbox")))
+        for ((input, tier) in cases) assertEquals(input.toString(), tier, AgentTools.screenActTier(input).wire)
+        assertNull(AgentAlerts.request("screen_act", JSONObject().put("action", "tap").put("label", "Inbox"), false, null))
     }
 
     @Test

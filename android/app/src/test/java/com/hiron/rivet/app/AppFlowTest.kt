@@ -25,6 +25,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -85,7 +86,7 @@ class AppFlowTest {
     @Test
     fun theWholeAppWorksAgainstABrain() {
         // First run: the power-on screen, then straight into the app.
-        compose.onNodeWithText("Get Started").assertIsDisplayed()
+        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
         shot("00-onboarding")
         compose.onNodeWithText("Not now").performClick()
         compose.waitForIdle()
@@ -160,19 +161,24 @@ class AppFlowTest {
         compose.onNodeWithContentDescription("Show Rivet").performClick()
         compose.mainClock.advanceTimeBy(600)
 
-        // An approval pops the review sheet; approving answers the brain.
+        // An approval pops the review sheet; "don't ask again" with Deny answers the brain with a standing deny.
         brain(
             socket,
             """{"type":"approval.request","turn_id":"$id","lane":"default","expires_at":9999999999,
-               "approvals":[{"id":"rivet-approval:a1","name":"rivet-approval","request":{"v":1,"tool":"sms_send",
-               "tier":"send","high":false,"summary":"Text +18015550123","preview":"{\"to\": \"+18015550123\", \"body\": \"Friday at 9 works!\"}",
-               "remember":true}}]}""",
+               "approvals":[{"id":"rivet-approval:a1","name":"rivet-approval","because":"You asked: “Text Dana that Friday at 9 works”",
+               "request":{"v":2,"tool":"sms_send","tier":"send","high":false,"headline":"Text +18015550123: “Friday at 9 works!”",
+               "blocks":[{"kind":"field","label":"To","value":"+18015550123"},{"kind":"quote","label":"Message","text":"Friday at 9 works!"}],
+               "preview":"{\"to\": \"+18015550123\", \"body\": \"Friday at 9 works!\"}",
+               "offer":{"key":"sms_send?to=%2B18015550123","tool":"sms_send","scope":{"to":"+18015550123"},"label":"Texts to +18015550123",
+               "allow":true,"deny":true}}}]}""",
         )
-        until { compose.onAllNodesWithTextCount("Text +1 801-555-0123") > 0 }
+        until { compose.onAllNodesWithTextCount("Text +1 801-555-0123: “Friday at 9 works!”") > 0 }
         shot("04-approval-sheet")
-        compose.onNodeWithText("Approve").performClick()
-        val answer = next("approval.response")
-        assertTrue(answer.getJSONObject("answers").getJSONObject("rivet-approval:a1").getBoolean("approved"))
+        compose.onNodeWithText("Don't ask again about Texts to +1 801-555-0123").performClick()
+        compose.onNodeWithText("Always deny").performClick()
+        val answer = next("approval.response").getJSONObject("answers").getJSONObject("rivet-approval:a1")
+        assertFalse(answer.getBoolean("approved"))
+        assertEquals("deny", answer.getString("standing"))
 
         // A call Rivet is answering: the lines come in live, the user takes it over, then Rivet's summary.
         runtime.settings.ownNumber = "+18015550100"
@@ -220,7 +226,7 @@ class AppFlowTest {
 
     @Test
     fun firstRunWalksEveryStepAndTheVoiceSetupOpensFromOnboardingAndSettings() {
-        compose.onNodeWithText("Get Started").performClick()
+        compose.onNodeWithText("Set up step by step").performClick()
         compose.onNodeWithText("Save & Continue").assertIsDisplayed()
 
         // The voice link on step 2 opens the voice setup over onboarding; skipping it lands back on step 2.

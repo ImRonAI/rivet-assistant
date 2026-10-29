@@ -32,7 +32,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
-import com.hiron.rivet.core.ApprovalRequest
+import com.hiron.rivet.testing.textApproval
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.core.RivetStore
@@ -122,9 +122,7 @@ class AssistOverlayTest {
         compose.onNodeWithText("I couldn't finish that: the brain is offline").assertIsDisplayed()
         shot("assist-error")
 
-        val approval = ApprovalRequest(
-            "a1", "default", "t2", "sms_send", "send", false, "Text Dana: Friday at 9 works!", "", true, false, emptyList(), null,
-        )
+        val approval = textApproval(turn = "t2")
         val texting = RivetStore.userSent(RivetStore.connection(RivetState(), Connection.Online), "t2", "Text Dana that Friday at 9 works")
             .then(
                 ServerEvent.TextDelta("I'll text Dana: \"Friday at 9 works!\"", "default"),
@@ -181,9 +179,7 @@ class AssistOverlayTest {
     @Config(qualifiers = "w360dp-h740dp-xxhdpi")
     fun nothingClipsOnANarrowPhoneWithLargeText() {
         RuntimeEnvironment.setFontScale(1.3f)
-        val approval = ApprovalRequest(
-            "a1", "default", "t2", "sms_send", "send", false, "Text Dana: Friday at 9 works!", "", true, false, emptyList(), null,
-        )
+        val approval = textApproval(turn = "t2")
         val waiting = RivetStore.userSent(RivetStore.connection(RivetState(), Connection.Offline), "t2", "Text Dana that Friday at 9 works")
             .then(ServerEvent.ApprovalsRequested("t2", "default", listOf(approval), false))
         var ui by mutableStateOf(AssistModel.ui(AssistLocal(listening = true, partial = "Text Dana that Friday at 9", level = 0.5f), RivetState()))

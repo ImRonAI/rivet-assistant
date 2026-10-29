@@ -15,7 +15,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Connection settings. The device token is encrypted with a key that never leaves the Android Keystore. */
-class Settings(context: Context) {
+class Settings(context: Context) : RecommendedPrefs {
     private val prefs = context.getSharedPreferences("rivet", Context.MODE_PRIVATE)
 
     var gatewayUrl: String
@@ -35,12 +35,17 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("speak_replies", true)
         set(value) = prefs.edit().putBoolean("speak_replies", value).apply()
 
-    var autoConnect: Boolean
+    override var autoConnect: Boolean
         get() = prefs.getBoolean("auto_connect", BuildConfig.DEFAULT_DEVICE_TOKEN.isNotBlank())
         set(value) = prefs.edit().putBoolean("auto_connect", value).apply()
 
+    /** Read replies aloud while the assistant overlay is on screen too (with [speakReplies]). */
+    override var speakInOverlay: Boolean
+        get() = prefs.getBoolean("speak_in_overlay", true)
+        set(value) = prefs.edit().putBoolean("speak_in_overlay", value).apply()
+
     /** Start a reply task for each new message notification (every reply still needs approval). */
-    var offerReplies: Boolean
+    override var offerReplies: Boolean
         get() = prefs.getBoolean("offer_replies", false)
         set(value) = prefs.edit().putBoolean("offer_replies", value).apply()
 
@@ -54,7 +59,7 @@ class Settings(context: Context) {
         get() = prefs.getString("own_number", "").orEmpty()
         set(value) = prefs.edit().putString("own_number", value.trim()).apply()
 
-    var answeringMode: ForwardMode
+    override var answeringMode: ForwardMode
         get() = runCatching { ForwardMode.valueOf(prefs.getString("answering_mode", null).orEmpty()) }.getOrDefault(ForwardMode.Unanswered)
         set(value) = prefs.edit().putString("answering_mode", value.name).apply()
 
@@ -101,7 +106,44 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("elevenlabs_agents", false)
         set(value) = prefs.edit().putBoolean("elevenlabs_agents", value).apply()
 
+    /** What the last "Use recommended settings" changed, until it is undone. */
+    override var recommendedUndo: RecommendedUndo?
+        get() {
+            if (!prefs.contains(UNDO_AT)) return null
+            fun flag(key: String) = if (prefs.contains(key)) prefs.getBoolean(key, false) else null
+            return RecommendedUndo(
+                autoConnect = flag(UNDO_AUTO_CONNECT),
+                speakInOverlay = flag(UNDO_SPEAK_IN_OVERLAY),
+                offerReplies = flag(UNDO_OFFER_REPLIES),
+                answeringMode = prefs.getString(UNDO_ANSWERING_MODE, null)?.let { runCatching { ForwardMode.valueOf(it) }.getOrNull() },
+                ruleTargets = prefs.getStringSet(UNDO_RULE_TARGETS, null).orEmpty().mapNotNull(RuleTargetCodec::decode).toSet(),
+                at = prefs.getLong(UNDO_AT, 0),
+            )
+        }
+        set(value) {
+            val edit = prefs.edit()
+            listOf(UNDO_AUTO_CONNECT, UNDO_SPEAK_IN_OVERLAY, UNDO_OFFER_REPLIES, UNDO_ANSWERING_MODE, UNDO_RULE_TARGETS, UNDO_AT).forEach(edit::remove)
+            if (value != null) {
+                value.autoConnect?.let { edit.putBoolean(UNDO_AUTO_CONNECT, it) }
+                value.speakInOverlay?.let { edit.putBoolean(UNDO_SPEAK_IN_OVERLAY, it) }
+                value.offerReplies?.let { edit.putBoolean(UNDO_OFFER_REPLIES, it) }
+                value.answeringMode?.let { edit.putString(UNDO_ANSWERING_MODE, it.name) }
+                if (value.ruleTargets.isNotEmpty()) edit.putStringSet(UNDO_RULE_TARGETS, value.ruleTargets.map(RuleTargetCodec::encode).toSet())
+                edit.putLong(UNDO_AT, value.at)
+            }
+            edit.apply()
+        }
+
     fun gateway(): GatewayConfig = GatewayConfig(gatewayUrl, deviceToken, sessionId)
+
+    private companion object {
+        const val UNDO_AUTO_CONNECT = "undo_auto_connect"
+        const val UNDO_SPEAK_IN_OVERLAY = "undo_speak_in_overlay"
+        const val UNDO_OFFER_REPLIES = "undo_offer_replies"
+        const val UNDO_ANSWERING_MODE = "undo_answering_mode"
+        const val UNDO_RULE_TARGETS = "undo_rule_targets"
+        const val UNDO_AT = "undo_at"
+    }
 }
 
 private val E164 = Regex("""\+[1-9]\d{6,14}""")

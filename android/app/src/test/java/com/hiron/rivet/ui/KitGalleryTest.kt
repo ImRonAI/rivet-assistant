@@ -35,9 +35,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
-import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.testing.textApproval
 import com.hiron.rivet.testing.shot
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -63,7 +63,7 @@ class KitGalleryTest {
         }
     }
 
-    private val approval = ApprovalRequest("a1", "default", "t1", "sms_send", "send", false, "Text Dana", "{}", true, false, emptyList(), null)
+    private val approval = textApproval()
 
     @Test
     fun cardsKeysAndChips() {

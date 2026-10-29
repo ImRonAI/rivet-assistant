@@ -12,6 +12,14 @@ data class RivetState(
     val lastError: String? = null,
     /** The call Rivet's answering line is on, or the last one it finished until dismissed. */
     val liveCall: LiveCall? = null,
+    /** The brain's standing approval rules, as the phone last heard them. */
+    val rules: RuleSet = RuleSet.EMPTY,
+    /** Keys of rules the user asked to remove; they stay listed until the brain's next `rules` event. */
+    val removingRules: Set<String> = emptySet(),
+    /** Why the brain refused the last rule change, until its next `rules` event. */
+    val rulesError: String? = null,
+    /** Contact names for the numbers in approvals and rules (E.164 to name), looked up on this phone. */
+    val names: Map<String, String> = emptyMap(),
 )
 
 /** A call Rivet's Telnyx assistant answered: who, what is being said, and, once [LiveCallStatus.Ended], how it went. */
@@ -31,6 +39,9 @@ data class LiveCall(
     val outcome: String = "",
     val durationSeconds: Int? = null,
     val takenOver: Boolean = false,
+    /** The message the caller left on this call, if any. */
+    val message: String = "",
+    val urgent: Boolean = false,
 )
 
 enum class LiveCallStatus { Answering, Transferring, Ended }
@@ -129,10 +140,13 @@ object RivetStore {
         is ServerEvent.ApprovalsRequested -> state.copy(
             approvals = state.approvals.filterNot { a -> event.approvals.any { it.id == a.id } } + event.approvals,
             activity = Activity.Waiting,
-        ).log(now, "approval", event.approvals.joinToString("; ") { it.summary })
+        ).let { if (event.resent) it else it.log(now, "approval", asked(event.approvals)) }
         is ServerEvent.ApprovalExpired -> state.copy(
             approvals = state.approvals.filterNot { it.turnId == event.turnId && it.lane == event.lane },
-        ).log(now, "approval", "Approval timed out; the action was not taken")
+        ).log(now, "approval", EXPIRED)
+        is ServerEvent.Rules -> state.copy(removingRules = emptySet(), rulesError = null)
+        is ServerEvent.RulesRefused -> state.copy(removingRules = emptySet(), rulesError = event.error)
+        is ServerEvent.RulesApplied -> state.log(now, "approval", byRule(event.decision, event.label))
         is ServerEvent.TurnCompleted -> state.finishTurn(event, now)
         is ServerEvent.TurnFailed -> state.copy(
             activity = Activity.Failed,
@@ -143,7 +157,7 @@ object RivetStore {
         is ServerEvent.Error -> state.copy(lastError = event.message).log(now, "error", event.message)
         is ServerEvent.DeviceCall -> state.log(now, "device", event.tool)
         is ServerEvent.CallAnswering -> state.log(now, "call", "Rivet is answering a call from ${event.from.ifBlank { "an unknown number" }}")
-        is ServerEvent.CallMessage -> state.copy(liveCall = state.liveCall?.named(event.callerName))
+        is ServerEvent.CallMessage -> state.copy(liveCall = state.liveCall?.withMessage(event))
             .log(now, "call", CallText.describe(event))
         is ServerEvent.CallLive -> state.copy(liveCall = live(state.liveCall, event, now))
         // The brain reports the call's status with call.live; a refusal can leave it transferring.
@@ -175,6 +189,26 @@ object RivetStore {
 
     fun answered(state: RivetState, ids: Set<String>): RivetState =
         state.copy(approvals = state.approvals.filterNot { it.id in ids }, activity = Activity.Thinking)
+
+    const val EXPIRED = "Nobody answered in time, so Rivet didn't do it."
+
+    /** The activity line for approvals Rivet asked for. */
+    fun asked(approvals: List<ApprovalRequest>): String = "Asked: " + approvals.joinToString("; ") { it.headline }
+
+    /** The activity line for one answer: a standing rule names its label, a one-time answer the headline. */
+    fun answer(request: ApprovalRequest, answer: Protocol.Answer): String {
+        val label = request.offer?.label
+        return when {
+            answer.standing == Decision.Allow && label != null -> "Always allowed: $label"
+            answer.standing == Decision.Deny && label != null -> "Always declined: $label"
+            answer.approved -> "Approved: ${request.headline}"
+            else -> "Declined: ${request.headline}"
+        }
+    }
+
+    /** The activity line for a call a standing rule decided. */
+    fun byRule(decision: Decision, label: String): String =
+        if (decision == Decision.Allow) "Allowed by your rule: $label" else "Declined by your rule: $label"
 
     fun connection(state: RivetState, connection: Connection): RivetState = state.copy(
         connection = connection,
@@ -264,8 +298,11 @@ object RivetStore {
         )
     }
 
-    private fun LiveCall.named(name: String): LiveCall =
-        if (status == LiveCallStatus.Ended || name.isBlank()) this else copy(caller = name)
+    private fun LiveCall.withMessage(event: ServerEvent.CallMessage): LiveCall {
+        if (status == LiveCallStatus.Ended) return this
+        val named = if (event.callerName.isBlank()) this else copy(caller = event.callerName)
+        return if (event.callId.isNotBlank() && event.callId == callId) named.copy(message = event.message, urgent = event.urgent) else named
+    }
 
     private fun RivetState.trace(tag: String, text: String, tone: String): RivetState =
         copy(trace = (trace + TraceStep(tag, text.take(44), tone)).takeLast(TRACE_LIMIT))

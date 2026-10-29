@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -47,6 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.PhoneForwarded
 import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Link
@@ -57,6 +57,7 @@ import androidx.compose.material.icons.outlined.PhoneInTalk
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
@@ -88,8 +89,11 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.hiron.rivet.BuildConfig
 import com.hiron.rivet.R
 import com.hiron.rivet.core.Connection
+import com.hiron.rivet.core.Decision
+import com.hiron.rivet.core.PermissionGroups
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.core.StandingRule
 import com.hiron.rivet.core.isE164
 import com.hiron.rivet.device.CallForwarding
 import com.hiron.rivet.device.CarrierStyle
@@ -98,6 +102,8 @@ import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.device.ScreenOperator
 import com.hiron.rivet.service.RivetService
 import com.hiron.rivet.voice.LocalVoiceStudio
+import java.time.Instant
+import java.time.ZoneId
 
 @Composable
 fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
@@ -159,20 +165,22 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
 
         Section("Voice", 1, card = false) { Voice(runtime, refresh) }
 
-        Section("How Rivet behaves", 2, padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) { Behaviour(runtime) }
+        Section("How Rivet behaves", 2, card = false) { Behaviour(runtime) { refresh++ } }
 
-        Section("Call answering", 3) { CallAnswering(runtime, refresh) }
+        Section("Approval rules", 3) { ApprovalRules(runtime, state) }
 
-        Section("What Rivet can use", 4, padding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
+        Section("Call answering", 4) { CallAnswering(runtime, refresh) }
+
+        Section("What Rivet can use", 5, padding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)) {
             Permissions(context, refresh) { refresh++ }
         }
         InfoStrip(
             "On Android 13 and later, first allow restricted settings for Rivet: App info › ⋮ › Allow restricted " +
                 "settings. Then turn on Notification access and the App operator.",
-            Modifier.enter(5),
+            Modifier.enter(6),
         )
 
-        Section("About", 6) { About() }
+        Section("About", 7) { About() }
     }
 }
 
@@ -281,24 +289,106 @@ private fun Voice(runtime: RivetRuntime, refresh: Int) {
 }
 
 @Composable
-private fun Behaviour(runtime: RivetRuntime) {
+private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
     val p = LocalPalette.current
     val s = runtime.settings
-    var speak by remember { mutableStateOf(s.speakReplies) }
-    var auto by remember { mutableStateOf(s.autoConnect) }
-    var offer by remember { mutableStateOf(s.offerReplies) }
+    // Keyed on [version], so the toggles show what recommended settings (or their undo) just changed.
+    var version by remember { mutableIntStateOf(0) }
+    var speak by remember(version) { mutableStateOf(s.speakReplies) }
+    var overlay by remember(version) { mutableStateOf(s.speakInOverlay) }
+    var auto by remember(version) { mutableStateOf(s.autoConnect) }
+    var offer by remember(version) { mutableStateOf(s.offerReplies) }
     var agents by remember { mutableStateOf(s.elevenLabsAgents) }
-    Toggle("Read replies aloud", speak) { speak = it; s.speakReplies = it }
-    Rule(color = p.line)
-    Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
-    Rule(color = p.line)
-    Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
-    Rule(color = p.line)
-    Toggle("Use ElevenLabs agents", agents) {
-        agents = it
-        s.elevenLabsAgents = it
-        if (!it) runtime.agent.stop()
+    var undo by remember(version) { mutableStateOf(s.recommendedUndo) }
+    var undone by remember { mutableStateOf(false) }
+    var recommending by rememberSaveable { mutableStateOf(false) }
+    FeatureCard(
+        Icons.Outlined.Tune, "Use recommended settings", "See what Rivet suggests and choose what to change.",
+        tone = Tone.Accent, trailing = { Keycap("Review", { recommending = true }) },
+        nested = undo?.let { u ->
+            {
+                Column {
+                    TextKey("Undo recommended settings", {
+                        runtime.undoRecommended()
+                        undone = true
+                        version++
+                        onChanged()
+                    }, Modifier.offset { IntOffset(-8.dp.roundToPx(), 0) })
+                    Text("Puts back: ${u.titles().joinToString(", ")}", style = Type.cardBody, color = p.ink2)
+                }
+            }
+        },
+    )
+    if (undone) InfoStrip("Recommended settings undone.", icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
+    if (recommending) {
+        RecommendedFlow(runtime) { applied ->
+            recommending = false
+            if (applied) undone = false
+            version++
+            onChanged()
+        }
     }
+    RivetCard(padding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+        Toggle("Read replies aloud", speak) { speak = it; s.speakReplies = it }
+        Rule(color = p.line)
+        Toggle("Read replies aloud in the assistant overlay", overlay) { overlay = it; s.speakInOverlay = it }
+        Rule(color = p.line)
+        Toggle("Connect automatically, also after a reboot", auto) { auto = it; s.autoConnect = it }
+        Rule(color = p.line)
+        Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
+        Rule(color = p.line)
+        Toggle("Use ElevenLabs agents", agents) {
+            agents = it
+            s.elevenLabsAgents = it
+            if (!it) runtime.agent.stop()
+        }
+    }
+}
+
+/** The brain's standing rules, each removable; only the brain changes them, so removing needs a connection. */
+@Composable
+internal fun ApprovalRules(runtime: RivetRuntime, state: RivetState) {
+    val p = LocalPalette.current
+    val online = state.connection == Connection.Online
+    val rules = state.rules.rules
+    if (rules.isEmpty()) {
+        Text("No rules yet. When Rivet asks, tick “Don't ask again” to make one.", style = Type.cardBody, color = p.ink2)
+    }
+    rules.forEachIndexed { i, rule ->
+        if (i > 0) Rule(color = p.line)
+        RuleRow(rule, state.names, removing = rule.key in state.removingRules, online = online) { runtime.revokeRule(rule) }
+    }
+    if (!online) InfoStrip("Connect to Rivet to change rules.", Modifier.padding(top = 12.dp))
+    state.rulesError?.let { InfoStrip(it, Modifier.padding(top = 12.dp), icon = Icons.Outlined.WarningAmber, tone = Tone.Red) }
+}
+
+@Composable
+private fun RuleRow(rule: StandingRule, names: Map<String, String>, removing: Boolean, online: Boolean, onRemove: () -> Unit) {
+    val p = LocalPalette.current
+    val number = rule.target.scope["to"] ?: rule.target.scope["number"]
+    val since = "since ${ruleDate(rule.createdAt)}"
+    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconWell(iconFor(rule.target.tool), tone = if (rule.decision == Decision.Allow) Tone.Amber else Tone.Red)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f).padding(end = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(Plain.people(rule.label, names), style = Type.cardTitle, color = p.ink)
+            Text(if (number != null && Plain.numbersIn(number).isNotEmpty()) "${Plain.phone(number)} · $since" else since, style = Type.cardBody, color = p.ink2)
+            if (rule.decision == Decision.Allow) StatusTag("ALWAYS ALLOW", Tone.Amber) else StatusTag("ALWAYS DENY", Tone.Red)
+        }
+        if (removing) {
+            Text("Removing…", style = Type.cardBody, color = p.ink2)
+        } else {
+            Keycap("Remove", onRemove, enabled = online)
+        }
+    }
+}
+
+private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+/** "Oct 29": when a rule was made, in the phone's time zone. */
+internal fun ruleDate(createdAt: Double): String {
+    val day = Instant.ofEpochMilli((createdAt * 1000).toLong()).atZone(ZoneId.systemDefault()).toLocalDate()
+    return "${MONTHS[day.monthValue - 1]} ${day.dayOfMonth}"
 }
 
 /** Who made this, which build it is, and where to get help. */
@@ -470,15 +560,11 @@ private data class Access(val icon: ImageVector, val title: String, val why: Str
 
 @Composable
 private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
-    val runtimePerms = buildList {
-        add(Access(Icons.AutoMirrored.Outlined.Chat, "Texts", "Send and read SMS") to listOf(Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS))
-        add(Access(Icons.Outlined.Person, "Contacts", "Find people by name") to listOf(Manifest.permission.READ_CONTACTS))
-        add(Access(Icons.Outlined.Event, "Calendar", "Read and add events") to listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR))
-        add(Access(Icons.Outlined.Call, "Phone", "Place calls and read recent calls") to listOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CALL_LOG))
-        if (Build.VERSION.SDK_INT >= 33) {
-            add(Access(Icons.Outlined.Notifications, "Notifications", "Show approvals and reminders") to listOf(Manifest.permission.POST_NOTIFICATIONS))
-        }
-    }
+    val icons = mapOf(
+        "Texts" to Icons.AutoMirrored.Outlined.Chat, "Contacts" to Icons.Outlined.Person, "Calendar" to Icons.Outlined.Event,
+        "Phone" to Icons.Outlined.Call, "Notifications" to Icons.Outlined.Notifications,
+    )
+    val runtimePerms = PermissionGroups.ALL.map { g -> Access(icons[g.name] ?: Icons.Outlined.Notifications, g.name, g.why) to g.permissions }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onChanged() }
     val role = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { onChanged() }
     val missing = remember(refresh) {

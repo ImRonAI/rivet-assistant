@@ -164,7 +164,7 @@ fun Onboarding(runtime: RivetRuntime, onFinish: () -> Unit) {
             label = "step",
         ) { shown ->
             when (shown) {
-                1 -> MeetStep(next = { step = 2 }, onFinish = onFinish)
+                1 -> MeetStep(runtime, next = { step = 2 }, onFinish = onFinish)
                 2 -> ModelsStep(runtime, next = { step = 3 })
                 3 -> AssistantStep(next = { step = 4 })
                 else -> AccessStep(onFinish)
@@ -220,12 +220,20 @@ private fun StepScaffold(
 }
 
 @Composable
-private fun MeetStep(next: () -> Unit, onFinish: () -> Unit) {
+private fun MeetStep(runtime: RivetRuntime, next: () -> Unit, onFinish: () -> Unit) {
+    var recommending by rememberSaveable { mutableStateOf(false) }
+    if (recommending) {
+        RecommendedFlow(runtime) { applied ->
+            recommending = false
+            if (applied) onFinish()
+        }
+    }
     StepScaffold(
         "MEET RIVET",
         "An AI assistant you can see, with an honest heart.",
         keys = {
-            PrimaryKey("Get Started", next)
+            PrimaryKey("Use recommended settings", { recommending = true })
+            FooterLink("Set up step by step", next)
             FooterLink("Not now", onFinish)
         },
     ) {
@@ -426,13 +434,13 @@ private fun Context.has(group: AccessGroup): Boolean =
         group.permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
     }
 
-private fun Context.holdsAssistantRole(): Boolean {
+internal fun Context.holdsAssistantRole(): Boolean {
     val roles = getSystemService(RoleManager::class.java) ?: return false
     return roles.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && roles.isRoleHeld(RoleManager.ROLE_ASSISTANT)
 }
 
 /** Opens the first of [actions] this phone has a screen for. */
-private fun Context.openFirst(vararg actions: String) {
+internal fun Context.openFirst(vararg actions: String) {
     for (action in actions) {
         try {
             startActivity(Intent(action))
