@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** The 4x1 search bar: ask anything, or tap the orange key to talk. */
+/** The 4x1 search bar: search or ask, or tap the orange key to talk. */
 class SearchWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = RivetWidgets.render(context, manager, ids, panel = false)
 }
@@ -42,6 +42,9 @@ object RivetWidgets {
     const val ACTION_LISTEN = "com.hiron.rivet.action.LISTEN"
     const val ACTION_TYPE = "com.hiron.rivet.action.TYPE"
     const val ACTION_QUICK = "com.hiron.rivet.action.QUICK"
+
+    /** Opens the search sheet: widgets can't take typing, so the field is in the app. */
+    const val ACTION_SEARCH = "com.hiron.rivet.action.SEARCH"
     private const val PREFS = "rivet_widgets"
 
     /** Keeps every placed widget in step with the runtime. Streaming text is skipped; finished replies count. */
@@ -57,7 +60,7 @@ object RivetWidgets {
 
     fun snapshotOf(state: RivetState) = WidgetSnapshot(
         connection = state.connection,
-        lastReply = state.messages.lastOrNull { !it.fromUser && !it.streaming && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
+        lastReply = state.messages.lastOrNull { !it.fromUser && it.spoken && !it.streaming && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
         waiting = state.approvals.size,
     )
 
@@ -83,7 +86,7 @@ object RivetWidgets {
         }
         val dot = context.getColor(colour)
         views.setInt(R.id.status, "setColorFilter", dot)
-        views.setOnClickPendingIntent(R.id.ask, open(context, ACTION_TYPE, 1))
+        views.setOnClickPendingIntent(R.id.ask, open(context, ACTION_SEARCH, 1))
         views.setOnClickPendingIntent(R.id.head, open(context, null, 0))
         views.setOnClickPendingIntent(R.id.mic, open(context, ACTION_LISTEN, 2))
         if (panel) {

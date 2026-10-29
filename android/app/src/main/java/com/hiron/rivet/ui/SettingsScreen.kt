@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Person
@@ -64,6 +66,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +75,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -88,6 +92,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.hiron.rivet.BuildConfig
 import com.hiron.rivet.R
+import com.hiron.rivet.core.BrainModel
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.Decision
 import com.hiron.rivet.core.PermissionGroups
@@ -165,7 +170,7 @@ fun SettingsScreen(runtime: RivetRuntime, state: RivetState) {
 
         Section("Voice", 1, card = false) { Voice(runtime, refresh) }
 
-        Section("How Rivet behaves", 2, card = false) { Behaviour(runtime) { refresh++ } }
+        Section("How Rivet behaves", 2, card = false) { Behaviour(runtime, state) { refresh++ } }
 
         Section("Approval rules", 3) { ApprovalRules(runtime, state) }
 
@@ -273,8 +278,8 @@ private fun Voice(runtime: RivetRuntime, refresh: Int) {
         }
     }
     FeatureCard(
-        Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Rivet answers in its own voice.",
-        tone = Tone.Accent, tag = "ELEVENLABS" to Tone.Neutral,
+        Icons.Outlined.GraphicEq, "Talk key", "Shows the mic key, so you can talk to Rivet out loud.",
+        tone = Tone.Accent,
         trailing = {
             RivetToggle(voiceModel, {
                 voiceModel = it
@@ -282,14 +287,10 @@ private fun Voice(runtime: RivetRuntime, refresh: Int) {
             })
         },
     )
-    FeatureCard(
-        Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer.",
-        tone = Tone.Cyan, tag = "ALWAYS ON" to Tone.Cyan,
-    )
 }
 
 @Composable
-private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
+private fun Behaviour(runtime: RivetRuntime, state: RivetState, onChanged: () -> Unit) {
     val p = LocalPalette.current
     val s = runtime.settings
     // Keyed on [version], so the toggles show what recommended settings (or their undo) just changed.
@@ -299,6 +300,7 @@ private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
     var auto by remember(version) { mutableStateOf(s.autoConnect) }
     var offer by remember(version) { mutableStateOf(s.offerReplies) }
     var agents by remember { mutableStateOf(s.elevenLabsAgents) }
+    var suggest by remember { mutableStateOf(s.searchSuggestions) }
     var undo by remember(version) { mutableStateOf(s.recommendedUndo) }
     // True once undone; false when it couldn't be, because the rules need Rivet connected.
     var undone by remember { mutableStateOf<Boolean?>(null) }
@@ -341,11 +343,69 @@ private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
         Rule(color = p.line)
         Toggle("Offer replies to new messages (you approve each one)", offer) { offer = it; s.offerReplies = it }
         Rule(color = p.line)
-        Toggle("Use ElevenLabs agents", agents) {
+        Toggle("Use ElevenLabs agents", agents, detail = "Talk and type with Rivet's ElevenLabs agents. Off: Rivet's own brain.") {
             agents = it
-            s.elevenLabsAgents = it
-            if (!it) runtime.agent.stop()
+            runtime.useAgents(it)
         }
+        Rule(color = p.line)
+        Toggle(
+            "Suggest searches as you type", suggest,
+            detail = "What you type is sent to Brave Search for suggestions. Brave keeps search logs for up to 90 days.",
+        ) { suggest = it; s.searchSuggestions = it }
+    }
+    BrainModelPlate(state, runtime::setModel)
+}
+
+/** Which model Rivet's own brain runs; only the brain's `model` event changes what it shows. */
+@Composable
+internal fun BrainModelPlate(state: RivetState, onChoose: (BrainModel) -> Boolean) {
+    val p = LocalPalette.current
+    val online = state.connection == Connection.Online
+    // The model asked for, until the brain says which one runs or why it couldn't switch.
+    var pending by remember { mutableStateOf<BrainModel?>(null) }
+    LaunchedEffect(state.brainModel, state.modelError) { pending = null }
+    RivetCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconWell(Icons.Outlined.Psychology, tone = Tone.Cyan)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Rivet's own brain", style = Type.cardTitle, color = p.ink)
+                Text("The model it thinks with when the ElevenLabs agents are off.", style = Type.cardBody, color = p.ink2)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        BrainModel.entries.forEach { model ->
+            val usable = online && model in state.availableModels
+            val note = when {
+                model == state.brainModel -> "In use"
+                model == pending -> "Switching…"
+                !online -> null
+                model !in state.availableModels -> "Not set up on the brain"
+                else -> null
+            }
+            // Only the control dims when it can't be chosen; the note explaining why stays legible.
+            val dim = Modifier.alpha(if (usable || model == state.brainModel) 1f else 0.5f)
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    .selectable(model == state.brainModel, enabled = usable, role = Role.RadioButton) {
+                        if (model != state.brainModel && onChoose(model)) pending = model
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(dim) { RadioDot(model == state.brainModel) }
+                Spacer(Modifier.width(14.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(model.label, style = Type.bodyLg, color = p.ink, modifier = dim)
+                    note?.let { Text(it, style = Type.cardBody, color = if (model == state.brainModel) p.ok else p.ink2) }
+                }
+            }
+        }
+        when {
+            !online -> Text("Connect to change.", style = Type.cardBody, color = p.ink2)
+            state.brainModel == null -> Text("Rivet's brain hasn't said which models it offers.", style = Type.cardBody, color = p.ink2)
+        }
+        state.modelError?.let { InfoStrip(it, Modifier.padding(top = 8.dp), icon = Icons.Outlined.WarningAmber, tone = Tone.Amber) }
+        Text("Background tasks always use Rivet's own brain.", style = Type.cardBody, color = p.ink2, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -566,7 +626,7 @@ private data class Access(val icon: ImageVector, val title: String, val why: Str
 private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
     val icons = mapOf(
         "Texts" to Icons.AutoMirrored.Outlined.Chat, "Contacts" to Icons.Outlined.Person, "Calendar" to Icons.Outlined.Event,
-        "Phone" to Icons.Outlined.Call, "Notifications" to Icons.Outlined.Notifications,
+        "Phone" to Icons.Outlined.Call, "Microphone" to Icons.Outlined.Mic, "Notifications" to Icons.Outlined.Notifications,
     )
     val runtimePerms = PermissionGroups.ALL.map { g -> Access(icons[g.name] ?: Icons.Outlined.Notifications, g.name, g.why) to g.permissions }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onChanged() }
@@ -633,15 +693,18 @@ private fun <T> Choices(options: List<Pair<T, String>>, selected: T, onSelect: (
     }
 }
 
-/** A setting row: the whole row toggles. */
+/** A setting row: the whole row toggles. [detail] is a line under the label. */
 @Composable
-private fun Toggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) {
+private fun Toggle(label: String, value: Boolean, detail: String? = null, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).toggleable(value, role = Role.Switch, onValueChange = onChange).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = Type.bodyLg, color = p.ink, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, style = Type.bodyLg, color = p.ink)
+            detail?.let { Text(it, style = Type.cardBody, color = p.ink2) }
+        }
         RivetToggle(value, null)
     }
 }

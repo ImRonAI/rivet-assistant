@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,11 +46,16 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -80,18 +86,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hiron.rivet.core.Activity
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
+import com.hiron.rivet.core.ContextItem
 import com.hiron.rivet.core.LiveCallStatus
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.core.Suggester
 import kotlinx.coroutines.delay
 import java.util.Calendar
 import java.util.Date
@@ -123,6 +133,8 @@ fun HomeScreen(
     onListen: () -> Unit,
     onReviewApprovals: () -> Unit,
     focusRequests: Int = 0,
+    onOpenResults: (ResultsRequest) -> Unit = {},
+    suggester: Suggester? = runtime.search,
 ) {
     val p = LocalPalette.current
     val keyboard = WindowInsets.isImeVisible
@@ -141,54 +153,69 @@ fun HomeScreen(
         else -> 0.5f
     }
     val stageShare by animateFloatAsState(target, spring(dampingRatio = 0.85f, stiffness = 300f), label = "stage")
-    Column(Modifier.fillMaxSize().background(p.bg)) {
-        val idle = !talking && !keyboard && !callLive
-        val fade by animateDpAsState(if (idle) 240.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
-        StageFrame(
-            Modifier.weight(stageShare).fillMaxWidth(),
-            framed = false,
-            hint = if (idle) STAGE_HINT else null,
-            mood = moodColor(state.activity),
-        ) {
-            // While the greeting shows, Rivet stands in the upper part of the stage with the words under its feet.
-            RobotView(runtime, Modifier.fillMaxSize(), focus = if (idle) RobotFocus.Greet else RobotFocus.Stage)
-            // The stage melts into what sits below it, and the greeting stays legible over the floor.
-            Box(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(fade)
-                    .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to p.bg.copy(alpha = 0.72f), 1f to p.bg.copy(alpha = 0.96f))),
-            )
-            StageGreeting(idle, state, voice)
-        }
-        AnimatedVisibility(state.approvals.isNotEmpty()) {
-            ApprovalBanner(state.approvals.size, onReviewApprovals)
-        }
-        AnimatedVisibility(state.liveCall != null) {
-            state.liveCall?.let { call ->
-                LiveCallCard(call, onTakeOver = { runtime.takeOverCall(call.callId) }, onDismiss = runtime::dismissLiveCall)
+    val actions = remember(runtime) {
+        ResultActions(add = runtime::addContext, seeAll = { results, kind -> onOpenResults(ResultsRequest(results.query, kind, results)) })
+    }
+    // Rivet's own brain is offered when the ElevenLabs agent couldn't start and the brain can be reached.
+    val useBrain = if (state.agentDown && runtime.settings.elevenLabsAgents && state.connection == Connection.Online) runtime::useOwnBrain else null
+    CompositionLocalProvider(LocalResultActions provides actions) {
+        Column(Modifier.fillMaxSize().background(p.bg)) {
+            val idle = !talking && !keyboard && !callLive
+            val fade by animateDpAsState(if (idle) 240.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
+            StageFrame(
+                Modifier.weight(stageShare).fillMaxWidth(),
+                framed = false,
+                hint = if (idle) STAGE_HINT else null,
+                mood = moodColor(state.activity),
+            ) {
+                // While the greeting shows, Rivet stands in the upper part of the stage with the words under its feet.
+                RobotView(runtime, Modifier.fillMaxSize(), focus = if (idle) RobotFocus.Greet else RobotFocus.Stage)
+                // The stage melts into what sits below it, and the greeting stays legible over the floor.
+                Box(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(fade)
+                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to p.bg.copy(alpha = 0.72f), 1f to p.bg.copy(alpha = 0.96f))),
+                )
+                StageGreeting(idle, state, voice)
             }
-        }
-        if (sheet) {
-            TranscriptSheet(state, expanded || keyboard, { expanded = it }, Modifier.weight((1f - stageShare).coerceAtLeast(0.01f)))
-        } else {
-            state.lastError?.let { InfoStrip(it, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), icon = Icons.Outlined.WarningAmber, tone = Tone.Red) }
-            if (stageShare < 1f) Spacer(Modifier.weight(1f - stageShare))
-        }
-        Dock(
-            keyboard = keyboard,
-            voice = voice,
-            listening = state.activity == Activity.Listening,
-            focusRequests = focusRequests,
-            onSend = { text, asTask ->
-                when {
-                    asTask -> runtime.startTask(text)
-                    runtime.settings.elevenLabsAgents -> runtime.agent.sendText(text)
-                    else -> runtime.send(text)
+            AnimatedVisibility(state.approvals.isNotEmpty()) {
+                ApprovalBanner(state.approvals.size, onReviewApprovals)
+            }
+            AnimatedVisibility(state.liveCall != null) {
+                state.liveCall?.let { call ->
+                    LiveCallCard(call, onTakeOver = { runtime.takeOverCall(call.callId) }, onDismiss = runtime::dismissLiveCall)
                 }
-            },
-            onListen = onListen,
-        )
+            }
+            if (sheet) {
+                TranscriptSheet(state, expanded || keyboard, { expanded = it }, Modifier.weight((1f - stageShare).coerceAtLeast(0.01f)), useBrain)
+            } else {
+                state.lastError?.let {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        InfoStrip(it, icon = Icons.Outlined.WarningAmber, tone = Tone.Red)
+                        useBrain?.let { use -> UseBrainKey(use) }
+                    }
+                }
+                if (stageShare < 1f) Spacer(Modifier.weight(1f - stageShare))
+            }
+            Dock(
+                keyboard = keyboard,
+                voice = voice,
+                listening = state.activity == Activity.Listening,
+                focusRequests = focusRequests,
+                chips = state.chips,
+                onRemoveChip = runtime::removeChip,
+                suggester = suggester.takeIf { runtime.settings.searchSuggestions },
+                onSend = { text, asTask -> if (asTask) runtime.startTask(text) else runtime.ask(text) },
+                onListen = onListen,
+            )
+        }
     }
 }
+
+const val USE_BRAIN = "Use Rivet's own brain"
+
+@Composable
+private fun UseBrainKey(onClick: () -> Unit) =
+    Keycap(USE_BRAIN, onClick, Modifier.padding(top = 8.dp), tone = KeyTone.Accent, icon = Icons.Outlined.Psychology)
 
 const val STAGE_TAG = "stage"
 
@@ -270,7 +297,7 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
 
 /** The transcript as a sheet over the stage: tap or drag its header to pull it up over Rivet, or back down. */
 @Composable
-private fun TranscriptSheet(state: RivetState, expanded: Boolean, onExpand: (Boolean) -> Unit, modifier: Modifier) {
+private fun TranscriptSheet(state: RivetState, expanded: Boolean, onExpand: (Boolean) -> Unit, modifier: Modifier, useBrain: (() -> Unit)?) {
     val p = LocalPalette.current
     val streaming = state.messages.any { it.streaming }
     val working = state.activeTurn != null && state.messages.lastOrNull()?.let { it.fromUser || (it.streaming && it.text.isBlank()) } == true
@@ -315,7 +342,7 @@ private fun TranscriptSheet(state: RivetState, expanded: Boolean, onExpand: (Boo
                 )
             }
         }
-        Chat(state.messages, state.lastError, Modifier.weight(1f), working = working)
+        Chat(state.messages, state.lastError, Modifier.weight(1f), working = working, onUseBrain = useBrain)
     }
 }
 
@@ -323,7 +350,7 @@ const val CHAT_TAG = "chat"
 const val COMPOSER_TAG = "composer"
 
 @Composable
-internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier, working: Boolean = false) {
+internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier, working: Boolean = false, onUseBrain: (() -> Unit)? = null) {
     val p = LocalPalette.current
     val list = rememberLazyListState()
     // Newest at the bottom (reversed layout): streaming text stays in view while you're at the bottom and
@@ -348,8 +375,21 @@ internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifie
     ) {
         item(key = "end") { Spacer(Modifier.height(4.dp)) }
         if (working) item(key = "working") { Working(Modifier.animateItem()) }
-        if (error != null) item(key = "error") { Text(error, color = p.rec, style = Type.body, modifier = Modifier.padding(horizontal = 16.dp)) }
-        items(messages.asReversed(), key = { it.id }) { Bubble(it, Modifier.animateItem()) }
+        if (error != null) {
+            item(key = "error") {
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text(error, color = p.rec, style = Type.body)
+                    onUseBrain?.let { UseBrainKey(it) }
+                }
+            }
+        }
+        items(messages.asReversed(), key = { it.id }) { m ->
+            when {
+                m.search != null || m.searching != null -> SearchBlock(m.id, m.search, m.searching, Modifier.animateItem())
+                m.system -> SystemLine(m.text, Modifier.animateItem())
+                else -> Bubble(m, Modifier.animateItem())
+            }
+        }
         item(key = "start") { Spacer(Modifier.height(4.dp)) }
     }
 }
@@ -387,6 +427,13 @@ private fun Working(modifier: Modifier) {
 /** 0 → 1 → 0 over the first half of [t], then rest. */
 private fun bump(t: Float): Float = if (t < 0.5f) 1f - kotlin.math.abs(t * 4f - 1f) else 0f
 
+/** A small line from the app, such as what was just added to the conversation. */
+@Composable
+private fun SystemLine(text: String, modifier: Modifier) {
+    val p = LocalPalette.current
+    Text(text, style = Type.mono, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp))
+}
+
 @Composable
 private fun Bubble(m: ChatMessage, modifier: Modifier) {
     val p = LocalPalette.current
@@ -406,8 +453,11 @@ private fun Bubble(m: ChatMessage, modifier: Modifier) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (!m.fromUser) Eyebrow("RIVET", tone = Tone.Cyan, live = m.streaming)
-            val body = remember(m.text, m.fromUser) { if (m.fromUser) AnnotatedString(m.text) else Rich.format(m.text.ifBlank { "…" }, p) }
-            ReplyText(body, caret = m.streaming)
+            if (!m.fromUser || m.text.isNotBlank()) {
+                val body = remember(m.text, m.fromUser) { if (m.fromUser) AnnotatedString(m.text) else Rich.format(m.text.ifBlank { "…" }, p) }
+                ReplyText(body, caret = m.streaming)
+            }
+            m.attachments.forEach { Text("+ ${it.title}", style = Type.mono, color = p.accent, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
         if (m.failed) StatusTag("NOT DELIVERED", Tone.Red)
     }
@@ -437,9 +487,40 @@ private fun ReplyText(body: AnnotatedString, caret: Boolean) {
     )
 }
 
+const val SUGGESTIONS_TAG = "suggestions"
+
+/** A result waiting to go with the next message to Rivet's own brain; × takes it off. */
+@Composable
+private fun AttachedChip(item: ContextItem, onRemove: () -> Unit) {
+    val p = LocalPalette.current
+    val pill = RoundedCornerShape(50)
+    Row(
+        Modifier.heightIn(min = 48.dp).widthIn(max = 240.dp).clip(pill).background(p.accentSoft).border(1.dp, p.accent.copy(alpha = 0.35f), pill)
+            .padding(start = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("+ ${item.title}", style = Type.chip, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Box(
+            Modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = "Remove") { onRemove() }
+                .semantics { contentDescription = "Remove ${item.title}" },
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Outlined.Close, contentDescription = null, tint = p.ink2, modifier = Modifier.size(16.dp)) }
+    }
+}
+
 /** The dock: a task latch and quick requests, then the composer with its talk or send key. */
 @Composable
-private fun Dock(keyboard: Boolean, voice: Boolean, listening: Boolean, focusRequests: Int, onSend: (String, Boolean) -> Unit, onListen: () -> Unit) {
+private fun Dock(
+    keyboard: Boolean,
+    voice: Boolean,
+    listening: Boolean,
+    focusRequests: Int,
+    chips: List<ContextItem>,
+    onRemoveChip: (ContextItem) -> Unit,
+    suggester: Suggester?,
+    onSend: (String, Boolean) -> Unit,
+    onListen: () -> Unit,
+) {
     val p = LocalPalette.current
     var text by rememberSaveable { mutableStateOf("") }
     var asTask by remember { mutableStateOf(false) }
@@ -451,27 +532,41 @@ private fun Dock(keyboard: Boolean, voice: Boolean, listening: Boolean, focusReq
             ime?.show()
         }
     }
+    // Results waiting to go to the brain can be sent on their own.
+    val sendable = text.isNotBlank() || (chips.isNotEmpty() && !asTask)
     val send = {
         val t = text.trim()
-        if (t.isNotEmpty()) {
+        if (sendable) {
             onSend(t, asTask)
             text = ""
             asTask = false
         }
     }
+    val help = rememberTypingHelp(text, !asTask, suggester)
     Column(Modifier.fillMaxWidth().background(p.bg)) {
         Rule(color = p.line)
-        if (!keyboard) {
+        if (chips.isNotEmpty()) {
+            ChipRail(Modifier.padding(top = 12.dp), start = 16.dp) {
+                items(chips, key = { it.url }) { chip -> AttachedChip(chip) { onRemoveChip(chip) } }
+            }
+        }
+        val suggestions = help.suggestions.take(5).takeIf { text.trim().length >= 2 }.orEmpty()
+        if (suggestions.isNotEmpty()) {
+            ChipRail(Modifier.padding(top = 12.dp).testTag(SUGGESTIONS_TAG), start = 16.dp) {
+                items(suggestions, key = { it }) { s -> PillChip(s, { text = s }, Modifier.minimumInteractiveComponentSize(), leading = Icons.Outlined.Search) }
+            }
+        } else if (!keyboard) {
             ChipRail(Modifier.padding(top = 12.dp), start = 16.dp) {
                 item(key = "task") {
                     PillChip(
-                        "Task", { asTask = !asTask }, Modifier.semantics { selected = asTask },
+                        "Task", { asTask = !asTask }, Modifier.minimumInteractiveComponentSize().semantics { selected = asTask },
                         leading = Icons.Outlined.Bolt, selected = asTask,
                     )
                 }
-                items(Quick.entries, key = { it.name }) { q -> PillChip(q.label, { onSend(q.prompt, false) }) }
+                items(Quick.entries, key = { it.name }) { q -> PillChip(q.label, { onSend(q.prompt, false) }, Modifier.minimumInteractiveComponentSize()) }
             }
         }
+        help.corrected?.let { DidYouMean(it, { picked -> text = picked }, Modifier.padding(horizontal = 20.dp)) }
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
             RecessedField(
                 text, { text = it },
@@ -488,7 +583,7 @@ private fun Dock(keyboard: Boolean, voice: Boolean, listening: Boolean, focusReq
             Box(Modifier.size(width = 52.dp, height = 48.dp), contentAlignment = Alignment.Center) {
                 val unbounded = Modifier.wrapContentSize(unbounded = true)
                 when {
-                    text.isNotBlank() -> SendKey(send, unbounded)
+                    sendable -> SendKey(send, unbounded)
                     voice -> HaloTalkKey(if (listening) TalkState.Listening else TalkState.Idle, onListen, "Speak to Rivet", unbounded)
                     else -> Box(
                         unbounded.alpha(0.4f).clearAndSetSemantics {

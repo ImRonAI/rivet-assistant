@@ -38,11 +38,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.GppGood
@@ -50,6 +48,7 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.ScreenSearchDesktop
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Swipe
@@ -77,7 +76,6 @@ import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -256,34 +254,39 @@ private fun MeetStep(runtime: RivetRuntime, next: () -> Unit, onFinish: () -> Un
 @Composable
 private fun ModelsStep(runtime: RivetRuntime, next: () -> Unit) {
     val settings = runtime.settings
+    var agents by remember { mutableStateOf(settings.elevenLabsAgents) }
     var voice by remember { mutableStateOf(settings.voiceModel) }
     var speak by remember { mutableStateOf(settings.speakReplies) }
+    val setAgents = { on: Boolean ->
+        agents = on
+        runtime.useAgents(on)
+    }
     val setVoice = { on: Boolean ->
         voice = on
         settings.voiceModel = on
     }
     val openVoice = LocalOpenVoiceSetup.current
     StepScaffold(
-        "TWO MODELS, ONE RIVET",
-        "A voice model to talk with you out loud, and a text model that thinks things through.",
+        "TALK OR TYPE",
+        "Rivet's ElevenLabs agents answer you, or Rivet's own brain when they're off.",
         keys = {
             PrimaryKey("Save & Continue", next)
             FooterLink("Choose Rivet's voice", openVoice, leading = Icons.Outlined.GraphicEq, tone = Tone.Cyan)
         },
     ) {
         FeatureCard(
-            Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer, and asks before it acts.",
-            Modifier.enter(0).semantics(mergeDescendants = true) { stateDescription = "Always on" },
-            tone = Tone.Cyan, tag = "ALWAYS ON" to Tone.Cyan,
-            trailing = {
-                Box(Modifier.size(24.dp).background(LocalPalette.current.ok.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Outlined.Check, contentDescription = null, tint = LocalPalette.current.ok, modifier = Modifier.size(14.dp))
-                }
-            },
+            Icons.Outlined.RecordVoiceOver, "ElevenLabs agents", "Talk and type with Rivet's ElevenLabs agents. Off: Rivet's own brain answers.",
+            Modifier.enter(0).semantics { toggleableState = ToggleableState(agents) },
+            tone = Tone.Accent, onClick = { setAgents(!agents) }, role = Role.Switch,
+            trailing = { RivetToggle(agents, null) },
         )
         FeatureCard(
-            Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Rivet answers in its own voice, powered by ElevenLabs.",
-            Modifier.enter(1).semantics { toggleableState = ToggleableState(voice) },
+            Icons.Outlined.Psychology, "Rivet's own brain", "Answers when the ElevenLabs agents are off, runs background tasks, and asks before it acts.",
+            Modifier.enter(1), tone = Tone.Cyan,
+        )
+        FeatureCard(
+            Icons.Outlined.GraphicEq, "Talk key", "Shows the mic key, so you can talk to Rivet out loud.",
+            Modifier.enter(2).semantics { toggleableState = ToggleableState(voice) },
             tone = Tone.Accent, tag = "WHEN YOU TALK" to Tone.Accent,
             onClick = { setVoice(!voice) }, role = Role.Switch,
             trailing = { RivetToggle(voice, null) },
