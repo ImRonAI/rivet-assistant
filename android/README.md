@@ -36,7 +36,7 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Robot renders, follows light/dark, waves through states while a turn runs; mouth moves while replies are read aloud.
 - [ ] Rivet stays in view on Activity, Settings and the voice setup (a short band under the header); tapping the band on Activity or Settings opens Home.
 - [ ] Switching tabs never reloads the robot (no turntable flash on Home after the first load); the mouth keeps moving with read-aloud replies and ElevenLabs speech on every tab.
-- [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway and showreel stay off.
+- [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway stays off.
 - [ ] "What's on my calendar tomorrow?" lists events (calendar_list).
 - [ ] "Text <contact> I'm running late": contacts_search, then an approval card; Approve sends; the text appears in Messages.
 - [ ] Deny the same request: nothing is sent and Rivet says so.
