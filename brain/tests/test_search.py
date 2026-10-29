@@ -83,6 +83,12 @@ IMAGES = {
             "url": "https://photos.example/other",
             "thumbnail": {"src": "https://imgs.example/t2.jpg", "width": 500, "height": 500},
         },
+        {
+            "title": "Full size without its height",
+            "url": "https://photos.example/third",
+            "thumbnail": {"src": "https://imgs.example/t3.jpg", "width": 500, "height": 400},
+            "properties": {"url": "https://photos.example/third.jpg", "width": 3000},
+        },
         {"title": "No thumbnail", "url": "https://photos.example/none"},
     ],
     "extra": {"might_be_offensive": False},
@@ -312,6 +318,15 @@ def test_images_use_the_full_size_file_and_fall_back_to_the_thumbnail(client: Te
             "thumbnail": "https://imgs.example/t2.jpg",
             "width": 500,
             "height": 500,
+            "source": None,
+        },
+        {
+            "title": "Full size without its height",
+            "url": "https://photos.example/third",
+            "image": "https://photos.example/third.jpg",
+            "thumbnail": "https://imgs.example/t3.jpg",
+            "width": None,
+            "height": None,
             "source": None,
         },
     ]

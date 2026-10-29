@@ -106,9 +106,11 @@ object SearchSummary {
 
     fun forAgent(results: SearchResults): String {
         if (results.kind == SearchKind.Answers) {
-            val citations = JSONArray(results.citations.map { JSONObject().put("n", it.number).put("url", it.url).maybe("snippet", it.snippet?.take(200)) })
-            return JSONObject().put("shown_on_screen", true).put("answer", results.answer.orEmpty().take(4_000)).put("citations", citations)
-                .put("note", "The answer is on screen with its numbered sources; give the gist in a sentence or two.").toString()
+            val citations = results.citations.map { JSONObject().put("n", it.number).put("url", it.url).maybe("snippet", it.snippet?.take(200)) }
+            return fit(citations) {
+                JSONObject().put("shown_on_screen", true).put("answer", results.answer.orEmpty().take(4_000)).put("citations", it)
+                    .put("note", "The answer is on screen with its numbered sources; give the gist in a sentence or two.")
+            }
         }
         // Each page's text gets a share of the cap, so more pages means shorter extracts rather than fewer pages.
         val text = (6_000 / results.items.size.coerceAtLeast(1)).coerceIn(300, 1_500)
@@ -132,10 +134,17 @@ object SearchSummary {
                     .maybe("distance", item.distance?.let { "${it.value} ${it.units}".trim() })
             }
         }
+        return fit(items) {
+            JSONObject().put("shown_on_screen", true).put("note", NOTE).put("query", results.query)
+                .put("corrected_query", results.altered ?: JSONObject.NULL).put("results", it)
+        }
+    }
+
+    /** [build] with as many of [items], from the first, as fit in [LIMIT]. */
+    private fun fit(items: List<JSONObject>, build: (JSONArray) -> JSONObject): String {
         var kept = items.size
         while (true) {
-            val text = JSONObject().put("shown_on_screen", true).put("note", NOTE).put("query", results.query)
-                .put("corrected_query", results.altered ?: JSONObject.NULL).put("results", JSONArray(items.take(kept))).toString()
+            val text = build(JSONArray(items.take(kept))).toString()
             if (text.length <= LIMIT || kept == 0) return text
             kept--
         }

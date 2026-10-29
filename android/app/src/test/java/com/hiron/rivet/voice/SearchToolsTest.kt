@@ -1,5 +1,6 @@
 package com.hiron.rivet.voice
 
+import com.hiron.rivet.core.Citation
 import com.hiron.rivet.core.Freshness
 import com.hiron.rivet.core.SearchClient
 import com.hiron.rivet.core.RivetState
@@ -165,5 +166,12 @@ class SearchToolsTest {
         val kept = JSONObject(text).getJSONArray("results")
         assertTrue(kept.length() in 1..19)
         assertEquals(1, kept.getJSONObject(0).getInt("n"))
+
+        val sources = (1..30).map { Citation(it, "https://example.com/" + "p".repeat(300) + it, "s".repeat(300)) }
+        val answer = SearchSummary.forAgent(SearchFixtures.answerResults.copy(answer = "a".repeat(5_000), citations = sources))
+        assertTrue(answer.length <= SearchSummary.LIMIT)
+        val cited = JSONObject(answer).getJSONArray("citations")
+        assertTrue(cited.length() in 1..29)
+        assertEquals(1, cited.getJSONObject(0).getInt("n"))
     }
 }

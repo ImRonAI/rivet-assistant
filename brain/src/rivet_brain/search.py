@@ -616,15 +616,23 @@ def _image(raw: Mapping[str, object]) -> ImageItem | None:
     if title is None or url is None or thumbnail is None:
         return None
     properties, small = _obj(raw.get("properties")), _obj(raw.get("thumbnail"))
+    full = _text(properties.get("url"))
+    width, height = _size(properties) if full else _size(small)
     return ImageItem(
         title,
         url,
-        image=_text(properties.get("url")) or thumbnail,
+        image=full or thumbnail,
         thumbnail=thumbnail,
-        width=_count(properties.get("width")) or _count(small.get("width")),
-        height=_count(properties.get("height")) or _count(small.get("height")),
+        width=width,
+        height=height,
         source=_text(raw.get("source")),
     )
+
+
+def _size(raw: Mapping[str, object]) -> tuple[int | None, int | None]:
+    """Both dimensions of one image, or neither."""
+    width, height = _count(raw.get("width")), _count(raw.get("height"))
+    return (width, height) if width and height else (None, None)
 
 
 def _video(raw: Mapping[str, object]) -> VideoItem | None:

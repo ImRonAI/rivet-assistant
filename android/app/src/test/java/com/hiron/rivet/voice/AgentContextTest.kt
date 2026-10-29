@@ -1,5 +1,7 @@
 package com.hiron.rivet.voice
 
+import android.Manifest
+import android.app.Application
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.hiron.rivet.core.ChatMessage
@@ -13,6 +15,7 @@ import com.hiron.rivet.core.SearchKind
 import com.hiron.rivet.core.WebItem
 import com.hiron.rivet.device.ToolResult
 import io.elevenlabs.ClientTool
+import io.elevenlabs.ConversationConfig
 import io.elevenlabs.ConversationSession
 import io.elevenlabs.models.ConversationMode
 import io.elevenlabs.models.ConversationStatus
@@ -216,5 +219,44 @@ class AgentContextTest {
         val second = session.sent.single()
         assertTrue(second.startsWith("update:Earlier in this conversation by text,"))
         assertTrue(second.endsWith("User: And tomorrow?"))
+    }
+
+    @Test
+    fun aVoiceSessionIsInUseBeforeItConnectsAndHearsTheRecapWhenItDoes() {
+        shadowOf(ApplicationProvider.getApplicationContext<Application>()).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        server.enqueue(MockResponse().setBody(JSONObject().put("agent_id", "agent_voice").put("conversation_token", "token").toString()))
+        server.start()
+        val session = FakeSession()
+        val earlier = listOf(said(1, true, "Find coffee near the park"), said(2, false, "Summit Coffee is open until 7."))
+        var state = RivetState(messages = earlier)
+        var config: ConversationConfig? = null
+        val agent = RivetAgent(
+            ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
+            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            update = { change -> state = change(state) }, robot = {}, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            search = { Result.failure(IllegalStateException("unused")) }, transcript = { state.messages },
+            connect = { c, _ ->
+                config = c
+                session
+            },
+        )
+        fun idleUntil(done: () -> Boolean) {
+            val end = System.currentTimeMillis() + 10_000
+            while (!done() && System.currentTimeMillis() < end) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(20)
+            }
+        }
+        agent.start(AgentMode.Voice)
+        idleUntil { config != null }
+        assertEquals(AgentMode.Voice, agent.mode)
+        assertNull(state.lastError)
+
+        // Not connected yet, and the session already takes what the user adds.
+        agent.addContext(video)
+        assertEquals(listOf("update:" + AgentContext.update(video)), session.sent)
+        checkNotNull(config).onConnect?.invoke("conv-1")
+        idleUntil { session.sent.size == 2 }
+        assertEquals("update:" + AgentHistory.recap(earlier), session.sent.last())
     }
 }

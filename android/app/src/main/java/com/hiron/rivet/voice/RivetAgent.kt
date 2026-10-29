@@ -125,7 +125,7 @@ class RivetAgent(
                 // Not cancellable, so a session that did start is always handed over or ended below.
                 started = withContext(NonCancellable) { connect(config(credential, gen, connected), context) }
                 ensureActive()
-                if (earlier != null || messages.isNotEmpty() || added.isNotEmpty()) {
+                if (messages.isNotEmpty() || added.isNotEmpty()) {
                     checkNotNull(withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() }) { "the agent did not connect" }
                     // The conversation so far, then what the user added, so the first message can refer to both.
                     earlier?.let(started::sendContextualUpdate)
@@ -134,6 +134,8 @@ class RivetAgent(
                     added.clear()
                     messages.forEach(started::sendUserMessage)
                     messages.clear()
+                } else if (earlier != null) {
+                    recap(started, earlier, connected)
                 }
                 session = started
                 started = null
@@ -196,6 +198,14 @@ class RivetAgent(
         mode = null
         ending?.let(::end)
         update { if (it.activity == Activity.Listening) it.copy(activity = Activity.Idle) else it }
+    }
+
+    /** Sends [earlier] once [live] connects, if it is still the session. The session is in use before that. */
+    private fun recap(live: ConversationSession, earlier: String, connected: CompletableDeferred<Unit>) {
+        scope.launch(Dispatchers.Main) {
+            val up = runCatching { withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() } }.getOrNull()
+            if (up != null && session === live) runCatching { live.sendContextualUpdate(earlier) }
+        }
     }
 
     private fun end(ending: ConversationSession) {
