@@ -166,7 +166,6 @@ fun HomeScreen(
                 Modifier.weight(stageShare).fillMaxWidth(),
                 framed = false,
                 hint = if (idle) STAGE_HINT else null,
-                mood = moodColor(state.activity),
             ) {
                 // While the greeting shows, Rivet stands in the upper part of the stage with the words under its feet.
                 RobotView(runtime, Modifier.fillMaxSize(), focus = if (idle) RobotFocus.Greet else RobotFocus.Stage)

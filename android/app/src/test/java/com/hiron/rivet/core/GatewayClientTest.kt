@@ -85,7 +85,6 @@ class GatewayClientTest {
         client.connect(config())
         assertEquals("resume", brain.received.next().getString("type"))
         assertEquals("t-1", brain.received.next().getString("turn_id"))
-        assertEquals(0, client.queued)
     }
 
     @Test

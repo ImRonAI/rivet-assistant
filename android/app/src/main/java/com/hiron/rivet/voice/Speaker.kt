@@ -48,8 +48,6 @@ class Speaker(
         if (ready) tts.stop()
     }
 
-    fun shutdown() = tts.shutdown()
-
     companion object {
         private const val WORD_RATE = 14.0
     }

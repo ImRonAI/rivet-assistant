@@ -57,17 +57,17 @@ data class Palette(
     val amb: Color,
     /** Crimson: live, failed, destructive. */
     val rec: Color,
-    /** Feature, row, radio and toggle cards; the live call plate; stat tiles. */
+    /** Feature and toggle cards; the live call plate. */
     val card: Color,
     /** A card while it is pressed. */
     val cardHi: Color,
-    /** The composer card and chips. */
+    /** Fields and chips. */
     val field: Color,
     /** 8% ink hairline: card borders, header rules. */
     val line: Color,
     /** 16% ink: a pressed card's border. */
     val lineHi: Color,
-    /** 10% white: stage frame, chips, secondary and play keys. */
+    /** 10% white: stage frame, chips, secondary keys. */
     val edge: Color,
     /** 5% white: icon wells, nested-row dividers, info strips. */
     val edgeSoft: Color,
@@ -75,18 +75,14 @@ data class Palette(
     val dot: Color,
     /** Accent highlight: pressed fill, gradient top. */
     val accentHi: Color,
-    /** Accent shadow: the end of the live record core's gradient. */
+    /** Accent shadow: the end of the listening talk key's gradient. */
     val accentDeep: Color,
-    /** 12% accent: the user's bubble, a selected icon well. */
+    /** 12% accent: the user's bubble. */
     val accentSoft: Color,
     /** A toggle's track when off. */
     val track: Color,
-    /** Unplayed waveform bars. */
-    val waveOff: Color,
-    /** Translucent graphite under sticky headers and the tab bar. */
+    /** Translucent graphite under the tab bar. */
     val glass: Color,
-    /** Dashed drop-zone border, disc border. */
-    val graphite: Color,
     val white: Color,
     val dark: Boolean,
 )
@@ -100,7 +96,7 @@ val DarkPalette = Palette(
     card = Color(0xFF11161B), cardHi = Color(0xFF171D23), field = Color(0xFF12171D), line = Color(0x14E8ECF0),
     lineHi = Color(0x29E8ECF0), edge = Color(0x1AFFFFFF), edgeSoft = Color(0x0DFFFFFF), dot = Color(0x33FFFFFF),
     accentHi = Color(0xFFFF723B), accentDeep = Color(0xFFE0450C), accentSoft = Color(0x1FFF5A1F), track = Color(0xFF1B2026),
-    waveOff = Color(0xFF30353C), glass = Color(0xCC0B0E12), graphite = Color(0xFF2B3038), white = Color(0xFFFFFFFF),
+    glass = Color(0xCC0B0E12), white = Color(0xFFFFFFFF),
     dark = true,
 )
 
@@ -133,15 +129,10 @@ object Type {
     val labelLg = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, lineHeight = 16.sp)
     val labelMd = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 0.10.em)
     val labelSm = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 10.sp, lineHeight = 12.sp, letterSpacing = 0.14.em)
-    val tele = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 14.sp, fontFeatureSettings = "tnum")
     val mono = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 17.sp)
 
-    /** Voice-setup headlines: tight, heavy, uppercase source strings, accent full stop added by HeroTitle. */
-    val hero = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 38.sp, lineHeight = 36.sp, letterSpacing = (-0.01).em)
     /** Onboarding step headlines. */
     val step = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, lineHeight = 32.sp, letterSpacing = 0.05.em)
-    /** Display call-to-action (voice setup). */
-    val cta = TextStyle(fontFamily = Display, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, lineHeight = 22.sp, letterSpacing = 0.05.em)
     /** Sans call-to-action (onboarding, sheets). */
     val button = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp, letterSpacing = 0.025.em)
     /** Mono secondary keys and text links. */
@@ -153,7 +144,7 @@ object Type {
     val cardTitle = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 19.sp)
     val cardBody = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 17.sp)
     val chip = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 18.sp)
-    /** Quoted text inside a card: the line to read, the message Rivet will send. */
+    /** Quoted text inside a card: the message Rivet will send. */
     val quote = TextStyle(fontFamily = Sans, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 26.sp)
 }
 

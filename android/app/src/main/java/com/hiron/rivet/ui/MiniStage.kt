@@ -10,8 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -46,8 +43,7 @@ const val MINI_STAGE_TAG = "mini-stage"
 
 /**
  * Rivet in a short band at the top of a screen that isn't Home, so it stays in view. Tapping it runs [onOpen]
- * when given (back to Home); without it the band only shows Rivet. It steps aside while the keyboard is up and
- * on short windows.
+ * (back to Home). It steps aside while the keyboard is up and on short windows.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -56,7 +52,7 @@ fun MiniStage(
     state: RivetState,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
-    onOpen: (() -> Unit)? = null,
+    onOpen: () -> Unit,
 ) {
     val p = LocalPalette.current
     val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
@@ -77,18 +73,16 @@ fun MiniStage(
             Modifier.testTag(MINI_STAGE_TAG).fillMaxWidth().background(p.bg)
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp).height(h),
         ) {
-            StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, mood = moodColor(state.activity)) {
+            StageFrame(Modifier.fillMaxSize(), framed = true, hint = null) {
                 // A leaving band drops its page at once.
                 if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card)
             }
             // The cover sits over the WebView, so a drag or pinch in the band never orbits the robot.
             val status = stageStatus(state)
-            val cover = if (onOpen != null) {
-                Modifier.clickable(role = Role.Button, onClickLabel = OPEN_LABEL, onClick = onOpen)
-            } else {
-                Modifier.pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() } }
-            }
-            Box(Modifier.matchParentSize().then(cover).semantics { contentDescription = status })
+            Box(
+                Modifier.matchParentSize().clickable(role = Role.Button, onClickLabel = OPEN_LABEL, onClick = onOpen)
+                    .semantics { contentDescription = status },
+            )
         }
     }
 }
@@ -118,7 +112,6 @@ internal fun stageStatus(state: RivetState): String = when (state.connection) {
             Activity.Working -> "Rivet is working on it."
             Activity.Texting -> "Rivet is writing a text."
             Activity.Emailing -> "Rivet is writing an email."
-            Activity.Calling -> "Rivet is on a call."
             Activity.Waiting -> "Rivet needs your OK."
             Activity.Done -> "Rivet is done."
             Activity.Failed -> "Rivet didn't finish."

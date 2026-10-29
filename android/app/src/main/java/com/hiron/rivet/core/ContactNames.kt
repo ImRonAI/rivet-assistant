@@ -10,10 +10,6 @@ import androidx.core.content.ContextCompat
 /** A contact's name for a phone number, or null when there is none. */
 fun interface NameLookup {
     fun name(e164: String): String?
-
-    companion object {
-        val NONE = NameLookup { null }
-    }
 }
 
 /**

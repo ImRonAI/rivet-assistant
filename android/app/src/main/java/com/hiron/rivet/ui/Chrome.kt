@@ -26,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,9 +49,6 @@ import androidx.compose.ui.unit.sp
 import com.hiron.rivet.core.Activity
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetState
-
-/** Opens the voice setup screens over the whole app (provided by MainActivity). */
-val LocalOpenVoiceSetup = staticCompositionLocalOf<() -> Unit> { {} }
 
 /**
  * The strip across the top of every screen: the RIVET mark and the screen's name, and on the right one status
@@ -115,7 +111,6 @@ private fun status(state: RivetState, p: Palette): Status = when (state.connecti
         Activity.Working -> Status("WORKING", p.cy, live = true)
         Activity.Texting -> Status("TEXTING", p.cy, live = true)
         Activity.Emailing -> Status("EMAILING", p.cy, live = true)
-        Activity.Calling -> Status("ON A CALL", p.cy, live = true)
         Activity.Waiting -> Status("NEEDS YOU", p.amb, live = true)
         Activity.Done -> Status("DONE", p.ok)
         Activity.Failed -> Status("DIDN'T FINISH", p.rec)

@@ -166,7 +166,7 @@ class HomeScreenTest {
             mutableStateOf(
                 RivetState(
                     connection = Connection.Online,
-                    activity = RivetActivity.Calling,
+                    activity = RivetActivity.Working,
                     liveCall = answering,
                     messages = listOf(
                         ChatMessage("m1", true, "Catch me up"),

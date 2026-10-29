@@ -19,9 +19,9 @@ import org.json.JSONObject
 import java.util.UUID
 
 /**
- * The agents' seven search tools as client tools (the definitions are in rivet-search-client-tools.json): each
- * runs through the brain's search proxy, shows its results on screen, and tells the agent what is shown. These are
- * reads, so nothing asks first; their web text marks the turn untrusted, like [AgentTools.UNTRUSTED].
+ * The agents' seven search tools as client tools: each runs through the brain's search proxy, shows its results on
+ * screen, and tells the agent what is shown. These are reads, so nothing asks first; their web text marks the turn
+ * untrusted, like [AgentTools.UNTRUSTED].
  */
 object SearchTools {
     val NAMES = mapOf(

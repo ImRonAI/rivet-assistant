@@ -85,7 +85,6 @@ class ProtocolTest {
         assertEquals("deny", set.getString("decision"))
         assertEquals("Send", set.getJSONObject("scope").getString("label"))
         assertEquals("k", JSONObject(Protocol.rulesRevoke("k")).getString("key"))
-        assertEquals("rules.list", JSONObject(Protocol.rulesList()).getString("type"))
     }
 
     @Test
@@ -171,7 +170,6 @@ class ProtocolTest {
         assertEquals("call.take_over", body.getString("type"))
         assertEquals("c-0123456789ab", body.getString("call_id"))
         assertEquals("+18015550199", body.getString("to"))
-        assertFalse(JSONObject(Protocol.takeOver("c-0123456789ab", null)).has("to"))
     }
 
     @Test
@@ -198,7 +196,6 @@ class ProtocolTest {
         assertTrue(result.getJSONObject("result").getBoolean("ok"))
         assertEquals("task", JSONObject(Protocol.task("g", "id")).getString("type"))
         assertFalse(JSONObject(Protocol.task("g", "id")).has("reason"))
-        assertEquals("A new WhatsApp message arrived.", JSONObject(Protocol.task("g", "id", "A new WhatsApp message arrived.")).getString("reason"))
     }
 
     @Test

@@ -9,7 +9,6 @@ import com.hiron.rivet.device.ReminderStore
 import com.hiron.rivet.device.ReminderStoreFile
 import com.hiron.rivet.device.Reminders
 import com.hiron.rivet.device.RivetCallScreening
-import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.service.CallNote
 import com.hiron.rivet.service.Notifications
 import com.hiron.rivet.service.RivetService
@@ -33,7 +32,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
-import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -137,7 +135,6 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
     )
 
     init {
-        RivetNotificationListener.onMessage = ::onMessageNotification
         RivetCallScreening.onIncoming = { number -> note("call", "Incoming call from ${number.ifBlank { "unknown number" }}") }
     }
 
@@ -203,10 +200,10 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
         waiting.forEach(agent::addContext)
     }
 
-    /** Starts a goal-driven background task on its own lane; [reason] is why, in plain words, for its approvals. */
-    fun startTask(goal: String, reason: String? = null): String {
+    /** Starts a goal-driven background task on its own lane. */
+    fun startTask(goal: String): String {
         val taskId = UUID.randomUUID().toString().take(12)
-        gateway.send(Protocol.task(goal, taskId, reason))
+        gateway.send(Protocol.task(goal, taskId))
         note("task", "Task queued: $goal")
         return taskId
     }
@@ -227,7 +224,7 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
         }
         gateway.send(Protocol.approvalResponse(lane, answers))
         Notifications.clearApprovals(app, answers.keys)
-        update { s -> lines.fold(RivetStore.answered(s, answers.keys)) { acc, line -> RivetStore.note(acc, now(), "approval", line) } }
+        update { s -> lines.fold(RivetStore.answered(s, answers.keys, lane)) { acc, line -> RivetStore.note(acc, now(), "approval", line) } }
     }
 
     /**
@@ -262,7 +259,7 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
      * Permissions and the assistant screen are the caller's.
      */
     fun applyRecommended(chosen: List<Recommendation>) {
-        Recommended.apply(chosen, settings, now())
+        Recommended.apply(chosen, settings)
         chosen.filterIsInstance<Recommendation.StopAsking>().forEach { setRule(Decision.Deny, it.candidate.target) }
         note("settings", "Applied recommended settings: ${chosen.joinToString(", ") { it.title }}")
     }
@@ -421,26 +418,12 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
     }
 
     private fun runDevice(call: ServerEvent.DeviceCall) {
-        RobotDirector.forDeviceCall(call.tool, call.input).forEach { _robot.tryEmit(it) }
         scope.launch {
             val result = ledger.run(call.actionId, call.tool) { tools.run(call.tool, call.input).toJson() } ?: return@launch
             gateway.send(Protocol.deviceResult(call.actionId, result))
             val ok = result.optBoolean("ok")
             note("device", "${call.tool}: ${if (ok) "done" else result.optString("data").take(120)}")
         }
-    }
-
-    private fun onMessageNotification(record: JSONObject) {
-        if (!settings.offerReplies || state.value.connection != Connection.Online) return
-        // The message text stays out of the goal: the task reads it with notifications_list, which marks the
-        // turn untrusted, so any reply it drafts needs the user's approval.
-        val source = record.optString("app")
-        startTask(
-            "A new $source message notification arrived (key ${record.optString("key")}). Read it with " +
-                "notifications_list. If it needs a reply, draft a short one in the user's voice and send it with " +
-                "notification_reply; the user approves before anything is sent. If it needs no reply, do nothing.",
-            reason = if (source.isBlank()) "A new message arrived." else "A new $source message arrived.",
-        )
     }
 
     private fun note(kind: String, text: String) = update { RivetStore.note(it, now(), kind, text) }

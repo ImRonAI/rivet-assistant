@@ -33,9 +33,9 @@ class PlainTest {
 
     @Test
     fun logLinesNameWhatRivetDid() {
-        assertEquals("Checked the calendar", Plain.log("tool", "calendar_list"))
+        assertEquals("Checked the calendar", Plain.log("device", "calendar_list"))
         assertEquals("Checked the phone", Plain.log("device", "device_status: done"))
-        assertEquals("Placed a call · No permission to call", Plain.log("device", "phone_call: No permission to call"))
+        assertEquals("Place a call · No permission to call", Plain.log("device", "phone_call: No permission to call"))
         assertEquals("Rivet's model is busy. Trying again in 8s.", Plain.log("backoff", "Model busy; retrying in 8s"))
     }
 
@@ -60,12 +60,11 @@ class PlainTest {
     fun otherTextPassesThrough() {
         assertEquals("Dana from Wasatch Dental", Plain.log("call", "Dana from Wasatch Dental"))
         assertEquals("Working on it", Plain.log("turn", "Working on it"))
-        assertEquals("search_memory", Plain.log("tool", "search_memory"))
+        assertEquals("search_memory", Plain.log("device", "search_memory"))
     }
 
     @Test
     fun kindsHaveWordsAndTones() {
-        assertEquals("DID" to Tone.Cyan, Plain.kind("tool"))
         assertEquals("YOU ASKED" to Tone.Accent, Plain.kind("turn"))
         assertEquals("TRYING AGAIN" to Tone.Amber, Plain.kind("backoff"))
         assertEquals("PROBLEM" to Tone.Red, Plain.kind("error"))

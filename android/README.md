@@ -34,7 +34,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 There is no emulator in the build environment, so these are checked on a real phone:
 
 - [ ] Robot renders, follows light/dark, waves through states while a turn runs; mouth moves while replies are read aloud.
-- [ ] Rivet stays in view on Activity, Settings and the voice setup (a short band under the header); tapping the band on Activity or Settings opens Home.
+- [ ] Rivet stays in view on Activity and Settings (a short band under the header); tapping the band on Activity or Settings opens Home.
 - [ ] Switching tabs never reloads the robot (no turntable flash on Home after the first load); the mouth keeps moving with read-aloud replies and ElevenLabs speech on every tab.
 - [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway and showreel stay off.
 - [ ] "What's on my calendar tomorrow?" lists events (calendar_list).
