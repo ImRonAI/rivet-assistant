@@ -1,73 +1,98 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rivet's panel for the home screen: link status, Rivet's latest reply, the search bar and quick keys. -->
+<!-- Rivet's panel for the home screen: status, Rivet's latest reply, the search bar and quick keys. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_panel_bg"
     android:orientation="vertical"
-    android:paddingStart="18dp"
-    android:paddingTop="14dp"
-    android:paddingEnd="18dp"
-    android:paddingBottom="14dp">
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="10dp">
 
-    <LinearLayout
+    <!-- The wordmark with the widget's name under it, as in the app's header; the name may run under the status capsule. -->
+    <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:paddingStart="2dp"
+        android:paddingEnd="2dp">
 
         <TextView
             android:id="@+id/mark"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentTop="true"
             android:fontFamily="@font/big_shoulders_display_extrabold"
+            android:includeFontPadding="false"
             android:letterSpacing="0.06"
             android:text="@string/widget_mark"
-            android:textColor="#FFE8ECF0"
-            android:textSize="22sp" />
+            android:textColor="@color/rivet_ink"
+            android:textSize="20sp" />
+
+        <!-- The status capsule: an LED and the status in plain words. -->
+        <LinearLayout
+            android:id="@+id/capsule"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentTop="true"
+            android:background="@drawable/widget_key_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="7dp"
+            android:paddingEnd="10dp">
+
+            <ImageView
+                android:id="@+id/status"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/widget_dot" />
+
+            <TextView
+                android:id="@+id/status_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:fontFamily="@font/ibm_plex_mono_medium"
+                android:letterSpacing="0.1"
+                android:maxLines="1"
+                android:textColor="@color/rivet_ink2"
+                android:textSize="11sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/unit"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1"
+            android:layout_below="@id/mark"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
             android:fontFamily="@font/ibm_plex_mono_medium"
+            android:includeFontPadding="false"
             android:letterSpacing="0.14"
             android:maxLines="1"
             android:text="@string/widget_unit"
-            android:textColor="#FF8A949E"
+            android:textAllCaps="true"
+            android:textColor="@color/rivet_ink2"
             android:textSize="10sp" />
-
-        <ImageView
-            android:id="@+id/status"
-            android:layout_width="7dp"
-            android:layout_height="7dp"
-            android:importantForAccessibility="no"
-            android:src="@drawable/widget_dot" />
-
-        <TextView
-            android:id="@+id/status_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:fontFamily="@font/ibm_plex_mono_medium"
-            android:letterSpacing="0.14"
-            android:textColor="#FF8A949E"
-            android:textSize="10sp" />
-    </LinearLayout>
+    </RelativeLayout>
 
     <TextView
         android:id="@+id/last"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:ellipsize="end"
         android:fontFamily="@font/ibm_plex_sans_regular"
-        android:lineSpacingExtra="3sp"
+        android:includeFontPadding="false"
+        android:lineSpacingExtra="2sp"
         android:maxLines="2"
-        android:textColor="#FFE8ECF0"
+        android:paddingStart="2dp"
+        android:paddingEnd="2dp"
+        android:textColor="@color/rivet_ink"
         android:textSize="14sp" />
 
     <!-- Widgets may only use RemoteViews-safe classes, so an empty FrameLayout takes the slack. -->
@@ -79,20 +104,22 @@
     <LinearLayout
         android:id="@+id/bar"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="46dp"
         android:layout_marginTop="6dp"
         android:background="@drawable/widget_bar_bg"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="10dp"
-        android:paddingEnd="5dp"
-        android:paddingBottom="1.5dp">
+        android:paddingStart="7dp"
+        android:paddingEnd="3dp"
+        android:paddingBottom="2dp">
 
         <ImageView
             android:id="@+id/head"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/widget_head_bg"
             android:importantForAccessibility="no"
+            android:padding="5dp"
             android:src="@drawable/rivet_head" />
 
         <TextView
@@ -104,15 +131,16 @@
             android:fontFamily="@font/ibm_plex_sans_regular"
             android:gravity="center_vertical"
             android:maxLines="1"
-            android:paddingStart="8dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="6dp"
             android:text="@string/widget_ask"
-            android:textColor="#FF8A949E"
+            android:textColor="@color/rivet_ink2"
             android:textSize="14sp" />
 
         <FrameLayout
             android:id="@+id/mic"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="@drawable/widget_mic_bg"
             android:contentDescription="@string/widget_talk">
 
@@ -120,7 +148,6 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:layout_gravity="center"
-                android:layout_marginBottom="1dp"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_widget_mic" />
         </FrameLayout>
@@ -132,9 +159,9 @@
         android:layout_marginTop="6dp"
         android:orientation="horizontal">
 
-        <TextView android:id="@+id/key_catchup" style="@style/WidgetKey" android:text="@string/widget_key_catchup" />
-        <TextView android:id="@+id/key_myday" style="@style/WidgetKey" android:text="@string/widget_key_myday" />
-        <TextView android:id="@+id/key_texts" style="@style/WidgetKey" android:text="@string/widget_key_texts" />
-        <TextView android:id="@+id/key_calls" style="@style/WidgetKey" android:text="@string/widget_key_calls" />
+        <TextView android:id="@+id/key_catchup" style="@style/WidgetKey" android:layout_width="wrap_content" android:layout_height="32dp" android:paddingStart="4dp" android:paddingEnd="4dp" android:layout_marginStart="0dp" android:layout_marginEnd="3dp" android:text="@string/widget_key_catchup" />
+        <TextView android:id="@+id/key_myday" style="@style/WidgetKey" android:layout_width="wrap_content" android:layout_height="32dp" android:paddingStart="4dp" android:paddingEnd="4dp" android:layout_marginStart="3dp" android:layout_marginEnd="3dp" android:text="@string/widget_key_myday" />
+        <TextView android:id="@+id/key_texts" style="@style/WidgetKey" android:layout_width="wrap_content" android:layout_height="32dp" android:paddingStart="4dp" android:paddingEnd="4dp" android:layout_marginStart="3dp" android:layout_marginEnd="3dp" android:text="@string/widget_key_texts" />
+        <TextView android:id="@+id/key_calls" style="@style/WidgetKey" android:layout_width="wrap_content" android:layout_height="32dp" android:paddingStart="4dp" android:paddingEnd="4dp" android:layout_marginStart="3dp" android:layout_marginEnd="0dp" android:text="@string/widget_key_calls" />
     </LinearLayout>
 </LinearLayout>

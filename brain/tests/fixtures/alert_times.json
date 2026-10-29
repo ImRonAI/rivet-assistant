@@ -1,0 +1,92 @@
+[
+  {
+    "start": "2026-10-27T09:00",
+    "end": "",
+    "text": "Tue Oct 27, 9:00 AM"
+  },
+  {
+    "start": "2026-10-27T09:00",
+    "end": "2026-10-27T10:00",
+    "text": "Tue Oct 27, 9:00 AM to 10:00 AM"
+  },
+  {
+    "start": "2026-10-27T23:30",
+    "end": "2026-10-28T00:15",
+    "text": "Tue Oct 27, 11:30 PM to Wed Oct 28, 12:15 AM"
+  },
+  {
+    "start": "2026-10-27T12:05-07:00",
+    "end": "soon",
+    "text": "Tue Oct 27, 12:05 PM"
+  },
+  {
+    "start": "tomorrow morning",
+    "end": "",
+    "text": "tomorrow morning"
+  },
+  {
+    "start": "tomorrow morning",
+    "end": "2026-10-27T10:00",
+    "text": "tomorrow morning"
+  },
+  {
+    "start": "2026-10-27",
+    "end": "",
+    "text": "Tue Oct 27, 12:00 AM"
+  },
+  {
+    "start": "2026-10-27T09:00:30.123456Z",
+    "end": "2026-10-27T17:45:00+02:00",
+    "text": "Tue Oct 27, 9:00 AM to 5:45 PM"
+  },
+  {
+    "start": "2026-10-27T00:00",
+    "end": "2026-10-27T12:00",
+    "text": "Tue Oct 27, 12:00 AM to 12:00 PM"
+  },
+  {
+    "start": "2026-10-27T12:59:59",
+    "end": "2026-10-27T13:00",
+    "text": "Tue Oct 27, 12:59 PM to 1:00 PM"
+  },
+  {
+    "start": "2026-10-27T24:00",
+    "end": "",
+    "text": "2026-10-27T24:00"
+  },
+  {
+    "start": "2026-02-30T09:00",
+    "end": "",
+    "text": "2026-02-30T09:00"
+  },
+  {
+    "start": "2026-10-27T09:00",
+    "end": "2026-11-01",
+    "text": "Tue Oct 27, 9:00 AM to Sun Nov 1, 12:00 AM"
+  },
+  {
+    "start": "2026-12-31T22:00",
+    "end": "2027-01-01T01:30",
+    "text": "Thu Dec 31, 10:00 PM to Fri Jan 1, 1:30 AM"
+  },
+  {
+    "start": "2028-02-29T09:00+05:30:15",
+    "end": "",
+    "text": "Tue Feb 29, 9:00 AM"
+  },
+  {
+    "start": "+12026-10-27T09:00",
+    "end": "",
+    "text": "+12026-10-27T09:00"
+  },
+  {
+    "start": " 2026-10-27T09:00",
+    "end": "",
+    "text": " 2026-10-27T09:00"
+  },
+  {
+    "start": "",
+    "end": "",
+    "text": ""
+  }
+]

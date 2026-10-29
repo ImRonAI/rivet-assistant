@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.text.SpannableString
 import android.text.Spanned
@@ -26,12 +25,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** The 4x1 search bar: ask anything, or tap the orange key to talk. */
+/** The 4x1 search bar: search or ask, or tap the orange key to talk. */
 class SearchWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = RivetWidgets.render(context, manager, ids, panel = false)
 }
 
-/** The 4x2 panel: link status, Rivet's latest reply, the search bar and quick keys. */
+/** The 4x2 panel: connection status, Rivet's latest reply, the search bar and quick keys. */
 class PanelWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = RivetWidgets.render(context, manager, ids, panel = true)
 }
@@ -43,12 +42,10 @@ object RivetWidgets {
     const val ACTION_LISTEN = "com.hiron.rivet.action.LISTEN"
     const val ACTION_TYPE = "com.hiron.rivet.action.TYPE"
     const val ACTION_QUICK = "com.hiron.rivet.action.QUICK"
-    private const val PREFS = "rivet_widgets"
 
-    private val OK = Color.parseColor("#42D392")
-    private val AMBER = Color.parseColor("#F2B544")
-    private val CRIMSON = Color.parseColor("#E5484D")
-    private val ACCENT = Color.parseColor("#FF5A1F")
+    /** Opens the search sheet: widgets can't take typing, so the field is in the app. */
+    const val ACTION_SEARCH = "com.hiron.rivet.action.SEARCH"
+    private const val PREFS = "rivet_widgets"
 
     /** Keeps every placed widget in step with the runtime. Streaming text is skipped; finished replies count. */
     fun follow(context: Context, runtime: RivetRuntime) {
@@ -63,7 +60,7 @@ object RivetWidgets {
 
     fun snapshotOf(state: RivetState) = WidgetSnapshot(
         connection = state.connection,
-        lastReply = state.messages.lastOrNull { !it.fromUser && !it.streaming && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
+        lastReply = state.messages.lastOrNull { !it.fromUser && it.spoken && !it.streaming && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
         waiting = state.approvals.size,
     )
 
@@ -81,18 +78,19 @@ object RivetWidgets {
 
     fun views(context: Context, snap: WidgetSnapshot, panel: Boolean): RemoteViews {
         val views = RemoteViews(context.packageName, if (panel) R.layout.widget_panel else R.layout.widget_search)
-        val (dot, label) = when {
-            snap.waiting > 0 -> AMBER to "${snap.waiting} WAITING"
-            snap.connection == Connection.Online -> OK to "ONLINE"
-            snap.connection == Connection.Connecting -> AMBER to "LINKING"
-            else -> CRIMSON to "OFFLINE"
+        val (colour, label) = when {
+            snap.waiting > 0 -> R.color.rivet_amber to "${snap.waiting} WAITING"
+            snap.connection == Connection.Online -> R.color.rivet_ok to "ONLINE"
+            snap.connection == Connection.Connecting -> R.color.rivet_amber to "CONNECTING…"
+            else -> R.color.rivet_crimson to "OFFLINE"
         }
+        val dot = context.getColor(colour)
         views.setInt(R.id.status, "setColorFilter", dot)
-        views.setOnClickPendingIntent(R.id.ask, open(context, ACTION_TYPE, 1))
+        views.setOnClickPendingIntent(R.id.ask, open(context, ACTION_SEARCH, 1))
         views.setOnClickPendingIntent(R.id.head, open(context, null, 0))
         views.setOnClickPendingIntent(R.id.mic, open(context, ACTION_LISTEN, 2))
         if (panel) {
-            views.setTextViewText(R.id.mark, mark())
+            views.setTextViewText(R.id.mark, mark(context.getColor(R.color.rivet_accent)))
             views.setTextViewText(R.id.status_text, label)
             views.setTextColor(R.id.status_text, dot)
             views.setTextViewText(
@@ -114,7 +112,7 @@ object RivetWidgets {
         return views
     }
 
-    private fun mark() = SpannableString("RIVET").apply { setSpan(ForegroundColorSpan(ACCENT), 3, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+    private fun mark(accent: Int) = SpannableString("RIVET").apply { setSpan(ForegroundColorSpan(accent), 3, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
 
     private fun open(context: Context, action: String?, code: Int, data: Uri? = null): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).setAction(action).setData(data)

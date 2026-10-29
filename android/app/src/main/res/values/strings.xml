@@ -4,10 +4,10 @@
     <string name="operator_stop">■  Stop Rivet</string>
     <string name="operator_label">Rivet app operator</string>
     <string name="operator_description">Lets Rivet read the screen and tap, type and scroll in other apps when you ask it to. Rivet never reads or types passwords, shows a Stop button while it works, and asks you before anything that sends, pays or deletes.</string>
-    <string name="widget_ask">Ask Rivet anything</string>
+    <string name="widget_ask">Search or ask Rivet</string>
     <string name="widget_talk">Talk to Rivet</string>
     <string name="widget_mark">RIVET</string>
-    <string name="widget_unit">R-7 · ASSISTANT</string>
+    <string name="widget_unit">Your assistant</string>
     <string name="widget_waiting">Ask Rivet for anything: your day, your texts, a call back.</string>
     <plurals name="widget_needs_ok">
         <item quantity="one">Rivet is waiting on your OK for %d action. Tap to review it.</item>
@@ -18,7 +18,7 @@
     <string name="widget_key_texts">Texts</string>
     <string name="widget_key_calls">Calls</string>
     <string name="widget_search_label">Rivet search</string>
-    <string name="widget_search_description">Ask Rivet anything, or tap the orange key to talk.</string>
+    <string name="widget_search_description">Search the web or ask Rivet, or tap the orange key to talk.</string>
     <string name="widget_panel_label">Rivet panel</string>
     <string name="widget_panel_description">Rivet\'s status and latest reply, the search bar and quick keys.</string>
     <string name="shortcut_talk">Talk to Rivet</string>

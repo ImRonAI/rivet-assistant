@@ -6,6 +6,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from .search import KINDS
+
 logger = logging.getLogger(__name__)
 
 UiSink = Callable[[dict[str, Any]], None]
@@ -22,8 +24,9 @@ class RivetEventBridge:
     """Translates SDK stream events into compact UI events.
 
     UI events (``type``): ``text``, ``thinking``, ``searching``, ``sources``, ``report``, ``tool``,
-    ``tool_done`` (one per tool-result message), ``backoff``, ``usage``, ``notice``. The phone maps them to
-    Rivet's moves.
+    ``tool_done`` (one per tool-result message), ``search.results`` {tool_id, results} (after ``tool_done``, for
+    each successful ``search_*`` tool result carrying a search envelope), ``backoff``, ``usage``, ``notice``. The
+    phone maps them to Rivet's moves.
 
     Args:
         sink: Receives each UI event; must not block. Errors it raises are logged, never propagated.
@@ -41,18 +44,27 @@ class RivetEventBridge:
         self.sink = sink
         self.on_activity = on_activity
         self.on_untrusted = on_untrusted
-        self._announced_tools: set[str] = set()
+        self._announced_tools: dict[str, str] = {}
 
     def __call__(self, **kwargs: Any) -> None:
         """Callback-handler entry point."""
         label, event = self._translate(kwargs)
         if self.on_activity is not None:
             self.on_activity(label)
-        if event is not None and self.sink is not None:
-            try:
-                self.sink(event)
-            except Exception:
-                logger.exception("event_type=<%s> | ui sink failed", event.get("type"))
+        if event is None:
+            return
+        self._send(event)
+        if event["type"] == "tool_done":
+            for search in self._search_results(kwargs["message"]):
+                self._send(search)
+
+    def _send(self, event: dict[str, Any]) -> None:
+        if self.sink is None:
+            return
+        try:
+            self.sink(event)
+        except Exception:
+            logger.exception("event_type=<%s> | ui sink failed", event.get("type"))
 
     def _translate(self, kwargs: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
         if "data" in kwargs:
@@ -77,7 +89,7 @@ class RivetEventBridge:
         tool_id = tool_use.get("toolUseId") if isinstance(tool_use, dict) else None
         if not tool_id or tool_id in self._announced_tools:
             return None
-        self._announced_tools.add(tool_id)
+        self._announced_tools[tool_id] = str(tool_use.get("name") or "")
         return {"type": "tool", "id": tool_id, "name": tool_use.get("name")}
 
     @staticmethod
@@ -87,6 +99,21 @@ class RivetEventBridge:
         if not results:
             return None
         return {"type": "tool_done", "tools": [{"id": r.get("toolUseId"), "status": r.get("status")} for r in results]}
+
+    def _search_results(self, message: dict[str, Any]) -> list[dict[str, Any]]:
+        events = []
+        for block in message.get("content") or []:
+            result = block.get("toolResult") if isinstance(block, dict) else None
+            if not isinstance(result, dict) or result.get("status") != "success":
+                continue
+            tool_id = result.get("toolUseId")
+            if not self._announced_tools.get(str(tool_id), "").startswith("search_"):
+                continue
+            content = result.get("content") or [{}]
+            envelope = content[0].get("json") if isinstance(content[0], dict) else None
+            if isinstance(envelope, dict) and envelope.get("kind") in KINDS:
+                events.append({"type": "search.results", "tool_id": tool_id, "results": envelope})
+        return events
 
     def _rivet(self, payload: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
         kind = str(payload.get("type", "activity"))

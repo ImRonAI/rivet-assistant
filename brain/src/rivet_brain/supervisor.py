@@ -53,6 +53,7 @@ from strands.types.exceptions import (
 )
 from strands.vended_plugins.goal import GoalLoop
 
+from .alerts import because_task, because_you_asked
 from .approvals import TELNYX_PREFIX, TURN_KEY, RivetApprovals
 from .config import BrainSettings, WatchdogSettings
 from .events import UiSink
@@ -397,11 +398,11 @@ class SessionSupervisor:
 
     # -- public turn API ------------------------------------------------------------------------------------
 
-    async def send(self, prompt: Any, *, turn_id: str | None = None) -> TurnOutcome:
+    async def send(self, prompt: Any, *, turn_id: str | None = None, untrusted: bool = False) -> TurnOutcome:
         """Run one user turn on the conversation lane.
 
         A message that arrives while approvals are pending denies them first (the old turn finishes), then
-        runs as a new turn.
+        runs as a new turn. ``untrusted`` taints the turn from the start (the prompt carries web content).
         """
         lane = self._lane(DEFAULT_LANE, self._tools)
         caller_id = turn_id is not None
@@ -423,7 +424,9 @@ class SessionSupervisor:
                 await self._seal(lane)
             gen = await self._ensure_built(lane)
             gen.agent.state.set(TURN_KEY, turn_id)
-            self._set_status(gen.agent, {"turn_id": turn_id, "status": "running"})
+            if untrusted:
+                self.approvals.mark_untrusted(gen.agent.state)
+            self._set_status(gen.agent, _running(turn_id, because_you_asked(prompt)))
             self._emit({"type": "turn.started", "turn_id": turn_id, "lane": lane.agent_id})
             return await self._drive(lane, turn_id, prompt)
 
@@ -434,6 +437,11 @@ class SessionSupervisor:
             raise NoPendingApprovalError(f"no lane '{lane_id}'")
         async with lane.lock:
             return await self._answer(lane, answers)
+
+    @property
+    def busy(self) -> bool:
+        """A lane is running a turn or task, or waiting for an approval."""
+        return any(lane.lock.locked() or self.pending_approvals(lane.agent_id) for lane in self._lanes.values())
 
     @property
     def lanes(self) -> list[str]:
@@ -448,7 +456,7 @@ class SessionSupervisor:
         status = self._status(lane.gen.agent)
         if status.get("status") != "awaiting_approval":
             return []
-        return [_sheet(p) for p in status.get("pending", [])]
+        return [_sheet(p, status.get("because")) for p in status.get("pending", [])]
 
     async def run_task(
         self,
@@ -458,8 +466,12 @@ class SessionSupervisor:
         max_attempts: int = 5,
         timeout: float = 1800.0,
         tools: Sequence[Any] | None = None,
+        reason: str | None = None,
     ) -> TurnOutcome:
-        """Run a goal-driven task on its own lane, judged by GoalLoop on the aux model."""
+        """Run a goal-driven task on its own lane, judged by GoalLoop on the aux model.
+
+        ``reason`` is why the task exists, in plain words; approvals it raises show it (else the goal).
+        """
         task_id = task_id or uuid.uuid4().hex[:12]
         budget = GoalBudget(goal, max_attempts, time.time() + timeout)
         lane = self._lane(f"task-{task_id}", self._tools if tools is None else tools, goal=budget)
@@ -469,7 +481,7 @@ class SessionSupervisor:
             except _GiveUp as error:
                 return self._failed(lane, task_id, str(error), 0)
             gen.agent.state.set(TURN_KEY, task_id)
-            self._set_status(gen.agent, {"turn_id": task_id, "status": "running"})
+            self._set_status(gen.agent, _running(task_id, reason or because_task(goal)))
             self._emit({"type": "turn.started", "turn_id": task_id, "lane": lane.agent_id, "goal": goal})
             return await self._drive(lane, task_id, f"Task: {goal}")
 
@@ -585,16 +597,23 @@ class SessionSupervisor:
     ) -> TurnOutcome:
         gen = _current(lane)
         expires_at = time.time() + self.settings.approval_timeout
-        self._set_status(
-            gen.agent, {"turn_id": turn_id, "status": "awaiting_approval", "pending": pending, "expires_at": expires_at}
-        )
+        because = self._status(gen.agent).get("because")
+        status: dict[str, Any] = {
+            "turn_id": turn_id,
+            "status": "awaiting_approval",
+            "pending": pending,
+            "expires_at": expires_at,
+        }
+        if isinstance(because, str):
+            status["because"] = because
+        self._set_status(gen.agent, status)
         await self._save(gen)
         self._schedule_expiry(lane, turn_id, expires_at)
         outcome = TurnOutcome(
             turn_id,
             "awaiting_approval",
             stop_reason="interrupt",
-            approvals=[_sheet(p) for p in pending],
+            approvals=[_sheet(p, because) for p in pending],
             restarts=restarts,
             lane=lane.agent_id,
         )
@@ -818,7 +837,7 @@ class SessionSupervisor:
                 turn_id,
                 "awaiting_approval",
                 stop_reason="interrupt",
-                approvals=[_sheet(p) for p in pending],
+                approvals=[_sheet(p, status.get("because")) for p in pending],
                 lane=lane.agent_id,
             )
             self._emit(outcome.to_event())
@@ -1126,13 +1145,23 @@ def _responses(answers: Mapping[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _sheet(pending: Mapping[str, Any]) -> dict[str, Any]:
+def _running(turn_id: str, because: str | None) -> dict[str, Any]:
+    status: dict[str, Any] = {"turn_id": turn_id, "status": "running"}
+    if because:
+        status["because"] = because
+    return status
+
+
+def _sheet(pending: Mapping[str, Any], because: object = None) -> dict[str, Any]:
     reason = pending.get("reason")
     try:
         request = json.loads(reason) if isinstance(reason, str) else reason
     except ValueError:
-        request = {"summary": reason}
-    return {"id": pending.get("id"), "name": pending.get("name"), "request": request}
+        request = {"headline": reason}
+    sheet = {"id": pending.get("id"), "name": pending.get("name"), "request": request}
+    if isinstance(because, str) and because:
+        sheet["because"] = because
+    return sheet
 
 
 def _pending_from(interrupts: Mapping[str, Any]) -> list[dict[str, Any]]:

@@ -34,6 +34,9 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 There is no emulator in the build environment, so these are checked on a real phone:
 
 - [ ] Robot renders, follows light/dark, waves through states while a turn runs; mouth moves while replies are read aloud.
+- [ ] Rivet stays in view on Activity, Settings and the voice setup (a short band under the header); tapping the band on Activity or Settings opens Home.
+- [ ] Switching tabs never reloads the robot (no turntable flash on Home after the first load); the mouth keeps moving with read-aloud replies and ElevenLabs speech on every tab.
+- [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway and showreel stay off.
 - [ ] "What's on my calendar tomorrow?" lists events (calendar_list).
 - [ ] "Text <contact> I'm running late": contacts_search, then an approval card; Approve sends; the text appears in Messages.
 - [ ] Deny the same request: nothing is sent and Rivet says so.
@@ -54,3 +57,13 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Live call (after setting up call answering again, and with your own number in Settings): the ongoing
       notification shows what the caller and Rivet say; **Take over** (after unlocking) rings your phone and
       connects you to the caller; when the call ends, the summary replaces the notification and appears in Activity.
+- [ ] Approvals (0.4.0): "Text Dana …" shows the contact's name and "You asked: …"; tick "Don't ask again" and
+      **Always deny**: the next identical request is declined without a sheet and Activity says "Declined by your
+      rule"; **Always allow** asks for biometrics; Settings › Approval rules lists both and **Remove** works while
+      connected (disabled offline). A purchase offers only Deny.
+- [ ] Notifications (0.4.0): two pending approvals show a "2 things need your OK" summary that goes away at one; a
+      call keeps one notification from "answering" to its summary, with the caller's message in it; opening Rivet
+      clears approval notifications. Grouping and alert-once behaviour are verified only under Robolectric.
+- [ ] Recommended settings (0.4.0): from the power-on screen and Settings, the sheet lists only what would change;
+      Apply runs the permission prompt and then Android's default apps screen; Settings › **Undo recommended
+      settings** puts the settings back.

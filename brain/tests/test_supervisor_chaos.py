@@ -10,6 +10,7 @@ import pytest
 from strands import tool
 
 from rivet_brain.approvals import ToolPolicy
+from rivet_brain.device_tools import SMS_STANDING
 from rivet_brain.supervisor import ACTIONS_KEY, MAY_HAVE_RUN
 from tests.chaos import make_supervisor, roles, silent_stream, user_texts
 from tests.sse import SSE, FakePerplexity, error_response
@@ -64,7 +65,10 @@ async def test_hung_side_effect_after_approval_is_reported_as_uncertain_and_neve
         ]
     )
     supervisor = make_supervisor(
-        tmp_path, main, tools=[send_sms], policies={"send_sms": ToolPolicy("send", "Send an SMS", scope_arg="to")}
+        tmp_path,
+        main,
+        tools=[send_sms],
+        policies={"send_sms": ToolPolicy("send", "Send an SMS", standing=SMS_STANDING)},
     )
     await supervisor.start()
     try:

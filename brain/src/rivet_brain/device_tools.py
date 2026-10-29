@@ -9,14 +9,16 @@ asks, and the app operator asks at commit points, judged from the label the phon
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from strands.tools import PythonAgentTool
 
+from .alerts import alert_for
 from .approvals import Tier, ToolPolicy
 from .device import DeviceBridge, device_tool
+from .rules import Standing
 
 
 @dataclass(frozen=True)
@@ -143,12 +145,25 @@ def screen_act_tier(tool_input: Any) -> tuple[Tier, str]:
     return "read", summary
 
 
-def _recipient(field: str, verb: str) -> Any:
-    def assess(tool_input: Any) -> tuple[Tier, str]:
-        value = tool_input.get(field) if isinstance(tool_input, Mapping) else None
-        return "send", f"{verb} {value}" if value else verb
+def _sends(tool: str) -> Callable[[object], tuple[Tier, str]]:
+    def assess(tool_input: object) -> tuple[Tier, str]:
+        return "send", alert_for(tool, tool_input, "send", ()).headline
 
     return assess
+
+
+SMS_STANDING = Standing((("to", "phone"),), frozenset({"to"}), True, lambda scope: f"Texts to {scope['to']}")
+CALL_STANDING = Standing(
+    (("number", "phone"),), frozenset({"number"}), True, lambda scope: f"Calls to {scope['number']}"
+)
+CALENDAR_STANDING = Standing((), frozenset(), True, lambda scope: "Adding events to your calendar")
+TAP_STANDING = Standing(
+    (("label", "text"),),
+    frozenset({"label"}),
+    False,
+    lambda scope: f"Tapping “{scope['label']}” in apps",
+    when=(("action", frozenset({"tap"})),),
+)
 
 
 SPECS: tuple[DeviceToolSpec, ...] = (
@@ -158,7 +173,7 @@ SPECS: tuple[DeviceToolSpec, ...] = (
         "contacts_search first). Waits for the carrier's sent confirmation.",
         {"to": _str("Recipient phone number, e.g. +18015550100."), "body": _str("Message text.")},
         ("to", "body"),
-        ToolPolicy("send", "Send a text", scope_arg="to", assess=_recipient("to", "Text")),
+        ToolPolicy("send", "Send a text", standing=SMS_STANDING, assess=_sends("sms_send")),
         timeout=90.0,
     ),
     DeviceToolSpec(
@@ -187,7 +202,7 @@ SPECS: tuple[DeviceToolSpec, ...] = (
         "Place a phone call from the user's phone right now (the user talks; you don't).",
         {"number": _str("Phone number to call.")},
         ("number",),
-        ToolPolicy("send", "Place a call", scope_arg="number", assess=_recipient("number", "Call")),
+        ToolPolicy("send", "Place a call", standing=CALL_STANDING, assess=_sends("phone_call")),
         timeout=30.0,
     ),
     DeviceToolSpec(
@@ -208,7 +223,7 @@ SPECS: tuple[DeviceToolSpec, ...] = (
             "description": _str("Notes (optional)."),
         },
         ("title", "start"),
-        ToolPolicy("write", "Add a calendar event"),
+        ToolPolicy("write", "Add a calendar event", standing=CALENDAR_STANDING),
     ),
     DeviceToolSpec(
         "notifications_list",
@@ -223,7 +238,7 @@ SPECS: tuple[DeviceToolSpec, ...] = (
         "Reply to a message notification through the app's own reply action (SMS, WhatsApp, Signal, Messenger, ...).",
         {"key": _str("Notification key from notifications_list."), "text": _str("Reply text.")},
         ("key", "text"),
-        ToolPolicy("send", "Reply to a message", scope_arg="key"),
+        ToolPolicy("send", "Reply to a message"),
     ),
     DeviceToolSpec(
         "reminder_create",
@@ -293,7 +308,7 @@ SPECS: tuple[DeviceToolSpec, ...] = (
             "text": _str("Text to type (for type)."),
         },
         ("action",),
-        ToolPolicy("read", "Act in an app", scope_arg="label", assess=screen_act_tier),
+        ToolPolicy("read", "Act in an app", standing=TAP_STANDING, assess=screen_act_tier),
         timeout=30.0,
     ),
 )

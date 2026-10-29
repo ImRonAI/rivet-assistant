@@ -46,9 +46,12 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
   bearer read per request, `telnyx_` prefix, failure is fatal) and `RivetApprovals`.
 - **Approvals** (`approvals.py`): deterministic and fail-closed. Telnyx `execute` code is parsed and every
   `call_tool` target is looked up in a catalog generated from OubliTelnyxMCP's own tool construction
-  (`scripts/gen_telnyx_ops.py`): GET runs, anything else asks; purchases and deletes are high tier and
-  never remembered. Remembered approvals cover outbound sends only, expire, and are suspended for a turn
-  once it has read untrusted content (messages, mail, web pages, screens).
+  (`scripts/gen_telnyx_ops.py`): GET runs, anything else asks; purchases and deletes are high tier. Each
+  approval says in plain words what will happen, to whom and why (`alerts.py`). "Don't ask again" makes a
+  standing rule per action and recipient (`rules.py`), kept in the session's storage: an always-allow skips the
+  question, an always-decline refuses without asking and tells the model why. Purchases, deletes, unrecognised
+  actions, app taps and Telnyx code can only be always declined, and always-allows are suspended for a turn once
+  it has read untrusted content (messages, mail, web pages, screens).
 - **Supervisor** (`supervisor.py`): watchdog phase deadlines (first chunk, stream idle, model total,
   per-tool limits, retry backoff, Telnyx connection loss); stop sequence of cancel, hard cancel, abandon;
   generation fencing so an abandoned agent can never write the session; rebuild on the same session id;
@@ -60,7 +63,7 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
   tool calls routed to the phone by action id (the phone's ledger dedups them), re-sent turns ignored.
 - **Phone tools** (`device_tools.py`): the 18 tools the Android app runs, with their approval policies:
   reads run (messages, notifications, calendar and screens taint the turn), texts, replies and calls ask
-  (rememberable per recipient), calendar writes ask, and the app operator asks when a tap's label reads
+  (a standing rule is per recipient), calendar writes ask, and the app operator asks when a tap's label reads
   like a commit point (send, pay, delete, confirm). The phone refuses a tap whose label changed.
 
 ## Answering your calls (`brain/src/rivet_brain/calls.py`)
@@ -110,7 +113,7 @@ start with any other port, and sends nothing to a 587 server that offers no STAR
 
 - `email_search` and `email_read` run without asking and never mark mail read; what they return marks the turn
   untrusted.
-- `email_send` and `email_reply` ask first. A remembered approval covers the same `to` and `cc`, or replies to the
+- `email_send` and `email_reply` ask first. A standing rule covers the same `to` and `cc`, or replies to the
   same sender. A reply names the address it goes to, which must be the email's Reply-To (or its sender), and threads
   under it (`Re:`, `In-Reply-To`, `References`). Both file a copy in the folder the server marks `\Sent`.
 - `email_mark` (read, unread, archive) asks too. Archive moves the email to the folder marked `\Archive`, or Gmail's
@@ -120,7 +123,7 @@ On Fly (`deploy_fly.sh` also stages any `RIVET_EMAIL_*` set in its environment):
 
 ```bash
 read -rs RIVET_EMAIL_PASSWORD   # paste the app password; it stays out of your shell history
-fly secrets set -a rivet-brain-hiron RIVET_EMAIL_ADDRESS=you@gmail.com RIVET_EMAIL_PASSWORD="$RIVET_EMAIL_PASSWORD"
+fly secrets set -a rivet-assistant RIVET_EMAIL_ADDRESS=you@gmail.com RIVET_EMAIL_PASSWORD="$RIVET_EMAIL_PASSWORD"
 ```
 
 Gmail needs an app password: turn on 2-Step Verification, then create one at
@@ -149,7 +152,9 @@ installing and the on-device checklist.
 - **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
   reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
 - **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that
-  need the phone unlocked, and biometrics or the device credential for high-risk tiers.
+  need the phone unlocked, and biometrics or the device credential for high-risk tiers and for every
+  always-allow. "Don't ask again" works with Approve and with Deny; the rules are listed and removable in
+  Settings › Approval rules.
 - **Device tools**: `ActionLedger` records every action by the brain's tool use id, so a re-sent call returns
   its stored result and one interrupted by the app dying is reported as uncertain, never repeated.
 
@@ -162,7 +167,7 @@ export PERPLEXITY_API_KEY=... HORIZON_API_KEY=... RIVET_DEVICE_TOKEN=$(python -c
 uv run rivet-brain            # serves :8080, /healthz and /v1/sessions/{session_id}
 ```
 
-Deployed on Fly.io as `rivet-brain-hiron` (https://rivet-brain-hiron.fly.dev, region `sjc`, one machine,
+Deployed on Fly.io as `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, one machine,
 1 GB volume): `brain/scripts/deploy_fly.sh` creates or updates it (`FLY_LOCAL_BUILD=1` builds with local
 Docker when Fly's remote builder is unreachable). `brain/scripts/setup_call_answering.py` sets up call
 answering for a session from outside the phone.

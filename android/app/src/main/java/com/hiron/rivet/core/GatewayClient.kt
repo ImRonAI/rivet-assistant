@@ -14,12 +14,14 @@ data class GatewayConfig(val url: String, val token: String, val sessionId: Stri
     val complete: Boolean get() = url.isNotBlank() && token.isNotBlank() && sessionId.isNotBlank()
 
     /** `https://host` (or `wss://host`) to the session's socket URL; OkHttp upgrades http(s) URLs itself. */
-    fun socketUrl(): String {
+    fun socketUrl(): String = "${baseUrl()}/v1/sessions/$sessionId"
+
+    /** The brain's `https://host`, however the URL was typed. */
+    fun baseUrl(): String {
         val base = url.trim().trimEnd('/')
             .replaceFirst(Regex("^wss://", RegexOption.IGNORE_CASE), "https://")
             .replaceFirst(Regex("^ws://", RegexOption.IGNORE_CASE), "http://")
-        val withScheme = if (base.startsWith("http://") || base.startsWith("https://")) base else "https://$base"
-        return "$withScheme/v1/sessions/$sessionId"
+        return if (base.startsWith("http://") || base.startsWith("https://")) base else "https://$base"
     }
 }
 

@@ -2,7 +2,9 @@
 
 Event and item shapes follow ``docs.perplexity.ai/api-reference/agent-post`` (``ResponseStreamEvent`` and
 ``OutputItem``). Notably there are no ``response.function_call_arguments.*`` events: a function call
-arrives whole on ``response.output_item.added/done``.
+arrives whole on ``response.output_item.added/done``. Groq streams a function call as an empty item, then
+``function_call_arguments.delta`` and ``.done`` keyed by the item id (``groq_function_call``; recorded live from
+Groq with a function tool).
 """
 
 from __future__ import annotations
@@ -67,6 +69,22 @@ class SSE:
         self._emit("response.output_item.added", output_index=1, item=item)
         return self._emit("response.output_item.done", output_index=1, item=item)
 
+    def groq_function_call(self, name: str, arguments: dict[str, Any], call_id: str = "call_1") -> SSE:
+        """A function call as Groq streams it: an empty item, then argument deltas keyed by the item id."""
+        encoded = json.dumps(arguments)
+        item: dict[str, Any] = {
+            "type": "function_call",
+            "id": call_id,
+            "call_id": call_id,
+            "name": name,
+            "arguments": "",
+            "status": "in_progress",
+        }
+        self._emit("response.output_item.added", output_index=1, item=item)
+        self._emit("response.function_call_arguments.delta", item_id=call_id, output_index=1, delta=encoded)
+        self._emit("response.output_item.done", output_index=1, item={**item, "arguments": encoded})
+        return self._emit("response.function_call_arguments.done", item_id=call_id, output_index=1, arguments=encoded)
+
     def text(self, *parts: str, item_id: str = "msg_1") -> SSE:
         for part in parts:
             self._emit("response.output_text.delta", item_id=item_id, output_index=2, content_index=0, delta=part)
@@ -126,6 +144,10 @@ class FakePerplexity:
 
     def transport_factory(self) -> Callable[[], httpx.AsyncBaseTransport]:
         return lambda: httpx.MockTransport(self)
+
+
+class FakeGroq(FakePerplexity):
+    """A scripted Responses API on Groq's side; it scripts and records exactly as ``FakePerplexity`` does."""
 
 
 def error_response(status: int, code: str, message: str) -> httpx.Response:

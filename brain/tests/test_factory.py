@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
+from strands import tool
 from strands.storage import LocalFileStorage
 from strands_harness import HARNESS_CONTRACT
 
-from rivet_brain.approvals import TURN_KEY, RivetApprovals
-from rivet_brain.config import BrainSettings
-from rivet_brain.factory import RIVET_INSTRUCTIONS, Generation, build_agent
-from rivet_brain.models.perplexity import build_perplexity_model
+from rivet_brain.approvals import TURN_KEY, RivetApprovals, ToolPolicy
+from rivet_brain.config import BrainSettings, available_providers, default_provider
+from rivet_brain.factory import RIVET_INSTRUCTIONS, Generation, build_agent, build_models
+from rivet_brain.models.groq import GroqModel
+from rivet_brain.models.perplexity import PerplexityAgentModel, build_perplexity_model
 from rivet_brain.storage import FenceHolder
-from tests.sse import SSE, FakePerplexity
+from tests.sse import SSE, FakeGroq, FakePerplexity
 from tests.telnyx_server import INSTRUCTIONS, FakeTelnyx, serve_fake_telnyx
 
 LIST = "return await call_tool('ListPhoneNumbers', {})"
@@ -146,3 +149,78 @@ def test_next_generation_restores_the_session_with_a_fresh_prompt(tmp_path: Path
         assert len(second.agent.messages) == 4
     finally:
         second.agent.cleanup()
+
+
+def test_build_models_follows_the_provider(tmp_path: Path) -> None:
+    perplexity = BrainSettings(perplexity_api_key="p", groq_api_key="g")
+    main, aux = build_models(perplexity)
+    assert isinstance(main, PerplexityAgentModel) and isinstance(aux, PerplexityAgentModel)
+    groq = replace(perplexity, model_provider="groq")
+    main, aux = build_models(groq)
+    assert isinstance(main, GroqModel) and isinstance(aux, GroqModel) and main is not aux
+    assert main.config["model_id"] == "qwen/qwen3.8-27b" and main.context_window_limit == 131_072
+    assert main.client_args["base_url"] == "https://api.groq.com/openai/v1" and not main.stateful
+    with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+        build_models(replace(groq, groq_api_key=None))
+
+
+def test_a_scripted_groq_turn_calls_a_tool_and_answers(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    @tool
+    def device_status() -> str:
+        """Read the phone's battery and network."""
+        calls.append("status")
+        return "battery 80%"
+
+    fake = FakeGroq(
+        [
+            SSE().groq_function_call("device_status", {}).completed(cost=None),
+            SSE("r2").text("Your battery is at 80%.").completed(cost=None),
+        ]
+    )
+    aux = FakeGroq([], fallback=lambda: SSE("aux").text("[]").completed(cost=None))
+    models = (
+        GroqModel(api_key="k", model_id="qwen/qwen3.8-27b", transport_factory=fake.transport_factory()),
+        GroqModel(api_key="k", model_id="qwen/qwen3.8-27b", transport_factory=aux.transport_factory()),
+    )
+    generation = build_agent(
+        replace(_settings(tmp_path, "http://unused"), model_provider="groq"),
+        session_id="s1",
+        fence=FenceHolder(),
+        backend=LocalFileStorage(str(tmp_path / "sessions")),
+        approvals=RivetApprovals({"device_status": ToolPolicy("read", "Read the phone's status")}),
+        tools=[device_status],
+        models=models,
+        require_telnyx=False,
+    )
+    try:
+        assert "Your battery is at 80%." in str(generation.agent("how's my battery?"))
+    finally:
+        generation.agent.cleanup()
+    assert calls == ["status"]
+    first, second = fake.requests
+    assert first["model"] == "qwen/qwen3.8-27b" and first["store"] is False and "previous_response_id" not in second
+    assert "You can search the web" not in first["instructions"]
+    output = next(i for i in second["input"] if i.get("type") == "function_call_output")
+    assert output["call_id"] == "call_1" and "battery 80%" in str(output)
+
+
+def test_provider_settings_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("RIVET_MODEL_PROVIDER", "GROQ_API_KEY", "GROQ_MODEL", "GROQ_CONTEXT_WINDOW", "PERPLEXITY_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    settings = BrainSettings.from_env()
+    assert settings.model_provider == "perplexity" and settings.groq_model_id == "qwen/qwen3.8-27b"
+    assert available_providers(settings) == () and default_provider(settings) == "perplexity"
+    monkeypatch.setenv("RIVET_MODEL_PROVIDER", "groq")
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "p")
+    settings = BrainSettings.from_env()
+    # Groq was asked for but has no key, so the effective default is the provider that has one.
+    assert available_providers(settings) == ("perplexity",) and default_provider(settings) == "perplexity"
+    monkeypatch.setenv("GROQ_API_KEY", "g")
+    monkeypatch.setenv("GROQ_CONTEXT_WINDOW", "65536")
+    settings = BrainSettings.from_env()
+    assert default_provider(settings) == "groq" and settings.groq_context_window == 65536
+    monkeypatch.setenv("RIVET_MODEL_PROVIDER", "llama")
+    with pytest.raises(ValueError, match="perplexity or groq"):
+        BrainSettings.from_env()

@@ -12,6 +12,7 @@ from rivet_brain.approvals import RivetApprovals
 from rivet_brain.device import DeviceBridge
 from rivet_brain.device_tools import POLICIES, SPECS, screen_act_tier, tools_for
 from rivet_brain.gateway import create_app
+from rivet_brain.rules import Target
 from tests.chaos import Aux, fast_settings, make_build, make_supervisor
 from tests.sse import SSE, FakePerplexity
 
@@ -58,11 +59,13 @@ def test_policy_tiers(tool: str, tool_input: dict[str, Any], tier: str, untruste
     assert assessment.tier == tier and assessment.untrusted_output is untrusted
 
 
-def test_send_summaries_name_the_recipient_and_remember_per_recipient() -> None:
+def test_send_headlines_name_the_recipient_and_rules_are_per_recipient() -> None:
     approvals = RivetApprovals(POLICIES)
-    sms = approvals.assess("sms_send", {"to": "+18015550100", "body": "hi"})
-    assert sms.summary == "Text +18015550100" and sms.scope == "to=+18015550100"
+    sms = approvals.assess("sms_send", {"to": "+1 (801) 555-0100", "body": "hi"})
+    assert sms.summary == "Text +1 (801) 555-0100: “hi”"
+    assert sms.target == Target("sms_send", (("to", "+18015550100"),))
     assert approvals.assess("phone_call", {"number": "911"}).summary == "Call 911"
+    assert approvals.assess("notification_reply", {"key": "k", "text": "ok"}).target is None
 
 
 @pytest.mark.parametrize(
@@ -125,7 +128,9 @@ def test_an_approved_text_runs_on_the_phone_exactly_once(tmp_path: Path) -> None
         request, seen = _until(socket, "approval.request")
         assert not any(e["type"] == "device.call" for e in seen)
         sheet = request["approvals"][0]["request"]
-        assert sheet["tool"] == "sms_send" and sheet["summary"] == "Text +18015550100" and sheet["remember"] is True
+        assert sheet["tool"] == "sms_send" and sheet["headline"] == "Text +18015550100: “Running late”"
+        assert sheet["offer"]["label"] == "Texts to +18015550100" and sheet["offer"]["allow"] is True
+        assert request["approvals"][0]["because"] == "You asked: “tell Ada I'm late”"
         socket.send_json({"type": "approval.response", "answers": {request["approvals"][0]["id"]: {"approved": True}}})
         call, _ = _until(socket, "device.call")
         assert call["tool"] == "sms_send" and call["input"]["body"] == "Running late"

@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The search bar: a HUD-card pill with a hairline, a lit top edge and a lip underneath. -->
+<!-- The search bar: a glass pill with a hairline, a soft shadow under it and light along its top edge. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:top="1.5dp">
+    <item android:top="2dp">
         <shape android:shape="rectangle">
             <corners android:radius="28dp" />
-            <solid android:color="#99000000" />
+            <solid android:color="@color/rivet_shadow" />
         </shape>
     </item>
-    <item android:bottom="1.5dp">
+    <item android:bottom="2dp">
         <shape android:shape="rectangle">
             <corners android:radius="28dp" />
-            <gradient android:angle="270" android:startColor="#FA181E26" android:endColor="#FA11161C" />
-            <stroke android:width="1dp" android:color="#29E8ECF0" />
+            <solid android:color="@color/rivet_glass" />
+            <stroke android:width="1dp" android:color="@color/rivet_edge" />
         </shape>
+    </item>
+    <item android:left="28dp" android:right="28dp" android:top="1dp" android:height="1dp" android:gravity="top">
+        <shape android:shape="rectangle"><solid android:color="@color/rivet_highlight" /></shape>
     </item>
 </layer-list>

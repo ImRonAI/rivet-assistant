@@ -3,9 +3,10 @@
 Risk is decided from data, never by a model: Telnyx operations by their HTTP method in the bundled
 catalog (generated from OubliTelnyxMCP's own tool construction, see ``scripts/gen_telnyx_ops.py``),
 local tools by the policy they are registered with. Anything the policy cannot classify asks.
-Approvals and the per-turn taint live in ``agent.state``, so they persist with the session and survive
-a supervisor rebuild; ``Confirm`` interrupt ids are derived from the tool use id, so a pending approval
-keeps its id across a restart too.
+The per-turn taint lives in ``agent.state``, so it persists with the session and survives a supervisor rebuild;
+``Confirm`` interrupt ids are derived from the tool use id, so a pending approval keeps its id across a restart too.
+The user's standing "always allow" and "always decline" rules are the session's ``StandingRules`` (``rules.py``),
+checked here before anything is asked; what each approval says is composed by ``alerts.py``.
 """
 
 from __future__ import annotations
@@ -14,28 +15,64 @@ import ast
 import json
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cache, partial
 from importlib import resources
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
+from strands.agent.state import AgentState
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
-from strands.interventions import Confirm, InterventionHandler, Proceed
+from strands.interventions import Confirm, Deny, InterventionHandler, Proceed, Transform
+from strands.interventions.actions import LifecycleEvent
 from strands.interventions.handler import OnError
+from strands.types.tools import ToolResult
+
+from .alerts import ALERT_TOOLS, Alert, alert_for, operation_summary
+from .rules import (
+    Decision,
+    NoAllow,
+    RuleOffer,
+    Standing,
+    StandingRule,
+    StandingRules,
+    Target,
+    normalize,
+    standing_of,
+)
 
 logger = logging.getLogger(__name__)
 
 Tier = Literal["read", "send", "write", "destructive", "purchase", "unknown"]
 _RANK: dict[Tier, int] = {"read": 0, "send": 1, "write": 2, "destructive": 3, "purchase": 4, "unknown": 5}
 HIGH_TIERS: frozenset[Tier] = frozenset({"destructive", "purchase", "unknown"})
-REMEMBERABLE_TIERS: frozenset[Tier] = frozenset({"send"})
+_NO_ALLOW_TIERS: dict[Tier, NoAllow] = {"purchase": "purchase", "destructive": "destructive", "unknown": "unknown"}
 
 TURN_KEY = "rivet.turn"
 """``agent.state`` key the supervisor sets to the current turn id (unchanged when a turn resumes)."""
 APPROVALS_KEY = "rivet.approvals"
-MAX_REMEMBER_MINUTES = 24 * 60
+"""``agent.state`` key holding the per-turn taint."""
 PREVIEW_LIMIT = 2000
+PROMPT_VERSION = 2
+DECLINES_KEPT = 256
+CONFIRMATION_FAILED = "CONFIRMATION_FAILED:"
+
+STANDING_DENY = (
+    "The user set Rivet to always decline this ({label}), so it was not done. Don't try it again or offer it. If the "
+    "user asks for it, tell them it's blocked by a rule they can remove in Rivet › Settings › Approval rules."
+)
+DECLINED = "The user declined this ({headline}), so it was not done. Don't try it again unless they ask."
+TIMED_OUT = "Nobody answered the approval in time, so it was not done. Ask the user before trying again."
+SUPERSEDED = "The user sent a new message instead of answering, so this was not done."
+
+AnswerReason = Literal["answered", "timed out", "superseded", "no answer"]
+DeclineKind = Literal["standing", "answered", "timed out", "superseded", "no answer"]
+_REASONS: dict[str, AnswerReason] = {
+    "timed out": "timed out",
+    "superseded by a new message": "superseded",
+    "no answer": "no answer",
+}
 
 TELNYX_PREFIX = "telnyx_"
 TELNYX_EXECUTE = f"{TELNYX_PREFIX}execute"
@@ -131,6 +168,10 @@ class TelnyxCatalog:
         text = resources.files("rivet_brain.data").joinpath("telnyx_operations.json").read_text("utf-8")
         return TelnyxCatalog(json.loads(text))
 
+    def known(self, name: str) -> bool:
+        """``name`` is a generated operation or a read helper."""
+        return name in self.operations or name in self.read_helpers
+
     def describe(self, name: str | None) -> tuple[Tier, dict[str, str]]:
         """Tier and display fields for one ``call_tool`` target (``None`` = not a literal name)."""
         if name is None:
@@ -189,11 +230,10 @@ class ToolPolicy:
 
     Attributes:
         tier: Risk tier; ``read`` runs without asking.
-        summary: Short description shown on the approval sheet.
+        summary: Short description of what the tool does (the approval headline comes from ``alerts.py``).
         untrusted_output: The result can carry third-party text (messages, mail, screens, web pages);
-            reading it taints the turn, which suspends remembered approvals until the next turn.
-        scope_arg: Input field (or fields) a remembered approval is keyed on (e.g. ``to``), so approving texts
-            to one contact never covers another; ``("to", "cc")`` also keeps it from covering added recipients.
+            reading it taints the turn, which suspends standing allows until the next turn.
+        standing: How the tool's calls become "don't ask again" targets; None when they can't.
         assess: Optional ``(tool_input) -> (tier, summary)`` for tools whose risk depends on their input (the
             app operator's tap is a commit point or not by its label); it replaces ``tier`` and ``summary``.
     """
@@ -201,8 +241,8 @@ class ToolPolicy:
     tier: Tier
     summary: str = ""
     untrusted_output: bool = False
-    scope_arg: str | tuple[str, ...] | None = None
-    assess: Callable[[Any], tuple[Tier, str]] | None = None
+    standing: Standing | None = None
+    assess: Callable[[object], tuple[Tier, str]] | None = None
 
 
 INTERNAL_POLICIES: dict[str, ToolPolicy] = {
@@ -224,32 +264,48 @@ _TELNYX_READ_TOOLS = {
 
 @dataclass(frozen=True)
 class Assessment:
-    """The policy's verdict on one tool use."""
+    """The policy's verdict on one tool use.
+
+    Attributes:
+        tool: Tool name.
+        tier: Risk tier.
+        summary: The approval headline, or what a read does.
+        operations: For ``telnyx_execute``, each ``call_tool`` target as the sheet shows it.
+        untrusted_output: Its result taints the turn.
+        preview: The raw input, for the sheet's technical details.
+        target: What a standing rule about this call would be about; None when it can't have one.
+        alert: What the approval says.
+        changes: For ``telnyx_execute``, the non-read operations it runs (each can be standing-denied).
+    """
 
     tool: str
     tier: Tier
     summary: str
     operations: tuple[dict[str, str], ...] = ()
-    scope: str = ""
     untrusted_output: bool = False
     preview: str = ""
+    target: Target | None = None
+    alert: Alert = Alert("")
+    changes: tuple[str, ...] = ()
 
     @property
     def high(self) -> bool:
         """Needs the strongest confirmation (biometric on the phone)."""
         return self.tier in HIGH_TIERS
 
-    def prompt(self, *, tainted: bool) -> str:
+    def prompt(self, *, tainted: bool, offer: RuleOffer | None) -> str:
         """The interrupt reason: compact JSON the phone renders as an approval sheet."""
-        body: dict[str, Any] = {
-            "v": 1,
+        body: dict[str, object] = {
+            "v": PROMPT_VERSION,
             "tool": self.tool,
             "tier": self.tier,
             "high": self.high,
-            "summary": self.summary,
+            "headline": self.alert.headline,
+            "blocks": list(self.alert.blocks),
             "preview": self.preview,
-            "remember": self.tier in REMEMBERABLE_TIERS and not tainted,
         }
+        if offer is not None:
+            body["offer"] = offer.to_wire()
         if self.operations:
             body["operations"] = list(self.operations)
         if tainted:
@@ -257,81 +313,76 @@ class Assessment:
         return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
 
-def parse_approval(response: Any) -> tuple[bool, int]:
-    """``(approved, remember_minutes)`` from an interrupt response; anything unrecognised is a denial."""
+@dataclass(frozen=True)
+class Answer:
+    """The user's answer to one approval.
+
+    Attributes:
+        approved: Run the call.
+        standing: Also make it a standing rule (``allow`` only with an approval, ``deny`` only with a denial).
+        reason: Why a denial happened when the user did not answer it themselves.
+    """
+
+    approved: bool
+    standing: Decision | None = None
+    reason: AnswerReason = "answered"
+
+
+def parse_approval(response: object) -> Answer:
+    """The answer in an interrupt response; anything unrecognised, or a standing that contradicts it, is a denial."""
     if response is True or (isinstance(response, str) and response.strip().lower() in ("y", "yes")):
-        return True, 0
-    if not isinstance(response, Mapping) or response.get("approved") is not True:
-        return False, 0
-    minutes = response.get("remember_minutes", 0)
-    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
-        return True, 0
-    return True, min(minutes, MAX_REMEMBER_MINUTES)
+        return Answer(True)
+    if not isinstance(response, Mapping):
+        return Answer(False)
+    raw_reason = response.get("reason")
+    reason: AnswerReason = _REASONS.get(raw_reason, "answered") if isinstance(raw_reason, str) else "answered"
+    approved = response.get("approved") is True
+    if response.get("standing") is None:
+        return Answer(approved, reason=reason)
+    standing = standing_of(response)
+    if standing is None:
+        return Answer(False, reason=reason)
+    return Answer(approved, standing, reason)
 
 
-@dataclass
-class _ApprovalState:
-    """View over the approvals entry in ``agent.state``."""
+class RuleApplied(TypedDict):
+    """``rules.applied``: a standing rule decided a call without asking."""
 
-    state: Any
-    now: float
-    data: dict[str, Any] = field(init=False)
+    type: Literal["rules.applied"]
+    decision: Decision
+    key: str
+    label: str
+    tool: str
 
-    def __post_init__(self) -> None:
-        stored = self.state.get(APPROVALS_KEY)
-        self.data = stored if isinstance(stored, dict) else {}
 
-    @property
-    def turn(self) -> str | None:
-        turn = self.state.get(TURN_KEY)
-        return turn if isinstance(turn, str) else None
+class _Taint:
+    """View over the taint entry in ``agent.state``."""
+
+    def __init__(self, state: AgentState) -> None:
+        self.state = state
+        stored = state.get(APPROVALS_KEY)
+        self.data: dict[str, object] = dict(stored) if isinstance(stored, dict) else {}
 
     def tainted(self) -> bool:
+        turn = self.state.get(TURN_KEY)
         taint = self.data.get("taint_turn")
-        return taint is not None and taint == self.turn
+        return isinstance(turn, str) and taint == turn
 
     def taint(self) -> None:
-        self.data["taint_turn"] = self.turn
-        self._save()
-
-    def covered(self, assessment: Assessment) -> bool:
-        return any(
-            rule.get("tool") == assessment.tool and rule.get("scope") == assessment.scope for rule in self._live_rules()
-        )
-
-    def remember(self, assessment: Assessment, minutes: int) -> None:
-        rules = [
-            rule
-            for rule in self._live_rules()
-            if not (rule.get("tool") == assessment.tool and rule.get("scope") == assessment.scope)
-        ]
-        rules.append({"tool": assessment.tool, "scope": assessment.scope, "expires_at": self.now + minutes * 60})
-        self.data["rules"] = rules
-        self._save()
-
-    def _live_rules(self) -> list[dict[str, Any]]:
-        rules = self.data.get("rules")
-        if not isinstance(rules, list):
-            return []
-        return [
-            rule
-            for rule in rules
-            if isinstance(rule, dict)
-            and isinstance(rule.get("expires_at"), int | float)
-            and rule["expires_at"] > self.now
-        ]
-
-    def _save(self) -> None:
+        turn = self.state.get(TURN_KEY)
+        self.data = {"taint_turn": turn if isinstance(turn, str) else None}
         self.state.set(APPROVALS_KEY, self.data)
 
 
 class RivetApprovals(InterventionHandler):
-    """Asks the user before any tool call that is not provably read-only.
+    """Asks the user before any tool call that is not provably read-only, unless a standing rule answers.
 
     Args:
         policies: Policies for local tools (device tools, task tools), merged over ``INTERNAL_POLICIES``.
         catalog: Telnyx catalog; defaults to the bundled one.
-        clock: Wall-clock source for remembered-approval expiry.
+        clock: Wall-clock source for rule timestamps.
+        rules: The session's standing rules; defaults to rules held only in memory.
+        on_rule: Told when a standing rule decides a call (the gateway sends it to the phone's activity log).
     """
 
     def __init__(
@@ -340,10 +391,22 @@ class RivetApprovals(InterventionHandler):
         *,
         catalog: TelnyxCatalog | None = None,
         clock: Callable[[], float] = time.time,
+        rules: StandingRules | None = None,
+        on_rule: Callable[[RuleApplied], None] | None = None,
     ) -> None:
         self.policies = {**INTERNAL_POLICIES, **(policies or {})}
         self.catalog = catalog or TelnyxCatalog.bundled()
         self._clock = clock
+        self.rules = rules if rules is not None else StandingRules.in_memory()
+        self._on_rule = on_rule
+        self._declines: OrderedDict[str, DeclineKind] = OrderedDict()
+        self._telnyx_standing = Standing(
+            fields=(("operation", "text"),), required=frozenset({"operation"}), allow=False, label=self._telnyx_label
+        )
+
+    def bound(self, rules: StandingRules, on_rule: Callable[[RuleApplied], None]) -> RivetApprovals:
+        """A handler for one session: the same policies, catalog and clock over that session's rules."""
+        return RivetApprovals(self.policies, catalog=self.catalog, clock=self._clock, rules=rules, on_rule=on_rule)
 
     @property
     def name(self) -> str:
@@ -355,98 +418,216 @@ class RivetApprovals(InterventionHandler):
         """A broken policy check denies the call."""
         return "deny"
 
-    def assess(self, tool: str, tool_input: Any) -> Assessment:
+    def standing_for(self, tool: str) -> Standing | None:
+        """How ``tool``'s calls become rule targets; None when they can't."""
+        if tool == TELNYX_EXECUTE:
+            return self._telnyx_standing
+        policy = self.policies.get(tool)
+        return policy.standing if policy is not None else None
+
+    def assess(self, tool: str, tool_input: object) -> Assessment:
         """Classify one tool use."""
         preview = _preview(tool_input)
         if tool == TELNYX_EXECUTE:
             return self._assess_execute(tool_input, preview)
         if tool in _TELNYX_READ_TOOLS:
-            return Assessment(tool, "read", _TELNYX_READ_TOOLS[tool], preview=preview)
+            summary = _TELNYX_READ_TOOLS[tool]
+            return Assessment(tool, "read", summary, preview=preview, alert=Alert(summary))
         policy = self.policies.get(tool)
         if policy is None:
-            return Assessment(tool, "unknown", "Tool has no approval policy", preview=preview)
-        scope = ""
-        if policy.scope_arg is not None:
-            data = tool_input if isinstance(tool_input, Mapping) else {}
-            fields = (policy.scope_arg,) if isinstance(policy.scope_arg, str) else policy.scope_arg
-            scope = ",".join(f"{name}={data.get(name)}" for name in fields)
+            alert = alert_for(tool, tool_input, "unknown", ())
+            return Assessment(tool, "unknown", alert.headline, preview=preview, alert=alert)
         tier, summary = policy.tier, policy.summary or tool
         if policy.assess is not None:
             tier, summary = policy.assess(tool_input)
+        alert = Alert(summary)
+        if tier != "read" and tool in ALERT_TOOLS:
+            alert = alert_for(tool, tool_input, tier, ())
         return Assessment(
             tool,
             tier,
-            summary,
-            scope=scope,
+            alert.headline,
             untrusted_output=policy.untrusted_output,
             preview=preview,
+            target=policy.standing.target(tool, tool_input) if policy.standing is not None else None,
+            alert=alert,
         )
 
-    def _assess_execute(self, tool_input: Any, preview: str) -> Assessment:
+    def _assess_execute(self, tool_input: object, preview: str) -> Assessment:
         code = tool_input.get("code") if isinstance(tool_input, Mapping) else None
         if not isinstance(code, str):
-            return Assessment(TELNYX_EXECUTE, "unknown", "Telnyx code is missing", preview=preview)
+            alert = alert_for(TELNYX_EXECUTE, tool_input, "unknown", ())
+            return Assessment(TELNYX_EXECUTE, "unknown", alert.headline, preview=preview, alert=alert)
         tier: Tier = "read"
         operations: list[dict[str, str]] = []
-        for target in call_tool_targets(code):
-            target_tier, display = self.catalog.describe(target)
+        tiers: list[Tier] = []
+        targets = call_tool_targets(code)
+        for name in targets:
+            target_tier, display = self.catalog.describe(name)
             tier = max(tier, target_tier, key=_RANK.__getitem__)
             if display not in operations:
                 operations.append(display)
-        summaries = [op.get("summary") or op["name"] for op in operations if op.get("method") != "GET"]
-        summary = "Telnyx: " + ("; ".join(summaries) if summaries else "read-only calls")
-        scope = ",".join(sorted({op["name"] for op in operations}))
+                tiers.append(target_tier)
+        changes = tuple(op["name"] for op, op_tier in zip(operations, tiers, strict=True) if op_tier != "read")
+        alert = alert_for(
+            TELNYX_EXECUTE, tool_input, tier, [{**op, "tier": t} for op, t in zip(operations, tiers, strict=True)]
+        )
+        known = all(
+            name is not None and (name in self.catalog.operations or name in self.catalog.read_helpers)
+            for name in targets
+        )
+        rule_target = None
+        if known and len(changes) == 1:
+            rule_target = Target.of(TELNYX_EXECUTE, {"operation": changes[0]})
         # Telnyx results can carry inbound message text and caller data.
         return Assessment(
             TELNYX_EXECUTE,
             tier,
-            summary,
+            alert.headline,
             tuple(operations),
-            scope=scope,
             untrusted_output=True,
             preview=code[:PREVIEW_LIMIT],
+            target=rule_target,
+            alert=alert,
+            changes=tuple(name for name in changes if name in self.catalog.operations),
         )
 
-    def before_tool_call(self, event: BeforeToolCallEvent, **kwargs: Any) -> Proceed | Confirm:
-        """Run reads; ask for everything else unless a live remembered approval covers it."""
+    def offer(self, assessment: Assessment, *, tainted: bool) -> RuleOffer | None:
+        """The "don't ask again" choices for one call, or None when it can't have a rule."""
+        standing = self.standing_for(assessment.tool)
+        if standing is None or assessment.target is None:
+            return None
+        no_allow: NoAllow | None = _NO_ALLOW_TIERS.get(assessment.tier)
+        if no_allow is None and not standing.allows(assessment.target):
+            no_allow = "kind"
+        if no_allow is None and tainted:
+            no_allow = "untrusted"
+        label = standing.label(assessment.target.scope_dict())
+        return RuleOffer(assessment.target, label, allow=no_allow is None, deny=True, no_allow=no_allow)
+
+    def offer_for(self, tool: str, scope: Mapping[str, str]) -> RuleOffer | None:
+        """The offer for a rule the phone asks for directly (its own approvals), or None when it can't be one."""
+        if tool == TELNYX_EXECUTE:
+            if set(scope) != {"operation"}:
+                return None
+            name = normalize("text", scope["operation"]) or ""
+            operation = self.catalog.operations.get(name)
+            if operation is None or operation.tier == "read":
+                return None
+            only = Target.of(TELNYX_EXECUTE, {"operation": name})
+            return self.offer(Assessment(TELNYX_EXECUTE, operation.tier, "", target=only), tainted=False)
+        standing = self.standing_for(tool)
+        data = standing.input_for(scope) if standing is not None else None
+        if standing is None or data is None:
+            return None
+        target = standing.target(tool, data)
+        tier = self.assess(tool, data).tier
+        if target is None or tier == "read":
+            return None
+        return self.offer(Assessment(tool, tier, "", target=target), tainted=False)
+
+    def before_tool_call(self, event: BeforeToolCallEvent, **kwargs: object) -> Proceed | Deny | Confirm:
+        """Run reads; follow a standing rule; ask for everything else."""
         if event.selected_tool is None:
             return Proceed(reason="tool not found; the SDK reports the error")
         assessment = self.assess(event.tool_use["name"], event.tool_use.get("input"))
         if assessment.tier == "read":
             return Proceed()
-        approvals = _ApprovalState(event.agent.state, self._clock())
-        tainted = approvals.tainted()
-        if assessment.tier in REMEMBERABLE_TIERS and not tainted and approvals.covered(assessment):
-            logger.debug("tool=<%s>, scope=<%s> | remembered approval applies", assessment.tool, assessment.scope)
-            return Proceed(reason="remembered approval")
+        tainted = _Taint(event.agent.state).tainted()
+        denied = self._deny_rule(assessment)
+        if denied is not None:
+            self._applied(denied)
+            return Deny(reason=STANDING_DENY.format(label=denied.label))
+        offer = self.offer(assessment, tainted=tainted)
+        allowed = self.rules.match(assessment.target) if assessment.target is not None else None
+        # A stored allow counts only where the offer would grant one now, whatever the store holds.
+        if allowed is not None and allowed.decision == "allow" and offer is not None and offer.allow:
+            self._applied(allowed)
+            return Proceed(reason="standing rule")
         return Confirm(
-            prompt=assessment.prompt(tainted=tainted), evaluate=partial(self._evaluate, event.agent.state, assessment)
+            prompt=assessment.prompt(tainted=tainted, offer=offer),
+            evaluate=partial(self._evaluate, str(event.tool_use["toolUseId"]), assessment),
         )
 
-    def after_tool_call(self, event: AfterToolCallEvent, **kwargs: Any) -> Proceed:
-        """Taint the turn once it has read third-party content."""
-        assessment = self.assess(event.tool_use["name"], event.tool_use.get("input"))
+    def after_tool_call(self, event: AfterToolCallEvent, **kwargs: object) -> Proceed | Transform:
+        """Taint the turn once it has read third-party content; tell the model plainly why a call didn't run."""
+        use = event.tool_use
+        assessment = self.assess(use["name"], use.get("input"))
         if event.cancel_message is None and assessment.untrusted_output:
             self.mark_untrusted(event.agent.state)
-        return Proceed()
+        if event.cancel_message is None or not event.cancel_message.startswith(CONFIRMATION_FAILED):
+            return Proceed()
+        tool_use_id = str(use["toolUseId"])
+        result: ToolResult = {
+            "toolUseId": tool_use_id,
+            "status": "error",
+            "content": [{"text": self.decline_text(self._declines.pop(tool_use_id, "no answer"), assessment)}],
+        }
 
-    def mark_untrusted(self, state: Any) -> None:
+        def apply(target: LifecycleEvent) -> None:
+            if isinstance(target, AfterToolCallEvent):
+                target.result = result
+
+        return Transform(apply=apply, reason="plain decline result")
+
+    def decline_text(self, kind: DeclineKind, assessment: Assessment) -> str:
+        """What the model is told about a call the user (or nobody) declined."""
+        if kind == "standing":
+            offer = self.offer(assessment, tainted=False)
+            if offer is not None:
+                return STANDING_DENY.format(label=offer.label)
+        if kind == "timed out":
+            return TIMED_OUT
+        if kind == "superseded":
+            return SUPERSEDED
+        return DECLINED.format(headline=assessment.alert.headline)
+
+    def mark_untrusted(self, state: AgentState) -> None:
         """Taint the current turn (also called when Perplexity's native tools bring in web content)."""
-        approvals = _ApprovalState(state, self._clock())
-        if not approvals.tainted():
-            approvals.taint()
+        taint = _Taint(state)
+        if not taint.tainted():
+            taint.taint()
 
-    def _evaluate(self, state: Any, assessment: Assessment, response: Any) -> bool:
-        approved, minutes = parse_approval(response)
-        if approved and minutes and assessment.tier in REMEMBERABLE_TIERS:
-            _ApprovalState(state, self._clock()).remember(assessment, minutes)
+    def _deny_rule(self, assessment: Assessment) -> StandingRule | None:
+        targets = [assessment.target] if assessment.target is not None else []
+        targets += [Target.of(TELNYX_EXECUTE, {"operation": name}) for name in assessment.changes]
+        for target in targets:
+            rule = self.rules.match(target)
+            if rule is not None and rule.decision == "deny":
+                return rule
+        return None
+
+    def _applied(self, rule: StandingRule) -> None:
+        logger.info("tool=<%s>, decision=<%s> | standing rule applied", rule.target.tool, rule.decision)
+        if self._on_rule is not None:
+            self._on_rule(
+                {
+                    "type": "rules.applied",
+                    "decision": rule.decision,
+                    "key": rule.target.key,
+                    "label": rule.label,
+                    "tool": rule.target.tool,
+                }
+            )
+
+    def _evaluate(self, tool_use_id: str, assessment: Assessment, response: object) -> bool:
+        answer = parse_approval(response)
+        if not answer.approved:
+            self._declines[tool_use_id] = "standing" if answer.standing == "deny" else answer.reason
+            while len(self._declines) > DECLINES_KEPT:
+                self._declines.popitem(last=False)
         logger.info(
-            "tool=<%s>, tier=<%s>, approved=<%s> | approval answered", assessment.tool, assessment.tier, approved
+            "tool=<%s>, tier=<%s>, approved=<%s> | approval answered", assessment.tool, assessment.tier, answer.approved
         )
-        return approved
+        return answer.approved
+
+    def _telnyx_label(self, scope: Mapping[str, str]) -> str:
+        name = scope.get("operation", "")
+        operation = self.catalog.operations.get(name)
+        return f"{operation_summary(name, operation.summary if operation is not None else '')} on your Telnyx account"
 
 
-def _preview(tool_input: Any) -> str:
+def _preview(tool_input: object) -> str:
     try:
         text = json.dumps(tool_input, ensure_ascii=False, default=str)
     except (TypeError, ValueError):

@@ -1,7 +1,7 @@
 package com.hiron.rivet.voice
 
 import android.speech.SpeechRecognizer
-import com.hiron.rivet.core.ApprovalRequest
+import com.hiron.rivet.testing.textApproval
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.RivetState
@@ -28,9 +28,7 @@ class AssistModelTest {
 
     private fun RivetState.then(vararg events: ServerEvent) = events.fold(this) { s, e -> RivetStore.reduce(s, e, 2) }
 
-    private fun approval(turn: String) = ApprovalRequest(
-        "a-$turn", "default", turn, "sms_send", "send", false, "Text Dana", "", true, false, emptyList(), null,
-    )
+    private fun approval(turn: String) = textApproval("a-$turn", turn = turn)
 
     @Test
     fun listeningShowsTheWordsAsTheyAreHeard() {
@@ -66,6 +64,7 @@ class AssistModelTest {
         val searching = AssistModel.ui(mine, sent().then(ServerEvent.Searching(listOf("calendar"), "default")))
         assertEquals("SEARCHING", searching.status)
         assertEquals("OFFLINE · QUEUED", AssistModel.ui(mine, RivetStore.connection(sent(), Connection.Offline)).status)
+        assertEquals("CONNECTING", AssistModel.ui(mine, RivetStore.connection(sent(), Connection.Connecting)).status)
     }
 
     @Test
@@ -92,7 +91,7 @@ class AssistModelTest {
         val ui = AssistModel.ui(mine, sent().then(ServerEvent.ApprovalsRequested("t2", "default", listOf(approval("t2")), false)))
         assertEquals(AssistPhase.Waiting, ui.phase)
         assertEquals(1, ui.waiting)
-        assertEquals("WAITING", ui.status)
+        assertEquals("NEEDS YOU", ui.status)
     }
 
     @Test
@@ -101,6 +100,7 @@ class AssistModelTest {
         assertEquals(AssistPhase.Failed, before.phase)
         assertEquals("I couldn't finish that: the brain is offline", before.note)
         assertEquals("", before.reply)
+        assertEquals("DIDN'T FINISH", before.status)
 
         val midway = AssistModel.ui(
             mine,
@@ -142,6 +142,7 @@ class AssistModelTest {
         assertEquals(AssistPhase.Failed, ui.phase)
         assertEquals("Text Dana", ui.heard)
         assertEquals(AssistModel.SET_UP_FIRST, ui.note)
+        assertEquals("DIDN'T FINISH", ui.status)
     }
 
     @Test

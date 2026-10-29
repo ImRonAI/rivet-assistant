@@ -1174,7 +1174,7 @@ const pShadow = $('pShadow'), pContact = $('pContact');
 
 /* ---------- camera ---------- */
 const FOV = 26 * PI / 180;
-const cam = { yaw: 0, pitch: .13, zoom: 1, fit: 6, ty: 1.1, tx: 0, tz: 0, sway: 0, swayP: 0, dirty: true };
+const cam = { yaw: 0, pitch: .13, zoom: 1, fit: 6, ty: 1.1, rest: 1.1, tx: 0, tz: 0, sway: 0, swayP: 0, dirty: true };
 let VW = 800, VH = 600, FOC = 1000, OX = 400, OY = 300;
 const CB = { p: [0, 0, 6], r: [1, 0, 0], u: [0, 1, 0], f: [0, 0, -1] };
 function fitCamera() {
@@ -2950,7 +2950,7 @@ function play(id, o = {}) {
   D.prevMove = prevMv;
   if (mv.cam && !prevMv.cam) D.camSaved = { yaw: cam.yaw, pitch: cam.pitch, zoom: cam.zoom };
   if (mv.cam) { D.camHint = Object.assign({}, mv.cam, { yaw: mv.cam.yaw + body.heading }); D.camUser = false; }
-  else if (prevMv.cam && D.camSaved && !D.camUser) { D.camHint = Object.assign({ ty: 1.1, restore: true }, D.camSaved); }
+  else if (prevMv.cam && D.camSaved && !D.camUser) { D.camHint = Object.assign({ ty: cam.rest, restore: true }, D.camSaved); }
   else if (!mv.cam) D.camHint = null;
   D.cur = mv; D.t = 0; D.blendT = 0; D.blendDur = o.blend ?? Math.max(mv.loco ? .3 : .36, mv.blendIn || 0, prevMv.blendOut || 0);
   D.fired.clear(); D.ticks = {}; D.settle = null; D.idleT = 0;
@@ -3100,7 +3100,7 @@ function step(dt) {
   /* camera follows the robot loosely */
   cam.tx = damp(cam.tx, body.x * .55, 2, dt); cam.tz = damp(cam.tz, body.z * .55, 2, dt);
   const hint = D.camHint && !D.camUser ? D.camHint : null;
-  cam.ty = damp(cam.ty, (hint && hint.ty ? hint.ty : 1.1) + Math.max(0, pose.ry) * .5, 2.5, dt);
+  cam.ty = damp(cam.ty, (hint && hint.ty ? hint.ty : cam.rest) + Math.max(0, pose.ry) * .5, 2.5, dt);
   if (hint) {
     cam.yaw = dampA(cam.yaw, hint.yaw, 1.6, dt); cam.pitch = damp(cam.pitch, hint.pitch, 1.6, dt); cam.zoom = damp(cam.zoom, hint.zoom, 1.6, dt);
     if (hint.restore && Math.abs(wrapA(cam.yaw - hint.yaw)) < .01 && Math.abs(cam.zoom - hint.zoom) < .01) D.camHint = null;

@@ -140,12 +140,15 @@ class ScreenOperator : AccessibilityService() {
             result
         }
 
+        /** The whole label as read, so the label the approval was judged on is the one tapped. */
+        internal fun sameLabel(shown: String, label: String?): Boolean = label != null && shown.equals(label.trim(), ignoreCase = true)
+
         private fun target(node: Int?, label: String?): Any {
             val i = node ?: return ToolResult.error("Say which element to act on (its number from screen_read).")
             val n = lastNodes.getOrNull(i) ?: return ToolResult.error("Element $i is not on the last screen read. Read the screen again.")
             n.refresh()
             val shown = labelOf(n)
-            if (label == null || !shown.contains(label.trim(), ignoreCase = true)) {
+            if (!sameLabel(shown, label)) {
                 return ToolResult.error("Element $i now reads \"$shown\", not \"${label.orEmpty()}\". The screen changed; read it again.")
             }
             return n

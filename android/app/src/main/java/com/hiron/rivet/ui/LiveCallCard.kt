@@ -7,19 +7,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.PhoneForwarded
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.hiron.rivet.core.CallText
 import com.hiron.rivet.core.LiveCall
@@ -29,9 +36,9 @@ import kotlinx.coroutines.delay
 const val LIVE_CALL_TAG = "live-call"
 
 /**
- * The call Rivet is answering, as a plate: a crimson live LED and a running clock, who is calling, the latest
- * lines of what is being said, and "Take over" to have the call put through to you. When the call ends it
- * shows Rivet's summary until dismissed.
+ * The call Rivet is answering, as a lit plate: a live tag and a running clock, who is calling, the latest lines of
+ * what is being said, and "Take over" to have the call put through to you. When the call ends it shows Rivet's
+ * summary until dismissed.
  */
 @Composable
 fun LiveCallCard(call: LiveCall, onTakeOver: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
@@ -43,63 +50,100 @@ fun LiveCallCard(call: LiveCall, onTakeOver: () -> Unit, onDismiss: () -> Unit, 
             delay(1000)
         }
     }
-    val (pip, label) = when (call.status) {
-        LiveCallStatus.Answering -> p.rec to "Live call"
-        LiveCallStatus.Transferring -> p.amb to "Putting it through"
-        LiveCallStatus.Ended -> p.ok to "Call ended"
+    val (tone, tag) = when (call.status) {
+        LiveCallStatus.Answering -> Tone.Red to "LIVE"
+        LiveCallStatus.Transferring -> Tone.Amber to "PUTTING IT THROUGH"
+        LiveCallStatus.Ended -> Tone.Green to "CALL ENDED"
     }
-    val clock = if (ended) call.durationSeconds?.let(CallText::duration).orEmpty() else "%d:%02d".format(elapsed / 60, elapsed % 60)
-    HudCard(
-        label,
-        modifier.padding(horizontal = 12.dp, vertical = 8.dp).testTag(LIVE_CALL_TAG),
-        pip = pip,
-        live = !ended,
-        meta = clock.ifBlank { null },
-        metaColor = if (ended) null else pip,
-        outline = pip.copy(alpha = 0.45f),
-    ) {
+    val c = tone.color()
+    Plate(c.copy(alpha = if (ended) 0.4f else 0.5f), glow = if (ended) null else c.copy(alpha = 0.10f), modifier = modifier.testTag(LIVE_CALL_TAG)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(call.caller, style = Type.headline, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (call.number.isNotBlank() && call.number != call.caller) Text(call.number, style = Type.mono, color = p.ink2)
+            if (call.status == LiveCallStatus.Answering) {
+                Pip(p.rec, live = true, size = 6.dp)
+                Spacer(Modifier.width(2.dp))
             }
-            if (call.verified) Tag("Verified", p.ok)
-        }
-        if (ended) {
-            Text(call.summary.ifBlank { "No summary." }, style = Type.bodyLg, color = p.ink)
-            val result = if (call.takenOver) "You took it over." else CallText.outcome(call.outcome)
-            if (result.isNotBlank()) Tag(result.removeSuffix("."), if (call.takenOver) p.accent else p.ok)
-            Keycap("Dismiss", onDismiss)
-        } else {
-            val shown = call.lines.takeLast(3)
-            if (shown.isEmpty()) {
-                Text("Rivet picked up. What's said will show here.", style = Type.body, color = p.ink2)
+            StatusTag(tag, tone)
+            Spacer(Modifier.weight(1f))
+            if (!ended) {
+                TimerPill(elapsed.toInt(), 0)
             } else {
-                val well = RoundedCornerShape(8.dp)
-                Column(
-                    Modifier.fillMaxWidth().clip(well).background(p.tile).border(1.dp, p.keyLine, well).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    shown.forEach { line ->
-                        Row {
-                            Text(
-                                CallText.speaker(line).uppercase(), style = Type.labelSm,
-                                color = if (line.speaker == "caller") p.cy else p.accent,
-                                modifier = Modifier.width(56.dp).padding(top = 3.dp),
-                            )
-                            Text(line.text, style = Type.body, color = p.ink, modifier = Modifier.weight(1f))
-                        }
-                    }
+                call.durationSeconds?.let { Text(CallText.duration(it), style = Type.labelMd, color = p.ink2, maxLines = 1) }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(Plain.phone(call.caller), style = Type.headline, color = p.ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            val number = call.number.isNotBlank() && call.number != call.caller
+            if (number || call.verified) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (number) Text(Plain.phone(call.number), style = Type.mono, color = p.ink2, maxLines = 1, modifier = Modifier.padding(end = 10.dp))
+                    if (call.verified) StatusTag("VERIFIED", Tone.Green)
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (call.status == LiveCallStatus.Transferring) "Your phone will ring." else "Rivet is taking a message.",
-                    style = Type.body, color = p.ink2, modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.size(8.dp))
-                Keycap("Take over", onTakeOver, tone = KeyTone.Accent, enabled = call.status == LiveCallStatus.Answering)
+        }
+        if (ended) Ended(call, onDismiss) else Live(call, onTakeOver)
+    }
+}
+
+@Composable
+private fun Live(call: LiveCall, onTakeOver: () -> Unit) {
+    val p = LocalPalette.current
+    val well = RoundedCornerShape(12.dp)
+    // The plate shows the latest two lines so the robot keeps its stage; "Show all" opens the last three in full.
+    var all by remember(call.callId) { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().clip(well).background(p.field).border(1.dp, p.edgeSoft, well).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val shown = call.lines.takeLast(if (all) 3 else 2)
+        if (shown.isEmpty()) Text("Rivet picked up. What's said will show here.", style = Type.body, color = p.ink2)
+        shown.forEach { line ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val caller = line.speaker == "caller"
+                Eyebrow(CallText.speaker(line).uppercase(), tone = if (caller) Tone.Cyan else Tone.Accent, dot = false)
+                // One long turn must not push the newer lines and the Take over key off the plate.
+                Text(line.text, style = Type.bodyLg, color = p.ink, maxLines = if (all) 3 else 2, overflow = TextOverflow.Ellipsis)
             }
         }
+        if (call.lines.size > 2) {
+            TextKey(if (all) "Show less" else "Show all", { all = !all }, Modifier.offset { IntOffset(-8.dp.roundToPx(), 0) })
+        }
     }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (call.status == LiveCallStatus.Transferring) "Your phone will ring." else "Rivet is taking a message.",
+            style = Type.body, color = p.ink2, modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        Keycap(
+            "Take over", onTakeOver, tone = KeyTone.Accent, icon = Icons.AutoMirrored.Outlined.PhoneForwarded,
+            enabled = call.status == LiveCallStatus.Answering,
+        )
+    }
+}
+
+@Composable
+private fun Ended(call: LiveCall, onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    Text(call.summary.ifBlank { "No summary." }, style = Type.quote, color = p.ink)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val outcome = if (call.takenOver) "YOU TOOK IT OVER" else CallText.outcome(call.outcome).removeSuffix(".").uppercase()
+        Row(Modifier.weight(1f)) {
+            if (outcome.isNotBlank()) StatusTag(outcome, if (call.takenOver) Tone.Accent else Tone.Neutral)
+        }
+        Spacer(Modifier.width(12.dp))
+        Keycap("Dismiss", onDismiss)
+    }
+}
+
+/** The call's card: the card fill, an edge in the call's status colour and, while it is live, a faint glow of it. */
+@Composable
+private fun Plate(edge: Color, glow: Color?, modifier: Modifier, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
+            .then(if (glow != null) Modifier.glow(glow, 20.dp, shape) else Modifier)
+            .clip(shape).background(p.card).border(1.dp, edge, shape).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) { content() }
 }

@@ -4,7 +4,7 @@ Connects to the brain like the phone does and asks Rivet to set up call answerin
 ``call_answering_setup`` for exactly ``--number`` (with the reassign the owner asked for). Every other
 approval is denied, and device calls are answered as "phone not connected".
 
-    uv run python scripts/setup_call_answering.py --url https://rivet-brain-hiron.fly.dev \\
+    uv run python scripts/setup_call_answering.py --url https://rivet-assistant.fly.dev \\
         --session tim --number +17608769757 --owner Tim --reassign
 
 Needs RIVET_DEVICE_TOKEN in the environment.

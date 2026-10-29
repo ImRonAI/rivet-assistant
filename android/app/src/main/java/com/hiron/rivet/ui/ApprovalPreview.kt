@@ -3,13 +3,15 @@ package com.hiron.rivet.ui
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Turns a tool's JSON input into labelled lines for the approval sheet ("To", "Message", ...). */
+/** Turns a tool's JSON input into labelled lines for the approval sheet's technical details ("To", "Message", ...). */
 object ApprovalPreview {
     private val LABELS = mapOf(
         "to" to "To", "number" to "Number", "body" to "Message", "text" to "Message", "subject" to "Subject",
         "code" to "Telnyx code", "label" to "Button", "app" to "App", "title" to "Title", "start" to "Starts",
         "end" to "Ends", "owner_name" to "Your name", "reassign" to "Move the number",
     )
+
+    private val NUMBERS = setOf("to", "number", "from", "phone")
 
     /** Null when the preview is not a JSON object (it is then shown as-is). */
     fun fields(preview: String): List<Pair<String, String>>? {
@@ -18,7 +20,10 @@ object ApprovalPreview {
         } catch (e: Exception) {
             return null
         }
-        return obj.keys().asSequence().toList().map { key -> label(key) to value(obj.opt(key)) }
+        return obj.keys().asSequence().toList().map { key ->
+            val v = value(obj.opt(key))
+            label(key) to if (key in NUMBERS) Plain.phone(v) else v
+        }
     }
 
     private fun label(key: String) =

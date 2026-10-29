@@ -43,7 +43,7 @@ object AssistModel {
             local.locked -> AssistUi(AssistPhase.Locked, status = "LOCKED", note = LOCKED_NOTE)
             local.needsMic -> base.copy(phase = AssistPhase.NeedsMic, status = "MIC OFF", note = MIC_NOTE)
             local.listening -> base.copy(phase = AssistPhase.Listening, heard = local.partial, status = "LISTENING", level = local.level)
-            local.problem != null -> base.copy(phase = AssistPhase.Failed, heard = local.asked.ifBlank { local.partial }, status = "STUCK", note = local.problem)
+            local.problem != null -> base.copy(phase = AssistPhase.Failed, heard = local.asked.ifBlank { local.partial }, status = "DIDN'T FINISH", note = local.problem)
             local.turnId == null -> base.copy(note = local.hint)
             else -> turn(local.turnId, local.asked, state, base)
         }
@@ -51,15 +51,15 @@ object AssistModel {
 
     private fun turn(turnId: String, asked: String, state: RivetState, base: AssistUi): AssistUi {
         val at = state.messages.indexOfFirst { it.id == "$turnId:user" }
-        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser }
+        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser && it.spoken }
         val waiting = state.approvals.count { it.turnId == turnId }
         val finished = state.activeTurn != turnId
         val shown = base.copy(heard = asked, reply = reply?.text.orEmpty(), waiting = waiting)
         return when {
-            reply?.failed == true -> shown.copy(phase = AssistPhase.Failed, reply = "", status = "STUCK", note = reply.text)
+            reply?.failed == true -> shown.copy(phase = AssistPhase.Failed, reply = "", status = "DIDN'T FINISH", note = reply.text)
             finished && state.activity == Activity.Failed ->
-                shown.copy(phase = AssistPhase.Failed, status = "STUCK", note = "I couldn't finish that: ${state.lastError ?: "the brain stopped"}")
-            waiting > 0 -> shown.copy(phase = AssistPhase.Waiting, status = "WAITING")
+                shown.copy(phase = AssistPhase.Failed, status = "DIDN'T FINISH", note = "I couldn't finish that: ${state.lastError ?: "the brain stopped"}")
+            waiting > 0 -> shown.copy(phase = AssistPhase.Waiting, status = "NEEDS YOU")
             reply?.streaming == true -> shown.copy(phase = AssistPhase.Replying, status = "REPLYING")
             finished -> shown.copy(phase = AssistPhase.Done, status = "DONE")
             else -> shown.copy(phase = AssistPhase.Working, status = working(state))
@@ -68,7 +68,7 @@ object AssistModel {
 
     private fun working(state: RivetState): String = when (state.connection) {
         Connection.Offline -> "OFFLINE · QUEUED"
-        Connection.Connecting -> "LINKING"
+        Connection.Connecting -> "CONNECTING"
         Connection.Online -> when (state.activity) {
             Activity.Searching -> "SEARCHING"
             Activity.Working -> "WORKING"

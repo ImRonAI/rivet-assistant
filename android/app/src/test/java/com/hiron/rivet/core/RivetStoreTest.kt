@@ -1,5 +1,6 @@
 package com.hiron.rivet.core
 
+import com.hiron.rivet.testing.textApproval
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,9 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RivetStoreTest {
-    private fun approval(id: String, lane: String = "default", turn: String = "t1") = ApprovalRequest(
-        id, lane, turn, "sms_send", "send", false, "Send a text", "", true, false, emptyList(), null,
-    )
+    private fun approval(id: String, lane: String = "default", turn: String = "t1") = textApproval(id, lane, turn)
 
     @Test
     fun streamsTextIntoOneAssistantMessageAndClosesIt() {
@@ -176,5 +175,94 @@ class RivetStoreTest {
     fun deviceCallsAreLogged() {
         val s = RivetStore.reduce(RivetState(), ServerEvent.DeviceCall("a", "calendar_list", JSONObject()), 5)
         assertEquals(LogEntry(5, "device", "calendar_list"), s.log.single())
+    }
+
+    @Test
+    fun approvalsAndRulesReadPlainlyInTheLog() {
+        val text = approval("a1")
+        var s = RivetStore.reduce(RivetState(), ServerEvent.ApprovalsRequested("t1", "default", listOf(text, approval("a2")), false), 1)
+        assertEquals("Asked: Text +18015550100: “Friday at 9 works!”; Text +18015550100: “Friday at 9 works!”", s.log.last().text)
+        val resent = RivetStore.reduce(s, ServerEvent.ApprovalsRequested("t1", "default", listOf(text), true), 2)
+        assertEquals(s.log.size, resent.log.size)
+        s = RivetStore.reduce(s, ServerEvent.ApprovalExpired("t1", "default"), 3)
+        assertEquals("Nobody answered in time, so Rivet didn't do it.", s.log.last().text)
+        s = RivetStore.reduce(s, ServerEvent.RulesApplied(Decision.Deny, "k", "Texts to +1", "sms_send"), 4)
+        assertEquals("Declined by your rule: Texts to +1", s.log.last().text)
+        assertEquals("Always allowed: Texts to +18015550100", RivetStore.answer(text, Protocol.Answer(true, Decision.Allow)))
+        assertEquals("Always declined: Texts to +18015550100", RivetStore.answer(text, Protocol.Answer(false, Decision.Deny)))
+        assertEquals("Approved: Text +18015550100: “Friday at 9 works!”", RivetStore.answer(text, Protocol.Answer(true)))
+        assertEquals("Declined: Text +18015550100: “Friday at 9 works!”", RivetStore.answer(text, Protocol.Answer(false)))
+
+        s = s.copy(removingRules = setOf("k"))
+        s = RivetStore.reduce(s, ServerEvent.RulesRefused(RuleRequest.Revoke, "No such rule."), 5)
+        assertEquals("No such rule.", s.rulesError)
+        assertTrue(s.removingRules.isEmpty())
+        s = RivetStore.reduce(s, ServerEvent.Rules(RuleSet.EMPTY), 6)
+        assertNull(s.rulesError)
+    }
+
+    @Test
+    fun aMessageJoinsTheCallItWasTakenOn() {
+        val live = ServerEvent.CallLive("c-1", "+18015550100", true, null, "answering", emptyList(), true)
+        var s = RivetStore.reduce(RivetState(), live, 1)
+        s = RivetStore.reduce(s, ServerEvent.CallMessage("Ada", "+18015550100", "Lunch?", true, false, "c-1"), 2)
+        assertEquals("Lunch?", s.liveCall?.message)
+        assertEquals(true, s.liveCall?.urgent)
+        assertEquals("Ada", s.liveCall?.caller)
+        val other = RivetStore.reduce(s, ServerEvent.CallMessage("Bo", "+1", "Other", false, false, "c-2"), 3)
+        assertEquals("Lunch?", other.liveCall?.message)
+        val ended = RivetStore.reduce(s, ServerEvent.CallEnded("c-1", "+18015550100", "Ada", null, null, 30, "Lunch.", "message_taken", false), 4)
+        assertEquals("Lunch?", ended.liveCall?.message)
+    }
+
+    @Test
+    fun aBrainSearchShowsPlaceholdersThenItsCardsInOrder() {
+        var s = RivetStore.userSent(RivetState(), "t1", "coffee near the capitol")
+        s = RivetStore.reduce(s, ServerEvent.ToolStarted("tu1", "search_places", "default"), 1)
+        assertEquals(SearchKind.Places, s.messages.last().searching)
+        assertEquals(Activity.Searching, s.activity)
+        s = RivetStore.reduce(s, ServerEvent.ToolsDone(listOf("tu1" to "success"), "default"), 2)
+        assertEquals(SearchKind.Places, s.messages.last().searching)
+        s = RivetStore.reduce(s, ServerEvent.SearchResults("tu1", com.hiron.rivet.testing.SearchFixtures.placeResults, "default"), 3)
+        assertEquals(com.hiron.rivet.testing.SearchFixtures.placeResults, s.messages[1].search)
+        s = RivetStore.reduce(s, ServerEvent.TextDelta("Summit Coffee (1) is closest.", "default"), 4)
+        s = RivetStore.reduce(s, ServerEvent.TurnCompleted("t1", "default", "Summit Coffee (1) is closest.", 0, null), 5)
+        assertEquals(listOf(true, false, false), s.messages.map { it.fromUser })
+        assertEquals("Summit Coffee (1) is closest.", s.messages.last().text)
+        assertEquals(3, s.messages.size)
+    }
+
+    @Test
+    fun searchesOnOtherLanesAndFailedOnesLeaveNoCards() {
+        var s = RivetStore.reduce(RivetState(), ServerEvent.ToolStarted("tu1", "search_web", "task-1"), 1)
+        s = RivetStore.reduce(s, ServerEvent.SearchResults("tu1", com.hiron.rivet.testing.SearchFixtures.webResults, "task-1"), 2)
+        assertTrue(s.messages.isEmpty())
+        s = RivetStore.reduce(s, ServerEvent.ToolStarted("tu2", "search_web", "default"), 3)
+        s = RivetStore.reduce(s, ServerEvent.ToolsDone(listOf("tu2" to "error"), "default"), 4)
+        assertTrue(s.messages.isEmpty())
+        s = RivetStore.reduce(s, ServerEvent.ToolStarted("tu3", "search_news", "default"), 5)
+        s = RivetStore.reduce(s, ServerEvent.TurnCompleted("t1", "default", "", 0, null), 6)
+        assertTrue(s.messages.none { it.searching != null })
+    }
+
+    @Test
+    fun chipsGoWithTheTurnAndClearOnceItIsAccepted() {
+        val chip = ContextItem(SearchKind.Web, "Guide", "https://guide.example.com", null, null, null)
+        val later = ContextItem(SearchKind.News, "Race", "https://news.example.com", null, null, null)
+        var s = RivetState(chips = listOf(chip))
+        s = RivetStore.userSent(s, "t1", "", s.chips)
+        s = s.copy(chips = s.chips + later)
+        assertEquals(listOf(chip), s.messages.single().attachments)
+        s = RivetStore.reduce(s, ServerEvent.TurnAccepted("t1"), 1)
+        assertEquals(listOf(later), s.chips)
+    }
+
+    @Test
+    fun theModelEventReplacesARefusal() {
+        var s = RivetStore.reduce(RivetState(), ServerEvent.ModelRefused("Groq isn't set up on Rivet's brain."), 1)
+        assertEquals("Groq isn't set up on Rivet's brain.", s.modelError)
+        s = RivetStore.reduce(s, ServerEvent.Model(BrainModel.Perplexity, setOf(BrainModel.Perplexity)), 2)
+        assertNull(s.modelError)
+        assertEquals(BrainModel.Perplexity, s.brainModel)
     }
 }

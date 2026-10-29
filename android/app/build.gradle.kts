@@ -14,8 +14,8 @@ android {
         applicationId = "com.hiron.rivet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.2.0"
+        versionCode = 7
+        versionName = "0.4.0"
         // Ready-to-use defaults from rivet.local.properties (never committed); all stay editable in Settings.
         val local = Properties().apply {
             rootProject.file("rivet.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
@@ -84,6 +84,7 @@ dependencies {
     implementation(libs.compose.material.icons)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.elevenlabs.android)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 

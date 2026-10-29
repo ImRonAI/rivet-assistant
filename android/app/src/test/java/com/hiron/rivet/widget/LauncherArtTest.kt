@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
+import com.hiron.rivet.MainActivity
 import com.hiron.rivet.R
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.ui.Quick
@@ -22,6 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
@@ -92,6 +94,31 @@ class LauncherArtTest {
         val waiting = render(RivetWidgets.views(context, snap.copy(waiting = 2, lastReply = ""), panel = true), 360f, 200f, "widget-panel-waiting")
         assertEquals("2 WAITING", waiting.findViewById<TextView>(R.id.status_text).text.toString())
         assertEquals("Rivet is waiting on your OK for 2 actions. Tap to review them.", waiting.findViewById<TextView>(R.id.last).text.toString())
+    }
+
+    @Test
+    fun theSearchBarOpensTheSearchSheet() {
+        val snap = WidgetSnapshot(Connection.Online, "", 0)
+        for (panel in listOf(false, true)) {
+            val root = render(RivetWidgets.views(context, snap, panel), 360f, if (panel) 200f else 72f, if (panel) "widget-panel" else "widget-search")
+            assertEquals(context.getString(R.string.widget_ask), root.findViewById<TextView>(R.id.ask).text.toString())
+            root.findViewById<View>(R.id.ask).performClick()
+            val started = shadowOf(context as android.app.Application).nextStartedActivity
+            assertEquals(RivetWidgets.ACTION_SEARCH, started.action)
+            assertEquals(MainActivity::class.java.name, started.component?.className)
+        }
+        assertEquals("Search or ask Rivet", context.getString(R.string.widget_ask))
+    }
+
+    @Test
+    fun theSmallestSizesStillFitAndSayTheStatusPlainly() {
+        val snap = WidgetSnapshot(Connection.Connecting, "", 0)
+        render(RivetWidgets.views(context, snap, panel = false), 250f, 64f, "widget-search-narrow")
+        val panel = render(RivetWidgets.views(context, snap, panel = true), 250f, 200f, "widget-panel-narrow")
+        assertEquals("CONNECTING…", panel.findViewById<TextView>(R.id.status_text).text.toString())
+        assertEquals(context.getString(R.string.widget_waiting), panel.findViewById<TextView>(R.id.last).text.toString())
+        val offline = render(RivetWidgets.views(context, snap.copy(connection = Connection.Offline), panel = true), 250f, 200f, "widget-panel-offline")
+        assertEquals("OFFLINE", offline.findViewById<TextView>(R.id.status_text).text.toString())
     }
 
     @Test

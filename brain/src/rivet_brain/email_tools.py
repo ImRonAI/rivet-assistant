@@ -37,7 +37,9 @@ from typing import Any
 
 from strands.tools import PythonAgentTool
 
+from .alerts import alert_for
 from .approvals import Tier, ToolPolicy
+from .rules import Standing
 
 logger = logging.getLogger(__name__)
 
@@ -740,33 +742,49 @@ _FOLDER = _str("Mailbox folder (default INBOX).")
 _UID = _int("The email's uid from email_search.")
 
 
-def _send_tier(tool_input: Any) -> tuple[Tier, str]:
+def _send_tier(tool_input: object) -> tuple[Tier, str]:
+    return "send", alert_for("email_send", tool_input, "send", ()).headline
+
+
+def _reply_tier(tool_input: object) -> tuple[Tier, str]:
+    return "send", alert_for("email_reply", tool_input, "send", ()).headline
+
+
+def _mark_tier(tool_input: object) -> tuple[Tier, str]:
     data = tool_input if isinstance(tool_input, Mapping) else {}
-    summary = f"Email {data.get('to')}" if data.get("to") else "Send an email"
-    return "send", f"{summary}, cc {data.get('cc')}" if data.get("cc") else summary
+    tier: Tier = "write" if data.get("action") in MARK_ACTIONS else "unknown"
+    return tier, alert_for("email_mark", tool_input, tier, ()).headline
 
 
-def _reply_tier(tool_input: Any) -> tuple[Tier, str]:
-    data = tool_input if isinstance(tool_input, Mapping) else {}
-    to = data.get("to") or "the sender"
-    if data.get("reply_all") is True:
-        return "send", f"Reply to {to} and everyone else on the email"
-    return "send", f"Reply to {to}"
+def _send_label(scope: Mapping[str, str]) -> str:
+    copy = f" with a copy to {scope['cc']}" if scope.get("cc") else ""
+    return f"Emails to {scope['to']}{copy}"
 
 
-_MARK_SUMMARIES = {
-    "read": "Mark email {uid} in {folder} as read",
-    "unread": "Mark email {uid} in {folder} as unread",
-    "archive": "Archive email {uid} from {folder}",
-}
+def _reply_label(scope: Mapping[str, str]) -> str:
+    if scope.get("reply_all") == "true":
+        return f"Replies to {scope['to']} that go to everyone on the email"
+    return f"Replies to {scope['to']}"
 
 
-def _mark_tier(tool_input: Any) -> tuple[Tier, str]:
-    data = tool_input if isinstance(tool_input, Mapping) else {}
-    template = _MARK_SUMMARIES.get(str(data.get("action")))
-    if template is None:
-        return "unknown", f"Unrecognised email action {data.get('action')!r}"
-    return "write", template.format(uid=data.get("uid"), folder=data.get("folder") or "INBOX")
+_MARK_LABELS = {"read": "Marking emails as read", "unread": "Marking emails as unread", "archive": "Archiving emails"}
+
+SEND_STANDING = Standing((("to", "emails"), ("cc", "emails")), frozenset({"to"}), True, _send_label)
+# Reply-all also goes to everyone the original was sent to, a list the email's sender set, so it is deny-only.
+REPLY_STANDING = Standing(
+    (("to", "emails"), ("reply_all", "flag")),
+    frozenset({"to"}),
+    True,
+    _reply_label,
+    allow_only=(("reply_all", "false"),),
+)
+MARK_STANDING = Standing(
+    (("action", "text"),),
+    frozenset({"action"}),
+    True,
+    lambda scope: _MARK_LABELS[scope["action"]],
+    when=(("action", frozenset(MARK_ACTIONS)),),
+)
 
 
 @dataclass(frozen=True)
@@ -819,7 +837,7 @@ SPECS: tuple[EmailToolSpec, ...] = (
             "cc": _str("Cc address(es), comma separated (optional)."),
         },
         ("to", "subject", "body"),
-        ToolPolicy("send", "Send an email", scope_arg=("to", "cc"), assess=_send_tier),
+        ToolPolicy("send", "Send an email", standing=SEND_STANDING, assess=_send_tier),
     ),
     EmailToolSpec(
         "email_reply",
@@ -834,9 +852,7 @@ SPECS: tuple[EmailToolSpec, ...] = (
             "folder": _FOLDER,
         },
         ("uid", "to", "body"),
-        ToolPolicy(
-            "send", "Reply to an email", untrusted_output=True, scope_arg=("to", "reply_all"), assess=_reply_tier
-        ),
+        ToolPolicy("send", "Reply to an email", untrusted_output=True, standing=REPLY_STANDING, assess=_reply_tier),
     ),
     EmailToolSpec(
         "email_mark",
@@ -844,7 +860,7 @@ SPECS: tuple[EmailToolSpec, ...] = (
         "deletes email.",
         {"uid": _UID, "action": {"type": "string", "enum": list(MARK_ACTIONS)}, "folder": _FOLDER},
         ("uid", "action"),
-        ToolPolicy("write", "Mark or archive an email", assess=_mark_tier),
+        ToolPolicy("write", "Mark or archive an email", standing=MARK_STANDING, assess=_mark_tier),
     ),
 )
 
