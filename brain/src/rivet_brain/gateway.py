@@ -2,19 +2,19 @@
 
 Protocol (JSON messages on ``/v1/sessions/{session_id}``, ``Authorization: Bearer <RIVET_DEVICE_TOKEN>``):
 
-Phone to brain: ``turn`` {text, turn_id?, attachments?} (``attachments``, at most 5, are search results the user
-added: [{kind: web|news|images|videos|places|context, title, url, description?, watch_url?, image_url?}], URLs
-``https://`` only; they go to the model marked as web content and taint the turn; a turn with attachments may have
-empty text), ``model.set`` {model: perplexity|groq} (the model Rivet's own agent runs on; refused while it is
-working), ``approval.response`` {answers: {interrupt_id: {approved, standing?:
-allow|deny}}, lane?} (``standing`` makes the answer a standing rule when the sheet offered it; the rule is stored
-before the turn resumes), ``task`` {goal, task_id?, max_attempts?, timeout?, reason?} (``reason``, at most 140
-characters, is why the task exists; its approvals show it), ``rules.list``, ``rules.set`` {decision: allow|deny,
-tool, scope} (a rule the phone makes for its own approvals; the brain recomputes the offer and refuses what it
-would not offer), ``rules.revoke`` {key} or {tool, scope} (by target, for a rule the phone asked for before its
-``rules`` event arrived; messages run in order, so it follows that ``rules.set``), ``device.result`` {action_id,
-result}, ``call.take_over`` {call_id, to} (transfer a live call to ``to``, the user's own E.164 number; the tap is
-the approval), ``resume``, ``ping``.
+Phone to brain: ``turn`` {text, turn_id?, attachments?} (``attachments``, at most 5, are search results the user added:
+[{kind: web|news|images|videos|places|context, title, url, description?, watch_url?, image_url?}], URLs ``https://``
+only; they go to the model marked as web content and taint the turn; a turn with attachments may have empty text, and
+one left with neither is accepted and then fails), ``model.set`` {model: perplexity|groq} (the model Rivet's own agent
+runs on; refused while it is working), ``approval.response`` {answers: {interrupt_id: {approved, standing?:
+allow|deny}}, lane?} (``standing`` makes the answer a standing rule when the sheet offered it; the rule is stored before
+the turn resumes), ``task`` {goal, task_id?, max_attempts?, timeout?, reason?} (``reason``, at most 140 characters, is
+why the task exists; its approvals show it), ``rules.list``, ``rules.set`` {decision: allow|deny, tool, scope} (a rule
+the phone makes for its own approvals; the brain recomputes the offer and refuses what it would not offer),
+``rules.revoke`` {key} or {tool, scope} (by target, for a rule the phone asked for before its ``rules`` event arrived;
+messages run in order, so it follows that ``rules.set``), ``device.result`` {action_id, result}, ``call.take_over``
+{call_id, to} (transfer a live call to ``to``, the user's own E.164 number; the tap is the approval), ``resume``,
+``ping``.
 
 Brain to phone: ``turn.accepted``, ``turn.started``, the agent's UI events (``text``, ``thinking``,
 ``searching``, ``sources``, ``tool``, ...), ``approval.request`` (each approval is {id, name, request, because?},
@@ -131,6 +131,7 @@ FOLLOW_UP_REASON = "A caller left you a message."
 CANT_MAKE_RULE = "Rivet can't make a rule for this."
 MODEL_LABELS: dict[Provider, str] = {"perplexity": "Perplexity", "groq": "Groq"}
 MODEL_BUSY = "Rivet is busy. Change the model when it finishes."
+EMPTY_TURN = "Rivet had nothing to work with. Type a message, or add results with secure (https) links."
 
 ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
 
@@ -192,6 +193,9 @@ class _Session:
         self.calls = LiveCalls(self.emit, self.spawn, telnyx=telnyx, poll=call_poll)
         self.supervisor = supervisor_factory(self, models.current)
         self.failed: str | None = None
+        # Clear while the supervisor is being replaced; nothing may reach it until it is set.
+        self.ready = asyncio.Event()
+        self.ready.set()
         self.started = self.spawn(self._start())
         self.writer = self.spawn(self._write())
 
@@ -239,6 +243,7 @@ class _Session:
             self.calls.take_over(str(message.get("call_id") or ""), message.get("to"))
             return
         await self.started
+        await self.ready.wait()
         if self.failed is not None:
             self.emit({"type": "error", "error": self.failed})
             return
@@ -255,6 +260,11 @@ class _Session:
                 self.turn_ids.append(turn_id)
             prompt = search_tools.with_attachments(text, attachments)
             self._run(self._guard(self.supervisor.send(prompt, turn_id=turn_id, untrusted=bool(attachments)), turn_id))
+        elif kind == "turn":
+            # Accepted so the phone stops re-sending it, then failed so it stops waiting.
+            turn_id = message.get("turn_id")
+            self.emit({"type": "turn.accepted", "turn_id": turn_id})
+            self.emit({"type": "turn.failed", "turn_id": turn_id, "lane": "default", "error": EMPTY_TURN})
         elif kind == "approval.response" and isinstance(message.get("answers"), dict):
             lane = str(message.get("lane") or "default")
             answers: dict[str, object] = message["answers"]
@@ -335,10 +345,14 @@ class _Session:
             if self.work or self.supervisor.busy:
                 self.emit({"type": "model.refused", "error": MODEL_BUSY})
                 return
-            await self.models.save(provider)
-            await self.supervisor.close()
-            self.supervisor = self.make_supervisor(self, provider)
-            await self.supervisor.start()
+            self.ready.clear()
+            try:
+                await self.models.save(provider)
+                await self.supervisor.close()
+                self.supervisor = self.make_supervisor(self, provider)
+                await self.supervisor.start()
+            finally:
+                self.ready.set()
         self.emit(self.models.event())
 
     def _refused(self, request: RuleRequest) -> Callable[[str], None]:
@@ -351,6 +365,7 @@ class _Session:
 
     async def _follow_up(self, task_id: str) -> None:
         await self.started
+        await self.ready.wait()
         if self.failed is not None:
             return
         task = self.supervisor.run_task(

@@ -18,8 +18,9 @@ from rivet_brain.device import DeviceBridge, device_tool
 from rivet_brain.device_tools import POLICIES as PHONE_POLICIES
 from rivet_brain.device_tools import SMS_STANDING
 from rivet_brain.factory import Generation, build_agent
-from rivet_brain.gateway import create_app
+from rivet_brain.gateway import ModelChoice, _Session, create_app
 from rivet_brain.models.groq import GroqModel
+from rivet_brain.rules import StandingRules
 from tests.chaos import Aux, fast_settings, make_build
 from tests.sse import SSE, FakeGroq, FakePerplexity
 
@@ -477,8 +478,70 @@ def test_a_turn_with_text_and_attachments_keeps_the_text_first(tmp_path: Path) -
         page = {"kind": "web", "title": "Page", "url": "https://w.example/"}
         socket.send_json({"type": "turn", "turn_id": "t1", "text": "what about this?", "attachments": [page]})
         _until(socket, "turn.completed")
-        socket.send_json({"type": "turn", "turn_id": "t2", "text": "  ", "attachments": [{"kind": "web"}]})
-        error, _ = _until(socket, "error")
-        assert error["error"] == "unsupported message: 'turn'"
+        insecure = {"kind": "web", "title": "Old site", "url": "http://example.org/page"}
+        socket.send_json({"type": "turn", "turn_id": "t2", "text": "  ", "attachments": [insecure]})
+        failed, seen = _until(socket, "turn.failed")
+        assert [e["type"] for e in seen] == ["turn.accepted", "turn.failed"]
+        assert seen[0]["turn_id"] == failed["turn_id"] == "t2" and failed["lane"] == "default"
+        assert (
+            failed["error"]
+            == "Rivet had nothing to work with. Type a message, or add results with secure (https) links."
+        )
     prompt = json.dumps(next(i for i in main.requests[0]["input"] if i.get("role") == "user"))
     assert "what about this?\\n\\nThe user added these search results" in prompt
+
+
+class _SlowStorage(LocalFileStorage):
+    """Holds every write until ``release`` is set."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self.writing = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def write(self, key: str, data: bytes) -> None:
+        self.writing.set()
+        await self.release.wait()
+        await super().write(key, data)
+
+
+class _Supervisor:
+    def __init__(self, provider: str) -> None:
+        self.provider = provider
+        self.closed = False
+        self.busy = False
+        self.tasks: list[str] = []
+
+    async def start(self) -> None:
+        pass
+
+    async def close(self) -> None:
+        self.closed = True
+
+    async def run_task(self, goal: str, **kwargs: Any) -> None:
+        assert not self.closed, "a task reached a closed supervisor"
+        self.tasks.append(str(kwargs["task_id"]))
+
+
+async def test_a_call_follow_up_during_a_model_switch_waits_for_the_new_supervisor(tmp_path: Path) -> None:
+    storage = _SlowStorage(str(tmp_path / "sessions"))
+    built: list[_Supervisor] = []
+
+    def factory(session: Any, provider: str) -> Any:
+        built.append(_Supervisor(provider))
+        return built[-1]
+
+    settings = fast_settings(tmp_path, groq_api_key="g")
+    models = ModelChoice(storage, "phone-1", settings)
+    session = _Session("phone-1", factory, rules=StandingRules(storage, "phone-1"), models=models)
+    await session.started
+    switch = asyncio.ensure_future(session.handle({"type": "model.set", "model": "groq"}))
+    await storage.writing.wait()
+    session.follow_up_call(1.0)
+    await asyncio.sleep(0)
+    storage.release.set()
+    await switch
+    await asyncio.gather(*session.work)
+    assert [s.provider for s in built] == ["perplexity", "groq"]
+    assert built[0].tasks == [] and built[1].tasks == ["call-1000"]
+    await session.close()
