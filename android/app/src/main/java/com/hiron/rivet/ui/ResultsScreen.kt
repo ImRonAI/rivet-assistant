@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
@@ -40,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,7 +128,7 @@ fun DidYouMean(corrected: String, onPick: (String) -> Unit, modifier: Modifier =
             withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(corrected) }
             append("?")
         },
-        style = Type.body, color = p.cy, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        style = Type.body, color = p.cy, maxLines = 2, overflow = TextOverflow.Ellipsis,
         modifier = modifier.heightIn(min = 48.dp).clickable(role = Role.Button) { onPick(corrected) }.padding(vertical = 14.dp),
     )
 }
@@ -156,6 +158,8 @@ fun ResultsScreen(
         }
     }
     val errors = remember { mutableStateMapOf<Pair<String, SearchKind>, String>() }
+    // "Try again" moves it on, so the same words and tab search again.
+    var attempt by remember { mutableIntStateOf(0) }
     var focused by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val ime = LocalSoftwareKeyboardController.current
@@ -168,7 +172,7 @@ fun ResultsScreen(
         }
     }
     val key = query to tab
-    LaunchedEffect(key) {
+    LaunchedEffect(key, attempt) {
         if (query.isBlank() || key in found) return@LaunchedEffect
         errors.remove(key)
         search(SearchQuery(tab, query)).fold({ found[key] = it }, { errors[key] = it.message ?: "Search didn't work." })
@@ -207,7 +211,7 @@ fun ResultsScreen(
                     Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    ResultTabs.forEach { kind -> FilterChip(kind.label, kind == tab, { tab = kind }, Modifier.heightIn(min = 40.dp)) }
+                    ResultTabs.forEach { kind -> FilterChip(kind.label, kind == tab, { tab = kind }, Modifier.heightIn(min = 48.dp)) }
                 }
                 Rule(color = p.line)
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -215,7 +219,10 @@ fun ResultsScreen(
                     val error = errors[key]
                     when {
                         query.isBlank() -> Hint("Type what to look for, then press search.")
-                        error != null -> InfoStrip(error, Modifier.padding(16.dp), icon = Icons.Outlined.WarningAmber, tone = Tone.Red)
+                        error != null -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            InfoStrip(error, icon = Icons.Outlined.WarningAmber, tone = Tone.Red)
+                            Keycap("Try again", { attempt++ }, icon = Icons.Outlined.Refresh)
+                        }
                         results == null -> Column(Modifier.padding(top = 16.dp)) { Skeleton(tab) }
                         results.items.isEmpty() -> Hint(
                             "Nothing found for “$query”." + (results.altered?.let { " Brave searched for “$it”." } ?: ""),

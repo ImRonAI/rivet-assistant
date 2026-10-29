@@ -1,6 +1,7 @@
 package com.hiron.rivet
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -160,10 +161,25 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
         val heard = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (!heard.isNullOrBlank()) runtime.send(heard)
     }
+    // The voice agent starts once the microphone is allowed; denied for good, only the app's settings page can allow it.
+    val agentMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val activity = context as? Activity
+        when {
+            granted -> runtime.agent.switchMode(AgentMode.Voice)
+            activity != null && !activity.shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> context.startActivity(
+                Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+            )
+            else -> runtime.agent.switchMode(AgentMode.Voice)
+        }
+    }
     val listen = listen@{
         runtime.stopSpeaking()
         if (runtime.settings.elevenLabsAgents) {
-            if (runtime.agent.mode == AgentMode.Voice) runtime.agent.stop() else runtime.agent.switchMode(AgentMode.Voice)
+            when {
+                runtime.agent.mode == AgentMode.Voice -> runtime.agent.stop()
+                !runtime.agent.hasMicrophone() -> agentMic.launch(Manifest.permission.RECORD_AUDIO)
+                else -> runtime.agent.switchMode(AgentMode.Voice)
+            }
             return@listen
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)

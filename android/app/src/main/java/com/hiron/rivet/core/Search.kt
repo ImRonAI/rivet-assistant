@@ -145,8 +145,11 @@ data class ContextItem(
 ) {
     companion object {
         const val DESCRIPTION_LIMIT = 500
+        const val URL_LIMIT = 2048
 
-        fun of(kind: SearchKind, item: SearchItem): ContextItem {
+        /** Null unless [item]'s link is one the brain accepts (search_tools.py `parse_attachments`: https only). */
+        fun of(kind: SearchKind, item: SearchItem): ContextItem? {
+            val url = accepted(item.url) ?: return null
             val description = when (item) {
                 is WebItem -> item.description ?: item.snippets.firstOrNull()
                 is ImageItem -> item.source
@@ -156,12 +159,15 @@ data class ContextItem(
             return ContextItem(
                 kind = kind,
                 title = item.title,
-                url = item.url,
+                url = url,
                 description = description?.take(DESCRIPTION_LIMIT),
-                watchUrl = (item as? VideoItem)?.url,
-                imageUrl = (item as? ImageItem)?.image,
+                watchUrl = (item as? VideoItem)?.let { accepted(it.url) },
+                imageUrl = (item as? ImageItem)?.let { accepted(it.image) ?: accepted(it.thumbnail) },
             )
         }
+
+        private fun accepted(url: String): String? =
+            url.takeIf { it.startsWith("https://") && it.length <= URL_LIMIT && it.none(Char::isWhitespace) }
     }
 }
 

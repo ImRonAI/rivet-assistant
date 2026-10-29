@@ -349,7 +349,14 @@ class AgentToolsTest {
             assertEquals("/v1/agent/session?mode=text", server.takeRequest().path)
 
             val error = runCatching { fetchAgentCredential(http, config, AgentMode.Voice) }.exceptionOrNull()
-            assertEquals("ElevenLabs agents are not set up on the brain", error?.message)
+            assertEquals(AgentStartError.NotSetUp, error)
+
+            server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"unauthorized"}"""))
+            assertEquals(AgentStartError.Unauthorized, runCatching { fetchAgentCredential(http, config, AgentMode.Text) }.exceptionOrNull())
+            server.enqueue(MockResponse().setBody("""{"mode":"text","agent_id":"agent_t"}"""))
+            assertEquals(AgentStartError.NotSetUp, runCatching { fetchAgentCredential(http, config, AgentMode.Text) }.exceptionOrNull())
+            val unset = GatewayConfig("", "", "")
+            assertEquals(AgentStartError.NotConfigured, runCatching { fetchAgentCredential(http, unset, AgentMode.Text) }.exceptionOrNull())
         }
     }
 }

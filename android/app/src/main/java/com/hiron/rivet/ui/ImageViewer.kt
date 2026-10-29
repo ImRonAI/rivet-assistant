@@ -153,7 +153,7 @@ fun ImageViewer(item: ImageItem, n: Int, onAdd: (ContextItem) -> Unit, onDismiss
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Keycap("Share", { scope.launch { Share.image(context, images, item) } }, tone = KeyTone.Accent, icon = Icons.Outlined.Share)
                         Keycap("Open page", { openExternally(context, item.url) }, icon = Icons.AutoMirrored.Outlined.OpenInNew)
-                        Keycap("Add to Rivet", { onAdd(ContextItem.of(SearchKind.Images, item)) }, icon = Icons.Outlined.Add)
+                        ContextItem.of(SearchKind.Images, item)?.let { added -> Keycap("Add to Rivet", { onAdd(added) }, icon = Icons.Outlined.Add) }
                     }
                 }
             }

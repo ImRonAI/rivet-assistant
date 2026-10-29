@@ -30,8 +30,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,6 +53,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -92,7 +93,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.hiron.rivet.core.Activity
 import com.hiron.rivet.core.ChatMessage
@@ -156,8 +156,8 @@ fun HomeScreen(
     val actions = remember(runtime) {
         ResultActions(add = runtime::addContext, seeAll = { results, kind -> onOpenResults(ResultsRequest(results.query, kind, results)) })
     }
-    // Rivet's own brain is offered when the ElevenLabs agent couldn't start.
-    val useBrain = if (state.agentDown && runtime.settings.elevenLabsAgents) runtime::useOwnBrain else null
+    // Rivet's own brain is offered when the ElevenLabs agent couldn't start and the brain can be reached.
+    val useBrain = if (state.agentDown && runtime.settings.elevenLabsAgents && state.connection == Connection.Online) runtime::useOwnBrain else null
     CompositionLocalProvider(LocalResultActions provides actions) {
         Column(Modifier.fillMaxSize().background(p.bg)) {
             val idle = !talking && !keyboard && !callLive
@@ -191,7 +191,7 @@ fun HomeScreen(
                 state.lastError?.let {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         InfoStrip(it, icon = Icons.Outlined.WarningAmber, tone = Tone.Red)
-                        useBrain?.let { use -> TextKey(USE_BRAIN, use, leading = Icons.Outlined.Psychology, tone = Tone.Cyan) }
+                        useBrain?.let { use -> UseBrainKey(use) }
                     }
                 }
                 if (stageShare < 1f) Spacer(Modifier.weight(1f - stageShare))
@@ -211,7 +211,11 @@ fun HomeScreen(
     }
 }
 
-const val USE_BRAIN = "Use Rivet's own brain instead"
+const val USE_BRAIN = "Use Rivet's own brain"
+
+@Composable
+private fun UseBrainKey(onClick: () -> Unit) =
+    Keycap(USE_BRAIN, onClick, Modifier.padding(top = 8.dp), tone = KeyTone.Accent, icon = Icons.Outlined.Psychology)
 
 const val STAGE_TAG = "stage"
 
@@ -375,7 +379,7 @@ internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifie
             item(key = "error") {
                 Column(Modifier.padding(horizontal = 16.dp)) {
                     Text(error, color = p.rec, style = Type.body)
-                    onUseBrain?.let { TextKey(USE_BRAIN, it, Modifier.offset { IntOffset(-8.dp.roundToPx(), 0) }, leading = Icons.Outlined.Psychology, tone = Tone.Cyan) }
+                    onUseBrain?.let { UseBrainKey(it) }
                 }
             }
         }
@@ -491,13 +495,13 @@ private fun AttachedChip(item: ContextItem, onRemove: () -> Unit) {
     val p = LocalPalette.current
     val pill = RoundedCornerShape(50)
     Row(
-        Modifier.height(40.dp).widthIn(max = 240.dp).clip(pill).background(p.accentSoft).border(1.dp, p.accent.copy(alpha = 0.35f), pill)
+        Modifier.heightIn(min = 48.dp).widthIn(max = 240.dp).clip(pill).background(p.accentSoft).border(1.dp, p.accent.copy(alpha = 0.35f), pill)
             .padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("+ ${item.title}", style = Type.chip, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         Box(
-            Modifier.size(40.dp).clickable(role = Role.Button, onClickLabel = "Remove") { onRemove() }
+            Modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = "Remove") { onRemove() }
                 .semantics { contentDescription = "Remove ${item.title}" },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Outlined.Close, contentDescription = null, tint = p.ink2, modifier = Modifier.size(16.dp)) }
@@ -549,17 +553,17 @@ private fun Dock(
         val suggestions = help.suggestions.take(5).takeIf { text.trim().length >= 2 }.orEmpty()
         if (suggestions.isNotEmpty()) {
             ChipRail(Modifier.padding(top = 12.dp).testTag(SUGGESTIONS_TAG), start = 16.dp) {
-                items(suggestions, key = { it }) { s -> PillChip(s, { text = s }, leading = Icons.Outlined.Search) }
+                items(suggestions, key = { it }) { s -> PillChip(s, { text = s }, Modifier.minimumInteractiveComponentSize(), leading = Icons.Outlined.Search) }
             }
         } else if (!keyboard) {
             ChipRail(Modifier.padding(top = 12.dp), start = 16.dp) {
                 item(key = "task") {
                     PillChip(
-                        "Task", { asTask = !asTask }, Modifier.semantics { selected = asTask },
+                        "Task", { asTask = !asTask }, Modifier.minimumInteractiveComponentSize().semantics { selected = asTask },
                         leading = Icons.Outlined.Bolt, selected = asTask,
                     )
                 }
-                items(Quick.entries, key = { it.name }) { q -> PillChip(q.label, { onSend(q.prompt, false) }) }
+                items(Quick.entries, key = { it.name }) { q -> PillChip(q.label, { onSend(q.prompt, false) }, Modifier.minimumInteractiveComponentSize()) }
             }
         }
         help.corrected?.let { DidYouMean(it, { picked -> text = picked }, Modifier.padding(horizontal = 20.dp)) }

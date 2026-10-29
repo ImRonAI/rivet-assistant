@@ -18,6 +18,8 @@ import com.hiron.rivet.core.RobotDirector
 import com.hiron.rivet.core.RuleScope
 import com.hiron.rivet.core.RuleSet
 import com.hiron.rivet.core.RuleTarget
+import com.hiron.rivet.core.SearchClient
+import com.hiron.rivet.core.SearchError
 import com.hiron.rivet.core.SearchKind
 import com.hiron.rivet.core.SearchQuery
 import com.hiron.rivet.core.SearchResults
@@ -42,10 +44,12 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -108,7 +112,7 @@ class RivetAgent(
             var started: ConversationSession? = null
             try {
                 if (mode == AgentMode.Voice && !hasMicrophone()) {
-                    fail(gen, "Rivet needs the microphone for voice. Allow it in Settings › Permissions.")
+                    fail(gen, NEEDS_MICROPHONE, down = false)
                     return@launch
                 }
                 val credential = fetchAgentCredential(http, gateway(), mode)
@@ -131,7 +135,7 @@ class RivetAgent(
             } catch (e: Exception) {
                 started?.let(::end)
                 if (e is CancellationException) throw e
-                fail(gen, "Couldn't start the ElevenLabs agent: ${e.message ?: e.javaClass.simpleName}")
+                fail(gen, (e as? AgentStartError ?: AgentStartError.Failed).message)
             }
         }
     }
@@ -265,7 +269,7 @@ class RivetAgent(
         words.lastOrNull()?.let { delay((it.seconds * 1000).toLong()) }
     }
 
-    private fun hasMicrophone() =
+    fun hasMicrophone() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun say(fromUser: Boolean, text: String) = update {
@@ -278,10 +282,15 @@ class RivetAgent(
 
     private fun note(text: String, kind: String = "agent") = update { RivetStore.note(it, System.currentTimeMillis(), kind, text) }
 
-    private fun fail(gen: Int, error: String) {
+    /** [down]: the agent couldn't start, so Home offers Rivet's own brain instead. */
+    private fun fail(gen: Int, error: String, down: Boolean = true) {
         if (gen != generation) return
         mode = null
-        update { RivetStore.note(it.copy(lastError = error, activity = Activity.Failed, agentDown = true), System.currentTimeMillis(), "error", error) }
+        update { RivetStore.note(it.copy(lastError = error, activity = Activity.Failed, agentDown = down), System.currentTimeMillis(), "error", error) }
+    }
+
+    companion object {
+        const val NEEDS_MICROPHONE = "Rivet needs the microphone to talk. Tap the mic to allow it."
     }
 }
 
@@ -298,20 +307,35 @@ object AgentContext {
     }
 }
 
-/** Asks the brain for one session's credential; the ElevenLabs API key never reaches the phone. */
+/** Why an agent session didn't start, in words for the user. */
+sealed class AgentStartError(override val message: String) : Exception(message) {
+    data object NotConfigured : AgentStartError(SearchClient.NOT_CONFIGURED)
+    data object Offline : AgentStartError(SearchError.Offline.message)
+    data object Unauthorized : AgentStartError("Rivet's brain didn't accept this phone's device token. Check it in Settings.")
+    data object NotSetUp : AgentStartError("ElevenLabs isn't set up on Rivet's brain yet.")
+    data object Failed : AgentStartError("Couldn't start the ElevenLabs agent. Try again.")
+}
+
+/** Asks the brain for one session's credential; the ElevenLabs API key never reaches the phone. Throws [AgentStartError]. */
 internal suspend fun fetchAgentCredential(http: OkHttpClient, config: GatewayConfig, mode: AgentMode): AgentCredential =
     withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("${config.baseUrl()}/v1/agent/session?mode=${mode.wire}")
-            .header("Authorization", "Bearer ${config.token}")
-            .get()
-            .build()
-        http.newCall(request).execute().use { response ->
-            val body = runCatching { JSONObject(response.body?.string().orEmpty()) }.getOrDefault(JSONObject())
-            check(response.isSuccessful) { body.optString("error").ifBlank { "the brain answered ${response.code}" } }
+        val url = "${config.baseUrl()}/v1/agent/session?mode=${mode.wire}".toHttpUrlOrNull()
+        if (!config.complete || url == null) throw AgentStartError.NotConfigured
+        val request = Request.Builder().url(url).header("Authorization", "Bearer ${config.token}").get().build()
+        val response = try {
+            http.newCall(request).execute()
+        } catch (e: IOException) {
+            throw AgentStartError.Offline
+        }
+        response.use {
+            val body = runCatching { JSONObject(it.body?.string().orEmpty()) }.getOrDefault(JSONObject())
+            when {
+                it.code == 401 -> throw AgentStartError.Unauthorized
+                it.code == 503 -> throw AgentStartError.NotSetUp
+                !it.isSuccessful -> throw AgentStartError.Failed
+            }
             val field = if (mode == AgentMode.Voice) "conversation_token" else "signed_url"
-            val credential = body.optString(field)
-            check(credential.isNotBlank()) { "the brain sent no $field" }
+            val credential = body.optString(field).ifBlank { throw AgentStartError.NotSetUp }
             AgentCredential(mode, body.optString("agent_id"), credential)
         }
     }

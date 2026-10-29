@@ -34,7 +34,9 @@ import com.hiron.rivet.core.BrainModel
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.ContextItem
+import com.hiron.rivet.core.PlaceItem
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.core.SearchError
 import com.hiron.rivet.core.SearchKind
 import com.hiron.rivet.core.SearchQuery
 import com.hiron.rivet.core.SearchResults
@@ -42,6 +44,7 @@ import com.hiron.rivet.core.Suggester
 import com.hiron.rivet.core.rivet
 import com.hiron.rivet.testing.SearchFixtures
 import com.hiron.rivet.testing.shot
+import com.hiron.rivet.voice.AgentStartError
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -241,7 +244,7 @@ open class SearchScreensTest {
     fun composerChips() {
         val runtime = compose.activity.rivet
         val state = RivetState(connection = Connection.Online)
-        val chips = listOf(ContextItem.of(SearchKind.Videos, SearchFixtures.videoResults.items[0]), ContextItem.of(SearchKind.Web, SearchFixtures.webResults.items[1]))
+        val chips = listOfNotNull(ContextItem.of(SearchKind.Videos, SearchFixtures.videoResults.items[0]), ContextItem.of(SearchKind.Web, SearchFixtures.webResults.items[1]))
         page { HomeScreen(runtime, state.copy(chips = chips), onListen = {}, onReviewApprovals = {}, suggester = null) }
         compose.onNodeWithContentDescription("Remove How to pick trail running shoes in 10 minutes").assertIsDisplayed()
         compose.onNodeWithContentDescription("Send").assertIsDisplayed()
@@ -252,11 +255,62 @@ open class SearchScreensTest {
     fun useTheBrainWhenTheAgentCantStart() {
         val runtime = compose.activity.rivet
         runtime.settings.elevenLabsAgents = true
-        val state = RivetState(connection = Connection.Online, agentDown = true, lastError = "Couldn't start the ElevenLabs agent: ElevenLabs agents are not set up on the brain")
+        val state = RivetState(connection = Connection.Online, agentDown = true, lastError = AgentStartError.NotSetUp.message)
         page { HomeScreen(runtime, state, onListen = {}, onReviewApprovals = {}, suggester = null) }
         shot("agent-down")
         compose.onNodeWithText(USE_BRAIN).performClick()
         assertTrue(!runtime.settings.elevenLabsAgents)
+    }
+
+    @Test
+    fun theBrainIsNotOfferedWhileOffline() {
+        val runtime = compose.activity.rivet
+        runtime.settings.elevenLabsAgents = true
+        val state = RivetState(connection = Connection.Offline, agentDown = true, lastError = AgentStartError.Offline.message)
+        page { HomeScreen(runtime, state, onListen = {}, onReviewApprovals = {}, suggester = null) }
+        compose.onNodeWithText(AgentStartError.Offline.message).assertIsDisplayed()
+        compose.onNodeWithText(USE_BRAIN).assertDoesNotExist()
+    }
+
+    @Test
+    fun chipsGoToTheAgentWhenItIsTurnedOn() {
+        val runtime = compose.activity.rivet
+        runtime.settings.elevenLabsAgents = false
+        val chip = ContextItem.of(SearchKind.Web, SearchFixtures.webResults.items[1])
+        compose.runOnUiThread {
+            runtime.addContext(checkNotNull(chip))
+            runtime.useAgents(true)
+        }
+        assertTrue(runtime.state.value.chips.isEmpty())
+        assertTrue(runtime.state.value.messages.any { it.system && it.text == "Added to Rivet: ${chip?.title}" })
+        compose.runOnUiThread { runtime.agent.stop() }
+    }
+
+    @Test
+    fun aPlaceWithoutCoordinatesStillOpensThePlacesPage() {
+        val first = SearchFixtures.placeResults.items.filterIsInstance<PlaceItem>().first()
+        conversation(SearchFixtures.placeResults.copy(items = listOf(first.copy(at = null))))
+        compose.onNodeWithText("See all").performClick()
+        assertEquals(SearchKind.Places, opened.single())
+    }
+
+    @Test
+    fun aFailedSearchCanBeTriedAgain() {
+        var calls = 0
+        page {
+            ResultsScreen(
+                ResultsRequest("trail running shoes", SearchKind.Web, null),
+                search = { q: SearchQuery -> if (calls++ == 0) Result.failure(SearchError.Offline) else Result.success(SearchFixtures.webResults.copy(query = q.q)) },
+                suggester = null, suggestions = false, onAsk = {}, onAdd = {}, onClose = {},
+            )
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText(SearchError.Offline.message).assertIsDisplayed()
+        shot("page-error")
+        compose.onNodeWithText("Try again").performClick()
+        compose.waitForIdle()
+        assertEquals(2, calls)
+        compose.onNodeWithText(SearchError.Offline.message).assertDoesNotExist()
     }
 
     @Test
@@ -287,6 +341,9 @@ open class SearchScreensTest {
         state = one.copy(availableModels = setOf(BrainModel.Perplexity, BrainModel.Groq))
         compose.onNodeWithText(BrainModel.Groq.label).performClick()
         assertEquals(listOf(BrainModel.Groq), chosen)
+        compose.onNodeWithText("Switching…").assertIsDisplayed()
+        state = state.copy(brainModel = BrainModel.Groq)
+        compose.onNodeWithText("Switching…").assertDoesNotExist()
     }
 
     @Test

@@ -4,10 +4,12 @@ import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.hiron.rivet.core.ContextItem
 import com.hiron.rivet.core.GatewayConfig
+import com.hiron.rivet.core.ImageItem
 import com.hiron.rivet.core.Protocol
 import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.core.RuleSet
 import com.hiron.rivet.core.SearchKind
+import com.hiron.rivet.core.WebItem
 import com.hiron.rivet.device.ToolResult
 import io.elevenlabs.ClientTool
 import io.elevenlabs.ConversationSession
@@ -25,6 +27,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -94,6 +97,15 @@ class AgentContextTest {
                 "url: https://photos.example.com/2\nimage_url: https://img/full2",
             AgentContext.update(image),
         )
+    }
+
+    @Test
+    fun onlyHttpsLinksCanBeAdded() {
+        val page = WebItem("Old site", "http://example.org/page", null, null, null, null, null, false, emptyList())
+        assertNull(ContextItem.of(SearchKind.Web, page))
+        val image = ImageItem("Lugs", "https://photos.example.com/2", "http://cdn.example.org/a.jpg", "https://imgs.example.com/t.jpg", null, null, null)
+        assertEquals("https://imgs.example.com/t.jpg", ContextItem.of(SearchKind.Images, image)?.imageUrl)
+        assertNull(ContextItem.of(SearchKind.Images, image.copy(thumbnail = "http://cdn.example.org/t.jpg"))?.imageUrl)
     }
 
     @Test

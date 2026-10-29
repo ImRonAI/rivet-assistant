@@ -197,7 +197,8 @@ private fun Footer(kind: SearchKind, item: SearchItem, openLabel: String = "Open
         extra()
         ActionIcon(Icons.AutoMirrored.Outlined.OpenInNew, openLabel) { openExternally(context, item.url) }
         ActionIcon(Icons.Outlined.Share, "Share") { Share.start(context, Share.text(item.title, item.url)) }
-        if (actions != null && kind != SearchKind.Answers) AddKey { actions.add(ContextItem.of(kind, item)) }
+        val added = if (actions != null && kind != SearchKind.Answers) ContextItem.of(kind, item) else null
+        if (actions != null && added != null) AddKey { actions.add(added) }
     }
 }
 
@@ -345,7 +346,7 @@ fun PlaceCard(item: PlaceItem, n: Int, modifier: Modifier = Modifier, selected: 
                     val line = listOfNotNull(rating, item.price, item.categories.take(2).joinToString(", ").ifBlank { null })
                     if (line.isNotEmpty()) Text(line.joinToString(" · "), style = Type.body, color = p.amb, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (item.hoursToday.isNotEmpty()) {
-                        Text("Today " + item.hoursToday.joinToString(", ") { "${it.opens}–${it.closes}" }, style = Type.mono, color = p.ok, maxLines = 1)
+                        Text("Today " + item.hoursToday.joinToString(", ") { "${it.opens}–${it.closes}" }, style = Type.mono, color = p.ok, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     item.address?.let { Text(it, style = Type.body, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                 }
@@ -366,19 +367,25 @@ private fun PlaceStrip(id: String, results: SearchResults) {
     val p = LocalPalette.current
     val actions = LocalResultActions.current
     val places = results.items.filterIsInstance<PlaceItem>()
-    val pager = rememberPagerState { places.size }
+    val pager = rememberPagerState { places.size + if (actions != null) 1 else 0 }
     val pins = remember(places) { pins(places) }
     if (pins.isNotEmpty()) {
         val shape = RoundedCornerShape(16.dp)
         Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(180.dp).clip(shape).border(1.dp, p.edge, shape)) {
-            PlaceMap(pins, interactive = false, selected = pager.currentPage + 1, onSelect = {}, modifier = Modifier.fillMaxSize())
+            PlaceMap(pins, interactive = false, selected = (pager.currentPage + 1).coerceAtMost(places.size), onSelect = {}, modifier = Modifier.fillMaxSize())
             Box(
                 Modifier.fillMaxSize().clickable(enabled = actions != null, role = Role.Button) { actions?.seeAll(results, SearchKind.Places) }
                     .semantics { contentDescription = "Map of ${pins.size} places. Opens the results page." },
             )
         }
     }
-    CardPager(pager) { page -> PlaceCard(places[page], page + 1, selected = page == pager.currentPage) }
+    CardPager(pager) { page ->
+        val place = places.getOrNull(page)
+        when {
+            place != null -> PlaceCard(place, page + 1, selected = page == pager.currentPage)
+            actions != null -> SeeAll(Modifier.fillMaxWidth().height(180.dp)) { actions.seeAll(results, SearchKind.Places) }
+        }
+    }
 }
 
 internal fun pins(places: List<PlaceItem>): List<MapPin> = places.mapIndexedNotNull { i, place -> place.at?.let { MapPin(i + 1, it, place.title) } }

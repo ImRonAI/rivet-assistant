@@ -341,7 +341,7 @@ class ReviewScreensTest {
     fun settingsOnANarrowPhone() {
         settings(FakeStudio(null)) {}
         compose.onNodeWithText("Not chosen yet").assertIsDisplayed()
-        compose.onNodeWithText("Voice model").performScrollTo()
+        compose.onNodeWithText("Talk key").performScrollTo()
         compose.mainClock.advanceTimeBy(800)
         shot(compose, compose.activity, "review-settings-narrow")
     }

@@ -51,6 +51,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Person
@@ -65,6 +66,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -276,18 +278,14 @@ private fun Voice(runtime: RivetRuntime, refresh: Int) {
         }
     }
     FeatureCard(
-        Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Rivet answers in its own voice.",
-        tone = Tone.Accent, tag = "ELEVENLABS" to Tone.Neutral,
+        Icons.Outlined.GraphicEq, "Talk key", "Shows the mic key, so you can talk to Rivet out loud.",
+        tone = Tone.Accent,
         trailing = {
             RivetToggle(voiceModel, {
                 voiceModel = it
                 s.voiceModel = it
             })
         },
-    )
-    FeatureCard(
-        Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer.",
-        tone = Tone.Cyan, tag = "ALWAYS ON" to Tone.Cyan,
     )
 }
 
@@ -347,8 +345,7 @@ private fun Behaviour(runtime: RivetRuntime, state: RivetState, onChanged: () ->
         Rule(color = p.line)
         Toggle("Use ElevenLabs agents", agents, detail = "Talk and type with Rivet's ElevenLabs agents. Off: Rivet's own brain.") {
             agents = it
-            s.elevenLabsAgents = it
-            if (!it) runtime.agent.stop()
+            runtime.useAgents(it)
         }
         Rule(color = p.line)
         Toggle(
@@ -364,6 +361,9 @@ private fun Behaviour(runtime: RivetRuntime, state: RivetState, onChanged: () ->
 internal fun BrainModelPlate(state: RivetState, onChoose: (BrainModel) -> Boolean) {
     val p = LocalPalette.current
     val online = state.connection == Connection.Online
+    // The model asked for, until the brain says which one runs or why it couldn't switch.
+    var pending by remember { mutableStateOf<BrainModel?>(null) }
+    LaunchedEffect(state.brainModel, state.modelError) { pending = null }
     RivetCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconWell(Icons.Outlined.Psychology, tone = Tone.Cyan)
@@ -378,20 +378,24 @@ internal fun BrainModelPlate(state: RivetState, onChoose: (BrainModel) -> Boolea
             val usable = online && model in state.availableModels
             val note = when {
                 model == state.brainModel -> "In use"
+                model == pending -> "Switching…"
                 !online -> null
                 model !in state.availableModels -> "Not set up on the brain"
                 else -> null
             }
+            // Only the control dims when it can't be chosen; the note explaining why stays legible.
+            val dim = Modifier.alpha(if (usable || model == state.brainModel) 1f else 0.5f)
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                    .selectable(model == state.brainModel, enabled = usable, role = Role.RadioButton) { if (model != state.brainModel) onChoose(model) }
-                    .alpha(if (usable || model == state.brainModel) 1f else 0.5f),
+                    .selectable(model == state.brainModel, enabled = usable, role = Role.RadioButton) {
+                        if (model != state.brainModel && onChoose(model)) pending = model
+                    },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RadioDot(model == state.brainModel)
+                Box(dim) { RadioDot(model == state.brainModel) }
                 Spacer(Modifier.width(14.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(model.label, style = Type.bodyLg, color = p.ink)
+                    Text(model.label, style = Type.bodyLg, color = p.ink, modifier = dim)
                     note?.let { Text(it, style = Type.cardBody, color = if (model == state.brainModel) p.ok else p.ink2) }
                 }
             }
@@ -622,7 +626,7 @@ private data class Access(val icon: ImageVector, val title: String, val why: Str
 private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
     val icons = mapOf(
         "Texts" to Icons.AutoMirrored.Outlined.Chat, "Contacts" to Icons.Outlined.Person, "Calendar" to Icons.Outlined.Event,
-        "Phone" to Icons.Outlined.Call, "Notifications" to Icons.Outlined.Notifications,
+        "Phone" to Icons.Outlined.Call, "Microphone" to Icons.Outlined.Mic, "Notifications" to Icons.Outlined.Notifications,
     )
     val runtimePerms = PermissionGroups.ALL.map { g -> Access(icons[g.name] ?: Icons.Outlined.Notifications, g.name, g.why) to g.permissions }
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onChanged() }

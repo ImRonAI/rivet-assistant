@@ -3,8 +3,6 @@ package com.hiron.rivet.ui
 import android.provider.Settings as AndroidSettings
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -64,8 +62,8 @@ class OnboardingTest {
         shot("00a-onboarding-meet")
 
         tap("Set up step by step")
-        compose.onNodeWithText("TWO MODELS, ONE RIVET").assertIsDisplayed()
-        compose.onNode(hasText("Text model") and SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Always on")).assertExists()
+        compose.onNodeWithText("TALK OR TYPE").assertIsDisplayed()
+        compose.onNodeWithText("Rivet's own brain").assertExists()
         shot("00b-onboarding-models")
 
         tap("Save & Continue")
@@ -119,10 +117,17 @@ class OnboardingTest {
         val settings = compose.activity.rivet.settings
         settings.voiceModel = true
         settings.speakReplies = false
+        settings.elevenLabsAgents = true
         show()
         tap("Set up step by step")
 
-        val voice = compose.onNode(isToggleable() and hasText("Voice model"))
+        val agents = compose.onNode(isToggleable() and hasText("ElevenLabs agents"))
+        agents.assertIsOn().performClick()
+        compose.waitForIdle()
+        agents.assertIsOff()
+        assertFalse(settings.elevenLabsAgents)
+
+        val voice = compose.onNode(isToggleable() and hasText("Talk key"))
         voice.assertIsOn().performClick()
         compose.waitForIdle()
         voice.assertIsOff()

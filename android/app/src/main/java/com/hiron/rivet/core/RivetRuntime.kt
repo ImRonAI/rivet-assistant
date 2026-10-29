@@ -190,9 +190,17 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
 
     /** Turns the ElevenLabs agents off, so the user talks to Rivet's own brain from now on. */
     fun useOwnBrain() {
-        settings.elevenLabsAgents = false
-        agent.stop()
+        useAgents(false)
         update { it.copy(agentDown = false, lastError = null) }
+    }
+
+    /** Switches between the ElevenLabs agents and Rivet's own brain; results waiting as chips go to the agent. */
+    fun useAgents(on: Boolean) {
+        settings.elevenLabsAgents = on
+        if (!on) return agent.stop()
+        val waiting = state.value.chips
+        update { it.copy(chips = emptyList()) }
+        waiting.forEach(agent::addContext)
     }
 
     /** Starts a goal-driven background task on its own lane; [reason] is why, in plain words, for its approvals. */
