@@ -1,8 +1,13 @@
 package com.hiron.rivet.app
 
+import android.content.Intent
+import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebView
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
@@ -25,6 +30,8 @@ import com.hiron.rivet.ui.COMPOSER_TAG
 import com.hiron.rivet.ui.MINI_STAGE_TAG
 import com.hiron.rivet.ui.STAGE_TAG
 import com.hiron.rivet.ui.TAB_TAG_PREFIX
+import com.hiron.rivet.widget.RivetWidgets
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewFeature
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -35,6 +42,8 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -46,8 +55,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 private const val ROBOT_PAGE = "https://appassets.androidplatform.net/assets/rivet/index.html"
+private const val MARKER = "/* marker */"
 
 /**
  * Drives the real app (MainActivity, runtime, gateway client, screens) against a stand-in brain over a real
@@ -288,14 +299,63 @@ class AppFlowTest {
         else -> emptyList()
     }
 
-    /** The robot page on screen is [first], still alive, and the only one. */
-    private fun assertOnlyPage(first: WebView, step: String) {
+    /** A slot that can show the robot page. */
+    private enum class Slot {
+        /** The big stage: onboarding's or Home's. */
+        Stage,
+
+        /** The band under the app's header on Activity and Settings. */
+        Band,
+
+        /** The band in the voice setup, drawn over the whole app. */
+        VoiceBand,
+    }
+
+    private fun boundsOf(tag: String): List<Rect> = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().map { it.boundsInWindow }
+
+    private fun Rect.holds(inner: Rect): Boolean =
+        inner.left >= left - 1f && inner.top >= top - 1f && inner.right <= right + 1f && inner.bottom <= bottom + 1f
+
+    /**
+     * The robot frame of each slot on screen. Every slot draws Rivet in a [STAGE_TAG] frame; a band's frame sits
+     * inside its [MINI_STAGE_TAG] band. The voice setup is composed after the app under it, so its band comes last.
+     */
+    private fun slotFrames(): Map<Slot, Rect> {
+        val bands = boundsOf(MINI_STAGE_TAG)
+        val (inBands, stages) = boundsOf(STAGE_TAG).partition { frame -> bands.any { it.holds(frame) } }
+        return buildMap {
+            stages.singleOrNull()?.let { put(Slot.Stage, it) }
+            inBands.firstOrNull()?.let { put(Slot.Band, it) }
+            inBands.lastOrNull()?.let { put(Slot.VoiceBand, it) }
+        }
+    }
+
+    /** Where the page is drawn: the view Compose holds it in, since the stand-in WebView is never measured. */
+    private fun WebView.drawnBounds(): Rect {
+        val holder = parent as? View ?: error("the page is not in a slot")
+        val at = IntArray(2).also(holder::getLocationInWindow)
+        return Rect(at[0].toFloat(), at[1].toFloat(), (at[0] + holder.width).toFloat(), (at[1] + holder.height).toFloat())
+    }
+
+    /** The page fills [slot]'s frame: the frame holds it, and no other frame starts nearer to it (bands overlap). */
+    private fun assertPageIn(page: WebView, slot: Slot, step: String) {
+        val frames = slotFrames()
+        val drawn = page.drawnBounds()
+        val expected = frames[slot] ?: error("no $slot on screen after $step: $frames")
+        val nearest = frames.values.minBy { abs(it.left - drawn.left) + abs(it.top - drawn.top) }
+        assertTrue("the page is drawn after $step: $drawn", drawn.width > 0f && drawn.height > 0f)
+        assertTrue("the page is in the $slot after $step: page $drawn, frames $frames", expected.holds(drawn) && nearest == expected)
+    }
+
+    /** The robot page on screen is [first], still alive, the only one, and drawn in [slot]. */
+    private fun assertOnlyPage(first: WebView, step: String, slot: Slot) {
         compose.waitForIdle()
         val shown = webViews()
         assertEquals("one robot page after $step", 1, shown.size)
         assertSame("the same robot page after $step", first, shown.single())
         assertFalse("the page survived $step", shadowOf(first).wasDestroyCalled())
         assertEquals(ROBOT_PAGE, shadowOf(first).lastLoadedUrl)
+        assertPageIn(first, slot, step)
     }
 
     private fun openVoiceSetupFromSettings() {
@@ -313,34 +373,108 @@ class AppFlowTest {
     fun oneRobotPageAcrossScreens() {
         compose.waitForIdle()
         val first = webViews().single()
-        assertOnlyPage(first, "launch")
+        assertOnlyPage(first, "launch", Slot.Stage)
         skipOnboarding()
-        assertOnlyPage(first, "finishing onboarding")
+        assertOnlyPage(first, "finishing onboarding", Slot.Band)
 
         tab("activity")
-        assertOnlyPage(first, "Activity")
+        assertOnlyPage(first, "Activity", Slot.Band)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
         tab("settings")
-        assertOnlyPage(first, "Settings")
+        assertOnlyPage(first, "Settings", Slot.Band)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
         tab("rivet")
-        assertOnlyPage(first, "Home")
+        assertOnlyPage(first, "Home", Slot.Stage)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
         tab("settings")
-        assertOnlyPage(first, "back to Settings")
+        assertOnlyPage(first, "back to Settings", Slot.Band)
 
         openVoiceSetupFromSettings()
-        assertOnlyPage(first, "opening the voice setup")
         // The voice setup's band over the one Settings keeps underneath it.
         compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(2)
+        assertOnlyPage(first, "opening the voice setup", Slot.VoiceBand)
         pressBack()
         compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
-        assertOnlyPage(first, "closing the voice setup")
+        assertOnlyPage(first, "closing the voice setup", Slot.Band)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
 
         tab("rivet")
-        assertOnlyPage(first, "Home again")
+        assertOnlyPage(first, "Home again", Slot.Stage)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun theVoiceSetupKeepsThePageWhenAWidgetOpensHome() {
+        compose.waitForIdle()
+        val page = webViews().single()
+        skipOnboarding()
+        openVoiceSetupFromSettings()
+        assertOnlyPage(page, "opening the voice setup", Slot.VoiceBand)
+
+        // A widget's quick key switches the app under the voice setup to Home.
+        val quick = Intent(RivetWidgets.ACTION_QUICK, Uri.parse("rivet://quick/MyDay"))
+        compose.runOnUiThread { InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(compose.activity, quick) }
+        compose.waitForIdle()
+        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+        compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(1)
+        assertOnlyPage(page, "a widget opening Home under the voice setup", Slot.VoiceBand)
+
+        pressBack()
+        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        assertOnlyPage(page, "closing the voice setup over Home", Slot.Stage)
+    }
+
+    /** Taps a tab on a paused clock: the tap's state change is sent, and no frame runs until the test advances it. */
+    private fun tapTabNow(name: String) {
+        val key = compose.onNodeWithTag(TAB_TAG_PREFIX + name).fetchSemanticsNode()
+        compose.runOnUiThread { key.config[SemanticsActions.OnClick].action?.invoke() }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun aQuickRoundTripHandsThePageBackToHome() {
+        compose.waitForIdle()
+        val page = webViews().single()
+        skipOnboarding()
+        tab("rivet")
+        assertOnlyPage(page, "Home", Slot.Stage)
+
+        // Back to Home before the tab crossfade (220 ms) and the band's entrance finish.
+        compose.mainClock.autoAdvance = false
+        tapTabNow("settings")
+        compose.mainClock.advanceTimeBy(100)
+        assertFalse("the band took the page", slotFrames().getValue(Slot.Stage).holds(page.drawnBounds()))
+        tapTabNow("rivet")
+        repeat(3) { compose.mainClock.advanceTimeByFrame() }
+        assertEquals("one robot page", listOf(page), webViews())
+        assertPageIn(page, Slot.Stage, "tapping Rivet mid-fade")
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    fun aRendererCrashBringsAFreshPageToTheSlotShowingIt() {
+        compose.waitForIdle()
+        val page = webViews().single()
+        skipOnboarding()
+        assertOnlyPage(page, "Settings", Slot.Band)
+
+        val gone = object : RenderProcessGoneDetail() {
+            override fun didCrash(): Boolean = true
+
+            override fun rendererPriorityAtExit(): Int = 0
+        }
+        compose.runOnUiThread { shadowOf(page).webViewClient.onRenderProcessGone(page, gone) }
+        compose.waitForIdle()
+        assertTrue("the dead page is destroyed", shadowOf(page).wasDestroyCalled())
+        val fresh = webViews().single()
+        assertNotSame(page, fresh)
+        assertOnlyPage(fresh, "the renderer crash", Slot.Band)
+
+        // Commands wait for the fresh page; once it loads, Rivet's state is replayed there.
+        assertNull(shadowOf(fresh).lastEvaluatedJavascript)
+        compose.runOnUiThread { shadowOf(fresh).webViewClient.onPageFinished(fresh, ROBOT_PAGE) }
+        compose.waitForIdle()
+        assertEquals("""window.rivet && window.rivet.state("idle");""", shadowOf(fresh).lastEvaluatedJavascript)
     }
 
     @Test
@@ -364,13 +498,16 @@ class AppFlowTest {
         assertEquals("""window.rivet && window.rivet.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
         skipOnboarding()
         tab("settings")
-        assertOnlyPage(page, "Settings")
+        assertOnlyPage(page, "Settings", Slot.Band)
 
         compose.activity.rivet.listening(true)
         compose.waitForIdle()
         assertEquals("""window.rivet && window.rivet.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
 
-        // Opening the voice setup frames Rivet for its band and replays the state there.
+        // Opening the voice setup frames Rivet for its band and replays the state there; only a replay
+        // overwrites the marker.
+        compose.runOnUiThread { page.evaluateJavascript(MARKER, null) }
+        assertEquals(MARKER, shadowOf(page).lastEvaluatedJavascript)
         openVoiceSetupFromSettings()
         assertEquals("""window.rivet && window.rivet.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
         compose.activity.rivet.listening(false)

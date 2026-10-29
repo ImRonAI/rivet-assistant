@@ -62,6 +62,7 @@ import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
 import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.SettingsScreen
+import com.hiron.rivet.ui.StageLayer
 import com.hiron.rivet.ui.rememberRobotStage
 import com.hiron.rivet.ui.VoiceSetup
 import com.hiron.rivet.voice.AgentMode
@@ -202,7 +203,7 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
     ) {
         Box(Modifier.fillMaxSize()) {
             if (onboarded) MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests) else Onboarding(runtime, onFinish = finish)
-            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state) })
+            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state, layer = StageLayer.Overlay) })
         }
     }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {

@@ -45,22 +45,24 @@ enum class RobotFocus(val wire: String) {
     Greet("greet"),
 }
 
+/** Where a slot sits: a slot on an overlay drawn over the whole app outranks any slot on the screens under it. */
+enum class StageLayer { Screen, Overlay }
+
 /** Identifies one slot's claim on the stage. */
-@JvmInline
-value class StageClaim(val id: Long)
+data class StageClaim(val id: Long, val layer: StageLayer)
 
 /**
- * Which slot holds the robot page: the newest claim that hasn't been released. Snapshot state, so a change
- * recomposes the slots that read [owner].
+ * Which slot holds the robot page: the claim on the highest layer that hasn't been released, the newest of
+ * those first. Snapshot state, so a change recomposes the slots that read [owner].
  */
 @Stable
 class StageClaims {
     private val held = mutableStateListOf<StageClaim>()
     private var next = 0L
 
-    val owner: StageClaim? get() = held.lastOrNull()
+    val owner: StageClaim? get() = held.maxWithOrNull(compareBy<StageClaim> { it.layer }.thenBy { it.id })
 
-    fun claim(): StageClaim = StageClaim(next++).also { held.add(it) }
+    fun claim(layer: StageLayer = StageLayer.Screen): StageClaim = StageClaim(next++, layer).also { held.add(it) }
 
     /** Releasing a claim that isn't held does nothing. */
     fun release(claim: StageClaim) {
@@ -122,15 +124,21 @@ fun rememberRobotStage(runtime: RivetRuntime): RobotStage {
 }
 
 /**
- * The robot, drawn in this slot whenever it holds the app's stage. [focus] frames the camera for this slot.
+ * The robot, drawn in this slot whenever it holds the app's stage. [focus] frames the camera for this slot;
+ * [layer] is where the slot sits.
  */
 @Composable
-fun RobotView(runtime: RivetRuntime, modifier: Modifier = Modifier, focus: RobotFocus = RobotFocus.Stage) {
+fun RobotView(
+    runtime: RivetRuntime,
+    modifier: Modifier = Modifier,
+    focus: RobotFocus = RobotFocus.Stage,
+    layer: StageLayer = StageLayer.Screen,
+) {
     val stage = LocalRobotStage.current ?: rememberRobotStage(runtime)
     // Claimed in an effect, so composing a slot writes no state.
     var claim by remember(stage) { mutableStateOf<StageClaim?>(null) }
-    DisposableEffect(stage) {
-        val held = stage.claims.claim()
+    DisposableEffect(stage, layer) {
+        val held = stage.claims.claim(layer)
         claim = held
         onDispose { stage.claims.release(held) }
     }

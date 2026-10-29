@@ -21,6 +21,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -42,7 +47,7 @@ const val MINI_STAGE_TAG = "mini-stage"
 /**
  * Rivet in a short band at the top of a screen that isn't Home, so it stays in view. Tapping it runs [onOpen]
  * when given (back to Home); without it the band only shows Rivet. It steps aside while the keyboard is up and
- * on short windows.
+ * on short windows. [layer] is where the band sits.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -51,6 +56,7 @@ fun MiniStage(
     state: RivetState,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
+    layer: StageLayer = StageLayer.Screen,
     onOpen: (() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -58,19 +64,23 @@ fun MiniStage(
     val height = bandHeight(window)
     val shown = visible && !WindowInsets.isImeVisible && height != null
     val reduce = rememberReduceMotion()
+    var last by remember { mutableStateOf(FULL_BAND) }
+    if (height != null) SideEffect { last = height }
     AnimatedVisibility(
         shown,
+        modifier,
         enter = if (reduce) EnterTransition.None else expandVertically(tween(Motion.BASE, easing = Motion.Emphasized)) + fadeIn(tween(Motion.BASE)),
         exit = if (reduce) ExitTransition.None else shrinkVertically(tween(Motion.QUICK)) + fadeOut(tween(Motion.QUICK)),
     ) {
         // The band keeps its last height while it shrinks away on a window that just got too short.
-        val h = height ?: COMPACT_BAND
+        val h = height ?: last
         Box(
-            modifier.testTag(MINI_STAGE_TAG).fillMaxWidth().background(p.bg)
+            Modifier.testTag(MINI_STAGE_TAG).fillMaxWidth().background(p.bg)
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp).height(h),
         ) {
             StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, mood = moodColor(state.activity)) {
-                RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card)
+                // A leaving band lets go of the page at once, so the screen it uncovers gets Rivet back.
+                if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card, layer = layer)
             }
             // The cover sits over the WebView, so a drag or pinch in the band never orbits the robot.
             val status = stageStatus(state)
@@ -96,21 +106,23 @@ private fun bandHeight(window: Dp): Dp? = when {
 }
 
 /** What Rivet is doing, in one plain sentence for the band's screen reader label. */
-internal fun stageStatus(state: RivetState): String = when {
-    state.connection == Connection.Offline -> "Rivet is offline."
-    state.connection == Connection.Connecting -> "Rivet is connecting."
-    state.liveCall?.status == LiveCallStatus.Answering || state.liveCall?.status == LiveCallStatus.Transferring -> "Rivet is answering a call."
-    else -> when (state.activity) {
-        Activity.Idle -> "Rivet is ready."
-        Activity.Listening -> "Rivet is listening."
-        Activity.Thinking -> "Rivet is thinking."
-        Activity.Searching -> "Rivet is searching the web."
-        Activity.Working -> "Rivet is working on it."
-        Activity.Texting -> "Rivet is writing a text."
-        Activity.Emailing -> "Rivet is writing an email."
-        Activity.Calling -> "Rivet is on a call."
-        Activity.Waiting -> "Rivet needs your OK."
-        Activity.Done -> "Rivet is done."
-        Activity.Failed -> "Rivet didn't finish."
+internal fun stageStatus(state: RivetState): String = when (state.connection) {
+    Connection.Offline -> "Rivet is offline."
+    Connection.Connecting -> "Rivet is connecting."
+    Connection.Online -> when (state.liveCall?.status) {
+        LiveCallStatus.Answering, LiveCallStatus.Transferring -> "Rivet is answering a call."
+        LiveCallStatus.Ended, null -> when (state.activity) {
+            Activity.Idle -> "Rivet is ready."
+            Activity.Listening -> "Rivet is listening."
+            Activity.Thinking -> "Rivet is thinking."
+            Activity.Searching -> "Rivet is searching the web."
+            Activity.Working -> "Rivet is working on it."
+            Activity.Texting -> "Rivet is writing a text."
+            Activity.Emailing -> "Rivet is writing an email."
+            Activity.Calling -> "Rivet is on a call."
+            Activity.Waiting -> "Rivet needs your OK."
+            Activity.Done -> "Rivet is done."
+            Activity.Failed -> "Rivet didn't finish."
+        }
     }
 }
