@@ -64,6 +64,15 @@ sealed interface ServerEvent {
 
     /** A standing rule decided one of the brain's calls without asking. */
     data class RulesApplied(val decision: Decision, val key: String, val label: String, val tool: String) : ServerEvent
+
+    /** What one of the brain's search tools found ([toolId] is its call), for the phone to show as cards. */
+    data class SearchResults(val toolId: String, val results: com.hiron.rivet.core.SearchResults, val lane: String) : ServerEvent
+
+    /** The model Rivet's own brain runs for this session and the ones it could; on `resume` and after every change. */
+    data class Model(val model: BrainModel?, val available: Set<BrainModel>) : ServerEvent
+
+    /** The brain refused a `model.set`; [error] is plain text for the user. */
+    data class ModelRefused(val error: String) : ServerEvent
     data object SessionReady : ServerEvent
     data object Pong : ServerEvent
     data class Error(val message: String) : ServerEvent
@@ -125,6 +134,13 @@ object Protocol {
             "rules.applied" -> Decision.of(o.optStringOrNull("decision"))?.let {
                 ServerEvent.RulesApplied(it, o.optString("key"), o.optString("label"), o.optString("tool"))
             } ?: ServerEvent.Unknown(type)
+            "search.results" -> SearchCodec.results(o.optJSONObject("results"))?.let {
+                ServerEvent.SearchResults(o.optString("tool_id"), it, lane)
+            } ?: ServerEvent.Unknown(type)
+            "model" -> ServerEvent.Model(
+                BrainModel.of(o.optStringOrNull("model")), o.optJSONArray("available").strings().mapNotNull(BrainModel::of).toSet(),
+            )
+            "model.refused" -> ServerEvent.ModelRefused(o.optStringOrNull("error") ?: "Rivet couldn't change the model.")
             "session.ready" -> ServerEvent.SessionReady
             "pong" -> ServerEvent.Pong
             "error" -> ServerEvent.Error(o.optString("error", "error"))
@@ -132,8 +148,27 @@ object Protocol {
         }
     }
 
-    fun turn(text: String, turnId: String): String =
-        JSONObject().put("type", "turn").put("text", text).put("turn_id", turnId).toString()
+    /** A chat turn; [attachments] are results the user added (gateway.py caps them at 5). */
+    fun turn(text: String, turnId: String, attachments: List<ContextItem> = emptyList()): String {
+        val body = JSONObject().put("type", "turn").put("text", text).put("turn_id", turnId)
+        if (attachments.isNotEmpty()) {
+            body.put(
+                "attachments",
+                JSONArray(
+                    attachments.map { a ->
+                        JSONObject().put("kind", a.kind.wire).put("title", a.title).put("url", a.url).apply {
+                            a.description?.let { put("description", it) }
+                            a.watchUrl?.let { put("watch_url", it) }
+                            a.imageUrl?.let { put("image_url", it) }
+                        }
+                    },
+                ),
+            )
+        }
+        return body.toString()
+    }
+
+    fun modelSet(model: BrainModel): String = JSONObject().put("type", "model.set").put("model", model.wire).toString()
 
     /** [reason] is why the task exists, in plain words; its approvals show it. */
     fun task(goal: String, taskId: String, reason: String? = null): String {

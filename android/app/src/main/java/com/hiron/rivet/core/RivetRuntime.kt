@@ -13,6 +13,7 @@ import com.hiron.rivet.device.RivetNotificationListener
 import com.hiron.rivet.service.CallNote
 import com.hiron.rivet.service.Notifications
 import com.hiron.rivet.service.RivetService
+import com.hiron.rivet.ui.ImageLoader
 import com.hiron.rivet.ui.Plain
 import com.hiron.rivet.voice.AgentTools
 import com.hiron.rivet.voice.RivetAgent
@@ -110,13 +111,19 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
         .build()
     private val gateway = GatewayClient(http, scope, ::onEvent, ::onConnection)
 
+    /** The brain's Brave search proxy, for the agents' search tools, the results page and suggestions. */
+    val search = SearchClient(http, settings::gateway)
+
+    /** Result thumbnails and images, cached in memory only. */
+    val images = ImageLoader(http)
+
     /** Approvals the ElevenLabs agents are waiting on, answered on this phone instead of by the brain. */
     private val localApprovals = ConcurrentHashMap<String, CompletableDeferred<Protocol.Answer>>()
 
     /** The ElevenLabs agents, used instead of the brain's turns when [Settings.elevenLabsAgents] is on. */
     val agent = RivetAgent(
         app, http, settings::gateway, tools::run, { approveOnPhone(it) }, { ruleBook.state.value }, ::setRule, ::update,
-        { _robot.tryEmit(it) }, scope,
+        { _robot.tryEmit(it) }, scope, search::search,
     )
 
     /** Turns sent but not yet acknowledged with `turn.accepted`; re-sent on reconnect (the brain dedups by id). */
@@ -145,15 +152,47 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
 
     fun disconnect() = gateway.disconnect()
 
-    /** Sends a chat turn; returns its id. */
+    /** Sends [text] to whoever the user talks to: the ElevenLabs text agent when it is on, otherwise the brain. */
+    fun ask(text: String) {
+        if (settings.elevenLabsAgents) agent.sendText(text) else send(text)
+    }
+
+    /** Sends a chat turn to the brain, with the results the user added ([RivetState.chips]); returns its id. */
     fun send(text: String): String {
         val turnId = "t-" + UUID.randomUUID().toString().take(12)
-        val message = Protocol.turn(text, turnId)
+        val chips = state.value.chips
+        val message = Protocol.turn(text, turnId, chips)
         synchronized(lock) { unacked[turnId] = message }
-        update { RivetStore.userSent(it, turnId, text) }
+        update { RivetStore.userSent(it, turnId, text, chips) }
         speaker.stop()
         gateway.send(message)
         return turnId
+    }
+
+    /**
+     * "Add to Rivet": the ElevenLabs agent gets [item] at once; for the brain it waits as a chip, at most
+     * [CHIP_LIMIT], for the next turn.
+     */
+    fun addContext(item: ContextItem) {
+        if (settings.elevenLabsAgents) return agent.addContext(item)
+        update { s -> if (s.chips.any { it.url == item.url }) s else s.copy(chips = (s.chips + item).takeLast(CHIP_LIMIT)) }
+    }
+
+    fun removeChip(item: ContextItem) = update { it.copy(chips = it.chips - item) }
+
+    /** Asks the brain to run [model]; false while offline. The brain's `model` event says when it has. */
+    fun setModel(model: BrainModel): Boolean {
+        if (state.value.connection != Connection.Online) return false
+        gateway.send(Protocol.modelSet(model))
+        update { it.copy(modelError = null) }
+        return true
+    }
+
+    /** Turns the ElevenLabs agents off, so the user talks to Rivet's own brain from now on. */
+    fun useOwnBrain() {
+        settings.elevenLabsAgents = false
+        agent.stop()
+        update { it.copy(agentDown = false, lastError = null) }
     }
 
     /** Starts a goal-driven background task on its own lane; [reason] is why, in plain words, for its approvals. */
@@ -409,4 +448,9 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
     }
 
     private fun now() = System.currentTimeMillis()
+
+    companion object {
+        /** gateway.py takes at most 5 attachments a turn. */
+        const val CHIP_LIMIT = 5
+    }
 }

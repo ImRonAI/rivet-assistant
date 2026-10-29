@@ -200,4 +200,43 @@ class ProtocolTest {
         assertFalse(JSONObject(Protocol.task("g", "id")).has("reason"))
         assertEquals("A new WhatsApp message arrived.", JSONObject(Protocol.task("g", "id", "A new WhatsApp message arrived.")).getString("reason"))
     }
+
+    @Test
+    fun parsesSearchResultsAndModelEvents() {
+        val raw = JSONObject().put("type", "search.results").put("lane", "default").put("tool_id", "tu1")
+            .put("results", com.hiron.rivet.testing.SearchFixtures.places).toString()
+        val event = Protocol.parse(raw) as ServerEvent.SearchResults
+        assertEquals("tu1", event.toolId)
+        assertEquals("default", event.lane)
+        assertEquals(SearchKind.Places, event.results.kind)
+        assertTrue(Protocol.parse("""{"type":"search.results","tool_id":"x","results":{"kind":"nope"}}""") is ServerEvent.Unknown)
+
+        assertEquals(
+            ServerEvent.Model(BrainModel.Groq, setOf(BrainModel.Perplexity, BrainModel.Groq)),
+            Protocol.parse("""{"type":"model","model":"groq","available":["perplexity","groq","mistral"]}"""),
+        )
+        assertEquals(ServerEvent.Model(null, emptySet()), Protocol.parse("""{"type":"model","model":null,"available":[]}"""))
+        assertEquals(
+            ServerEvent.ModelRefused("Rivet is busy. Change the model when it finishes."),
+            Protocol.parse("""{"type":"model.refused","error":"Rivet is busy. Change the model when it finishes."}"""),
+        )
+    }
+
+    @Test
+    fun buildsTurnsWithAttachmentsAndModelSet() {
+        val video = ContextItem(SearchKind.Videos, "How to pick", "https://www.youtube.com/watch?v=abc", "Ten minutes", "https://www.youtube.com/watch?v=abc", null)
+        val image = ContextItem(SearchKind.Images, "Lugs", "https://photos.example.com/2", null, null, "https://img/full2")
+        val turn = JSONObject(Protocol.turn("", "t9", listOf(video, image)))
+        assertEquals("", turn.getString("text"))
+        val attached = turn.getJSONArray("attachments")
+        assertEquals("videos", attached.getJSONObject(0).getString("kind"))
+        assertEquals("https://www.youtube.com/watch?v=abc", attached.getJSONObject(0).getString("watch_url"))
+        assertEquals("Ten minutes", attached.getJSONObject(0).getString("description"))
+        assertFalse(attached.getJSONObject(0).has("image_url"))
+        assertEquals("https://img/full2", attached.getJSONObject(1).getString("image_url"))
+        assertFalse(attached.getJSONObject(1).has("description"))
+        assertFalse(JSONObject(Protocol.turn("hi", "t1")).has("attachments"))
+        val set = JSONObject(Protocol.modelSet(BrainModel.Groq))
+        assertEquals("model.set" to "groq", set.getString("type") to set.getString("model"))
+    }
 }

@@ -51,7 +51,7 @@ object AssistModel {
 
     private fun turn(turnId: String, asked: String, state: RivetState, base: AssistUi): AssistUi {
         val at = state.messages.indexOfFirst { it.id == "$turnId:user" }
-        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser }
+        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser && it.spoken }
         val waiting = state.approvals.count { it.turnId == turnId }
         val finished = state.activeTurn != turnId
         val shown = base.copy(heard = asked, reply = reply?.text.orEmpty(), waiting = waiting)

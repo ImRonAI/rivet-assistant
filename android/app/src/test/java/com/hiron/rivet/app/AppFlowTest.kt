@@ -138,6 +138,9 @@ class AppFlowTest {
         val runtime = compose.activity.rivet
         runtime.settings.gatewayUrl = server.url("/").toString()
         runtime.settings.sessionId = "flow-test"
+        // This flow is Rivet's own brain; the ElevenLabs agents are the default, and suggestions would call the brain too.
+        runtime.settings.elevenLabsAgents = false
+        runtime.settings.searchSuggestions = false
         // The token is sealed with the Android keystore, as on a phone; no baked-in build config is needed.
         FakeAndroidKeyStore.install()
         runtime.settings.deviceToken = "flow-test-device-token"

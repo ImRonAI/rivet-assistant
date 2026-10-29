@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rivet's search bar for the home screen: ask anything, or tap the orange key to talk. -->
+<!-- Rivet's search bar for the home screen: search or ask, or tap the orange key to talk. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"

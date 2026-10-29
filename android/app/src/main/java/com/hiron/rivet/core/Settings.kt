@@ -103,8 +103,13 @@ class Settings(context: Context) : RecommendedPrefs {
 
     /** Talk and type through the ElevenLabs agents (the brain needs `ELEVENLABS_API_KEY`). Off: the brain's own turns. */
     var elevenLabsAgents: Boolean
-        get() = prefs.getBoolean("elevenlabs_agents", false)
+        get() = prefs.getBoolean("elevenlabs_agents", true)
         set(value) = prefs.edit().putBoolean("elevenlabs_agents", value).apply()
+
+    /** Brave Suggest and Spellcheck while typing in the composer and the search page; each keystroke goes to Brave. */
+    var searchSuggestions: Boolean
+        get() = prefs.getBoolean("search_suggestions", true)
+        set(value) = prefs.edit().putBoolean("search_suggestions", value).apply()
 
     /** What the last "Use recommended settings" changed, until it is undone. */
     override var recommendedUndo: RecommendedUndo?

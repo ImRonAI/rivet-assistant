@@ -13,9 +13,10 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 |---|---|
 | App | **0.4.0** (versionCode 7) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the robot kept in view on every screen (a mini stage on other tabs), tasks 3 and 4: plain alerts with "Don't ask again", standing approval rules, one notification per call, grouped notifications and recommended settings, on top of the v0.3 interface and the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. The brain on Fly does not run this code yet: the app and the brain ship together (rules messages need the new brain). |
 | Brain on Fly | `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, the owner's personal Fly organization) runs the brain with the ElevenLabs session endpoint (deployed 2026-10-28; `/healthz` ok, both agent credentials verified live). `RIVET_DEVICE_TOKEN` and `ELEVENLABS_API_KEY` are set; **`PERPLEXITY_API_KEY` and `HORIZON_API_KEY` are not yet**, so chat and Telnyx don't work there until the owner sets them. Call answering still points at the old app `rivet-brain-hiron`, which keeps running until the owner shuts it down. Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1` (Fly's remote builder isn't reachable from cloud sessions). If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
-| Tests | Brain: 349 pass (`-m "not live"`), ruff, format and mypy clean. Android: 200 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
+| Tests | Brain: 349 pass (`-m "not live"`), ruff, format and mypy clean. Android: 200 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. On branch `search-android`: 263 pass and 1 is skipped, lint 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
 | Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
-| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. Off until the user turns on Settings › "Use ElevenLabs agents". |
+| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. On by default for voice and text (branch `search-android`); Settings › "Use ElevenLabs agents" off sends everything to Rivet's own brain. The 7 search client tools (`rivet-search-client-tools.json`, built from the webhook definitions) are not attached to the agents yet: that is the owner's live write, together with removing the same-named webhook tools. |
+| Search (branch `search-android`) | The app side of the Brave search UI is built and tested under Robolectric with MockWebServer: client tools, result cards, results page, map, image viewer, inline YouTube, suggestions, Spellcheck and "Add to Rivet". It needs the brain's search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`, `search.results`, `model` events), which is built on its own branch; until that brain is deployed with the four `BRAVE_*` keys, searches say "Rivet's brain can't search yet" or "Search isn't set up". Not checked on a phone: the WebGL map, YouTube playback and its Referer, sharing into real apps, and the widget sheet's keyboard. |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
 
 ## Rules that always apply
@@ -101,13 +102,21 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
     - a display-type greeting, and a transcript sheet you drag over the robot;
     - a "thinking" row while Rivet works;
     - the dock: quick keys (Catch me up, My day, Texts, Calls), a Task latch, the composer and an orange talk key;
-    - replies render markdown and citations (`Rich.kt`).
+    - replies render markdown and citations (`Rich.kt`);
+    - as you type, Brave Suggest offers up to 5 searches above the field (250 ms pause, 2+ characters) and Spellcheck a cyan "Did you mean …" (800 ms, 4+ characters), off with Settings › "Suggest searches as you type";
+    - when the ElevenLabs agent can't start, the error offers "Use Rivet's own brain instead".
+  - **Search results** (`Results.kt`, `ResultsScreen.kt`, `ImageViewer.kt`, `VideoPlayer.kt`, `PlaceMap.kt`, `RemoteImage.kt`; `core/Search.kt`, `core/SearchClient.kt`): every search shows as numbered cards in the conversation, placeholders first:
+    - web, news (with BREAKING) and page text in a swipeable carousel ending in "See all"; images in a row of tiles that open a full-screen viewer with pinch-zoom and Share (the image itself through a `FileProvider`, or its link when it can't be downloaded); videos with their length, playing inline in YouTube's embedded player (one at a time, `Referer: https://com.hiron.rivet`) or opening outside for other hosts; places on a MapLibre GL map (OpenFreeMap dark, vendored MapLibre 5.24.0 in `assets/map/`) with numbered pins over a pager of place cards (Call, Directions, Open); Brave's answer as formatted text;
+    - every card has Open, Share and "Add to Rivet": the ElevenLabs agent gets the result as a contextual update (its link, title, description, and the watch URL for a video), and Rivet's own brain gets it as a removable chip sent with the next turn;
+    - the results page has a search field with suggestions, tabs for Web, News, Images, Videos and Places (the Places tab's map takes gestures and a tapped pin raises its card), and "Ask Rivet about …";
+    - results stay in memory only. Built and tested under Robolectric with synthetic results; the map, the player and sharing are not yet checked on a phone.
   - **Live call plate** (`LiveCallCard.kt`): live transcript lines, Take over, and the summary when the call ends.
   - **Approval sheet** (`ApprovalSheet.kt`): the plain headline with contact names in place of numbers, why Rivet is asking, a risk meter, the message as a quote, Rivet's notes formatted, technical details folded away, and "Don't ask again" (Always allow / Always deny). Biometrics for high-risk actions and for every always-allow.
   - **Activity** (`ActivityScreen.kt`): today's counters, then the activity trace grouped by day.
   - **Settings** (`SettingsScreen.kt`): numbered plates for:
     - link and connection details;
-    - behaviour toggles, with "Use recommended settings" and its undo, and reading replies aloud in the overlay;
+    - behaviour toggles, with "Use recommended settings" and its undo, reading replies aloud in the overlay, the ElevenLabs agents and search suggestions (with Brave's 90-day log retention said plainly);
+    - Rivet's own brain: Perplexity or Groq · Qwen 3.8 27B, as the brain reports it (`model` event); options the brain hasn't set up are disabled, and the choice is offline-disabled;
     - approval rules: each always-allow and always-decline, removable while connected;
     - call answering: number, mode, carrier codes, own number;
     - permissions, with "Allow all";
@@ -121,13 +130,14 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
   - an adaptive icon with a themed monochrome layer (`tools/build_icon.py`);
   - long-press shortcuts: Talk, Ask, Catch me up, My day;
   - two widgets: the search bar (4×1) and the panel (4×2).
-  - **The search bar currently opens Rivet. It is not yet a web search** (see task 5).
+  - the bar's "Search or ask Rivet" opens the search sheet (`ACTION_SEARCH`): the results page with the field focused, Brave suggestions and "Did you mean", and Web results on Enter. Widgets can't take typing, so the field is in the app. The engine is Brave through the brain; the other engines of task 5 are not built.
 - **Default assistant** (`voice/`): a `VoiceInteractionService` overlay over any app, with live speech-to-text through `SpeechRecognizer`, a keyboard fallback and "Open Rivet". It is locked out on a secured lock screen.
 - **Voice**: speech input through `RecognizerIntent` / `SpeechRecognizer`, and replies spoken with Android TextToSpeech (`voice/Speaker.kt`).
-- **ElevenLabs agents** (`voice/RivetAgent.kt`), behind Settings › "Use ElevenLabs agents" (off by default):
+- **ElevenLabs agents** (`voice/RivetAgent.kt`), Settings › "Use ElevenLabs agents" (on by default; off talks to Rivet's own brain):
   - the talk key starts or stops a voice session; the composer sends text to the text agent;
   - the agents call the 18 phone tools as client tools; sends, calls, message replies, calendar writes and commit-point taps follow the brain's standing rules (a read-only copy on the phone) or wait for the approval sheet, and a deny or a 20-second timeout refuses; reading texts, the calendar, notifications or the screen suspends always-allows until the user speaks again;
   - agent speech moves the robot's mouth, and messages land in the transcript;
+  - 7 search client tools (`voice/SearchTools.kt`: `web_search`, `news_search`, `image_search`, `video_search`, `place_search`, `answers`, `llm_context`) call the brain's search proxy, show the cards, mark the turn untrusted, and tell the agent what is on screen in at most 8,000 characters;
   - built and unit-tested only, not verified against a live agent or on a phone.
 - **Service**: a foreground WebSocket client with resume and an offline queue (`service/RivetService.kt`, `core/GatewayClient.kt`).
   - The action ledger never repeats a device action.

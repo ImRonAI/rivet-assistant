@@ -20,6 +20,15 @@ data class RivetState(
     val rulesError: String? = null,
     /** Contact names for the numbers in approvals and rules (E.164 to name), looked up on this phone. */
     val names: Map<String, String> = emptyMap(),
+    /** Results the user added for Rivet's own brain; they go with the next turn and clear once it is accepted. */
+    val chips: List<ContextItem> = emptyList(),
+    /** The model Rivet's own brain runs, as the brain last said; null until it says. */
+    val brainModel: BrainModel? = null,
+    val availableModels: Set<BrainModel> = emptySet(),
+    /** Why the brain refused the last model change, until its next `model` event. */
+    val modelError: String? = null,
+    /** The ElevenLabs agent couldn't start; Home then offers Rivet's own brain instead. */
+    val agentDown: Boolean = false,
 )
 
 /** A call Rivet's Telnyx assistant answered: who, what is being said, and, once [LiveCallStatus.Ended], how it went. */
@@ -60,7 +69,18 @@ data class ChatMessage(
     val text: String,
     val streaming: Boolean = false,
     val failed: Boolean = false,
-)
+    /** Search results shown as cards in place of a bubble; kept in memory only. */
+    val search: SearchResults? = null,
+    /** A search still running: its cards show as placeholders. */
+    val searching: SearchKind? = null,
+    /** Results the user sent along with this message. */
+    val attachments: List<ContextItem> = emptyList(),
+    /** A small line from the app itself, such as what was added to the conversation. */
+    val system: Boolean = false,
+) {
+    /** A bubble with words in it: a reply or the user's own message. */
+    val spoken: Boolean get() = search == null && searching == null && !system
+}
 
 data class TraceStep(val tag: String, val text: String, val tone: String)
 
@@ -108,8 +128,8 @@ object RivetStore {
     private const val TRACE_LIMIT = 7
     const val CALL_LINE_LIMIT = 50
 
-    fun userSent(state: RivetState, turnId: String, text: String): RivetState = state.copy(
-        messages = state.messages + ChatMessage(turnId + ":user", true, text),
+    fun userSent(state: RivetState, turnId: String, text: String, attachments: List<ContextItem> = emptyList()): RivetState = state.copy(
+        messages = state.messages + ChatMessage(turnId + ":user", true, text, attachments = attachments),
         activeTurn = turnId,
         activity = Activity.Thinking,
         trace = listOf(TraceStep("goal", text.take(44), "acc")),
@@ -130,10 +150,19 @@ object RivetStore {
         is ServerEvent.ToolStarted -> state.copy(activity = activityFor(event.name))
             .trace("tool", event.name, "cy")
             .log(now, "tool", event.name)
+            .let { s -> SearchKind.ofBrainTool(event.name)?.takeIf { event.lane == "default" }?.let { searchStarted(s, brainSearch(event.id), it) } ?: s }
         is ServerEvent.ToolsDone -> {
-            val failed = event.results.count { it.second != "success" }
-            state.trace("check", if (failed == 0) "tools finished" else "$failed tool(s) failed", if (failed == 0) "ok" else "amb")
+            val failed = event.results.filter { it.second != "success" }
+            failed.fold(state) { s, (id, _) -> searchFailed(s, brainSearch(id), null) }
+                .trace("check", if (failed.isEmpty()) "tools finished" else "${failed.size} tool(s) failed", if (failed.isEmpty()) "ok" else "amb")
         }
+        is ServerEvent.SearchResults -> if (event.lane != "default") state else searchShown(state, brainSearch(event.toolId), event.results)
+        is ServerEvent.TurnAccepted -> {
+            val sent = state.messages.firstOrNull { it.id == event.turnId + ":user" }?.attachments.orEmpty()
+            if (sent.isEmpty()) state else state.copy(chips = state.chips - sent.toSet())
+        }
+        is ServerEvent.Model -> state.copy(brainModel = event.model, availableModels = event.available, modelError = null)
+        is ServerEvent.ModelRefused -> state.copy(modelError = event.error)
         is ServerEvent.Backoff -> state.log(now, "backoff", "Model busy; retrying in ${event.delaySeconds.toInt()}s")
         is ServerEvent.Restart -> state.trace("restart", event.reason, "amb").log(now, "restart", event.reason)
         is ServerEvent.Notice -> state.log(now, "notice", event.detail)
@@ -153,7 +182,7 @@ object RivetStore {
             activeTurn = if (event.lane == "default") null else state.activeTurn,
             lastError = event.error,
             messages = state.closeStreaming(failedText = "I couldn't finish that: ${event.error}"),
-        ).log(now, "error", event.error)
+        ).log(now, "error", event.error).let { if (event.lane == "default") it.dropPlaceholders() else it }
         is ServerEvent.Error -> state.copy(lastError = event.message).log(now, "error", event.message)
         is ServerEvent.DeviceCall -> state.log(now, "device", event.tool)
         is ServerEvent.CallAnswering -> state.log(now, "call", "Rivet is answering a call from ${event.from.ifBlank { "an unknown number" }}")
@@ -217,7 +246,34 @@ object RivetStore {
 
     fun note(state: RivetState, now: Long, kind: String, text: String): RivetState = state.log(now, kind, text)
 
+    /** A search started: placeholder cards at the end of the conversation, under [id]. */
+    fun searchStarted(state: RivetState, id: String, kind: SearchKind): RivetState = state.copy(
+        messages = state.closeStreaming() + ChatMessage(id, false, "", searching = kind),
+        activity = Activity.Searching,
+    )
+
+    /** The search under [id] finished: its cards replace the placeholders, or join the end when there were none. */
+    fun searchShown(state: RivetState, id: String, results: SearchResults): RivetState {
+        val shown = ChatMessage(id, false, "", search = results)
+        val at = state.messages.indexOfFirst { it.id == id }
+        val messages = if (at < 0) state.closeStreaming() + shown else state.messages.toMutableList().also { it[at] = shown }
+        return state.copy(messages = messages)
+    }
+
+    /** The search under [id] failed: its placeholders go, replaced by [error] when there is one to show. */
+    fun searchFailed(state: RivetState, id: String, error: String?): RivetState {
+        val at = state.messages.indexOfFirst { it.id == id && it.searching != null }
+        if (at < 0) return state
+        val messages = state.messages.toMutableList()
+        if (error == null) messages.removeAt(at) else messages[at] = ChatMessage(id, false, error, system = true)
+        return state.copy(messages = messages)
+    }
+
+    /** The message id of the brain's search tool call [toolId]. */
+    fun brainSearch(toolId: String) = "search:$toolId"
+
     fun activityFor(tool: String): Activity = when {
+        SearchKind.ofBrainTool(tool) != null -> Activity.Searching
         tool.startsWith("sms_") || tool == "notification_reply" -> Activity.Texting
         tool.startsWith("email_") -> Activity.Emailing
         tool == "phone_call" -> Activity.Calling
@@ -247,9 +303,18 @@ object RivetStore {
         } else {
             messages
         }
-        val done = copy(messages = finished, activity = Activity.Done, activeTurn = null)
+        val done = copy(messages = finished, activity = Activity.Done, activeTurn = null).dropPlaceholders()
             .trace("decide", event.text.lineSequence().firstOrNull().orEmpty().take(44), "acc")
         return if (event.restarts > 0) done.log(now, "restart", "Finished after ${event.restarts} restart(s)") else done
+    }
+
+    /** Placeholders for searches whose results never came. */
+    private fun RivetState.dropPlaceholders(): RivetState = copy(messages = messages.filter { it.searching == null || !it.id.startsWith("search:") })
+
+    /** The conversation with its streaming reply, if any, finished as it stands. */
+    private fun RivetState.closeStreaming(): List<ChatMessage> {
+        val last = messages.lastOrNull()
+        return if (last != null && !last.fromUser && last.streaming) messages.dropLast(1) + last.copy(streaming = false) else messages
     }
 
     private fun RivetState.closeStreaming(failedText: String): List<ChatMessage> {
