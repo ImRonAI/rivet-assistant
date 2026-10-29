@@ -398,11 +398,11 @@ class SessionSupervisor:
 
     # -- public turn API ------------------------------------------------------------------------------------
 
-    async def send(self, prompt: Any, *, turn_id: str | None = None) -> TurnOutcome:
+    async def send(self, prompt: Any, *, turn_id: str | None = None, untrusted: bool = False) -> TurnOutcome:
         """Run one user turn on the conversation lane.
 
         A message that arrives while approvals are pending denies them first (the old turn finishes), then
-        runs as a new turn.
+        runs as a new turn. ``untrusted`` taints the turn from the start (the prompt carries web content).
         """
         lane = self._lane(DEFAULT_LANE, self._tools)
         caller_id = turn_id is not None
@@ -424,6 +424,8 @@ class SessionSupervisor:
                 await self._seal(lane)
             gen = await self._ensure_built(lane)
             gen.agent.state.set(TURN_KEY, turn_id)
+            if untrusted:
+                self.approvals.mark_untrusted(gen.agent.state)
             self._set_status(gen.agent, _running(turn_id, because_you_asked(prompt)))
             self._emit({"type": "turn.started", "turn_id": turn_id, "lane": lane.agent_id})
             return await self._drive(lane, turn_id, prompt)
@@ -435,6 +437,11 @@ class SessionSupervisor:
             raise NoPendingApprovalError(f"no lane '{lane_id}'")
         async with lane.lock:
             return await self._answer(lane, answers)
+
+    @property
+    def busy(self) -> bool:
+        """A lane is running a turn or task, or waiting for an approval."""
+        return any(lane.lock.locked() or self.pending_approvals(lane.agent_id) for lane in self._lanes.values())
 
     @property
     def lanes(self) -> list[str]:

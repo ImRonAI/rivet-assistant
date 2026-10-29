@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import Literal
 
 DEFAULT_TELNYX_MCP_URL = "https://oubli-catolabs.fastmcp.app/mcp"
+DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
+DEFAULT_GROQ_CONTEXT_WINDOW = 131_072  # qwen/qwen3.8-27b on Groq (its model card)
+
+Provider = Literal["perplexity", "groq"]
+"""Which API Rivet's own agent runs on."""
+PROVIDERS: dict[str, Provider] = {"perplexity": "perplexity", "groq": "groq"}
 
 
 def _env_list(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -52,6 +59,10 @@ class BrainSettings:
     """Everything the brain needs to build agents. Secrets stay in the environment."""
 
     perplexity_api_key: str | None
+    model_provider: Provider = "perplexity"
+    groq_api_key: str | None = field(default=None, repr=False)
+    groq_model_id: str = DEFAULT_GROQ_MODEL
+    groq_context_window: int = DEFAULT_GROQ_CONTEXT_WINDOW
     horizon_api_key_env: str = "HORIZON_API_KEY"
     perplexity_base_url: str = "https://api.perplexity.ai/v1"
     model_id: str = "openai/gpt-5.6-sol"
@@ -76,8 +87,15 @@ class BrainSettings:
     @classmethod
     def from_env(cls) -> BrainSettings:
         """Build settings from ``RIVET_*`` and provider environment variables."""
+        provider = os.environ.get("RIVET_MODEL_PROVIDER", "perplexity").strip() or "perplexity"
+        if provider not in PROVIDERS:
+            raise ValueError("RIVET_MODEL_PROVIDER must be perplexity or groq")
         return cls(
             perplexity_api_key=os.environ.get("PERPLEXITY_API_KEY"),
+            model_provider=PROVIDERS[provider],
+            groq_api_key=os.environ.get("GROQ_API_KEY"),
+            groq_model_id=os.environ.get("GROQ_MODEL") or DEFAULT_GROQ_MODEL,
+            groq_context_window=_env_int("GROQ_CONTEXT_WINDOW", DEFAULT_GROQ_CONTEXT_WINDOW),
             perplexity_base_url=os.environ.get("PERPLEXITY_BASE_URL", "https://api.perplexity.ai/v1"),
             model_id=os.environ.get("RIVET_MODEL", "openai/gpt-5.6-sol"),
             fallback_models=_env_list("RIVET_FALLBACK_MODELS", ()),
@@ -106,3 +124,15 @@ class BrainSettings:
                 build=_env_float("RIVET_T_BUILD", 120.0),
             ),
         )
+
+
+def available_providers(settings: BrainSettings) -> tuple[Provider, ...]:
+    """The providers whose API key is set."""
+    keys: dict[Provider, str | None] = {"perplexity": settings.perplexity_api_key, "groq": settings.groq_api_key}
+    return tuple(provider for provider, key in keys.items() if key)
+
+
+def default_provider(settings: BrainSettings) -> Provider:
+    """``model_provider`` when its key is set, else the first provider that has one."""
+    available = available_providers(settings)
+    return settings.model_provider if settings.model_provider in available or not available else available[0]

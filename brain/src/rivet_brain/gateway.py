@@ -2,7 +2,11 @@
 
 Protocol (JSON messages on ``/v1/sessions/{session_id}``, ``Authorization: Bearer <RIVET_DEVICE_TOKEN>``):
 
-Phone to brain: ``turn`` {text, turn_id?}, ``approval.response`` {answers: {interrupt_id: {approved, standing?:
+Phone to brain: ``turn`` {text, turn_id?, attachments?} (``attachments``, at most 5, are search results the user
+added: [{kind: web|news|images|videos|places|context, title, url, description?, watch_url?, image_url?}], URLs
+``https://`` only; they go to the model marked as web content and taint the turn; a turn with attachments may have
+empty text), ``model.set`` {model: perplexity|groq} (the model Rivet's own agent runs on; refused while it is
+working), ``approval.response`` {answers: {interrupt_id: {approved, standing?:
 allow|deny}}, lane?} (``standing`` makes the answer a standing rule when the sheet offered it; the rule is stored
 before the turn resumes), ``task`` {goal, task_id?, max_attempts?, timeout?, reason?} (``reason``, at most 140
 characters, is why the task exists; its approvals show it), ``rules.list``, ``rules.set`` {decision: allow|deny,
@@ -17,7 +21,9 @@ Brain to phone: ``turn.accepted``, ``turn.started``, the agent's UI events (``te
 ``request`` being the v2 prompt of ``approvals.Assessment.prompt``), ``approval.expired``, ``rules`` {revision,
 rules: [{key, tool, scope, decision, label, created_at}]} (on every ``resume``, before ``session.ready``, and after
 every change), ``rules.refused`` {request: set|revoke, error} (plain text), ``rules.applied`` {decision, key, label,
-tool} (a standing rule decided a call without asking), ``restart``,
+tool} (a standing rule decided a call without asking), ``model`` {model, available} (on every ``resume``, before
+``session.ready``, and after every change), ``model.refused`` {error} (plain text), ``search.results`` {lane,
+tool_id, results} (the envelope of the search routes below, for a search the agent ran), ``restart``,
 ``turn.completed``, ``turn.failed``, ``device.call``, ``call.answering`` {call_id, from, verified}, ``call.live``
 {call_id, from, verified, started_at, status: answering|transferring, lines: [{speaker: caller|rivet, text}],
 snapshot} (``lines`` are new since the last one, or all of them when ``snapshot``; a snapshot of each live call
@@ -28,6 +34,13 @@ ended_at, duration, summary, outcome, taken_over}, ``session.ready``, ``pong``, 
 
 ``GET /v1/agent/session?mode=voice|text`` (same bearer) returns a credential for one ElevenLabs agent session:
 ``{mode, agent_id, conversation_token}`` for voice (WebRTC), ``{mode, agent_id, signed_url}`` for text (WebSocket).
+
+Brave Search, same bearer, ``Cache-Control: no-store``, nothing kept (see ``search.py``):
+``GET /v1/search/{web|news|images|videos|places|context|answers}?q=&count=&freshness=&location=&lat=&long=&max_tokens=``
+returns {kind, query, altered, items, answer, center}; ``GET /v1/suggest?q=&count=`` returns {query, suggestions};
+``GET /v1/spellcheck?q=`` returns {query, corrected}. Errors are {error} with a plain sentence: 400 bad parameters,
+401, 404 unknown kind, 429 {retry_after} Brave is busy, 502 {upstream} Brave answered wrongly, 503 not set up, 504
+Brave timed out.
 
 Telnyx's answering assistant posts to ``/v1/calls/{session_id}/{token}/start|message|summary`` (see ``calls.py``
 and ``live_calls.py``).
@@ -46,8 +59,9 @@ import os
 import re
 import time
 from collections import deque
-from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -59,7 +73,7 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from strands.storage import LocalFileStorage, Storage
 
-from . import calls, device_tools, email_tools
+from . import calls, device_tools, email_tools, search_tools
 from .alerts import task_reason
 from .approvals import RivetApprovals
 from .calls import (
@@ -74,11 +88,12 @@ from .calls import (
     clean_message,
     clean_summary,
 )
-from .config import BrainSettings
+from .config import PROVIDERS, BrainSettings, Provider, available_providers, default_provider
 from .device import DeviceBridge
 from .factory import Wiring, build_agent, build_telnyx_client
 from .live_calls import POLL_SECONDS, LiveCalls, TelnyxRunner
 from .rules import RuleRefusedError, StandingRules, admit, apply_answers
+from .search import KINDS, BraveSearch, SearchError, SearchKeys, SearchQuery, query_text, suggest_count
 from .supervisor import BuildFn, NoPendingApprovalError, SessionLockedError, SessionSupervisor
 
 logger = logging.getLogger(__name__)
@@ -114,8 +129,40 @@ ELEVENLABS_AGENTS = {
 _SESSION_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 FOLLOW_UP_REASON = "A caller left you a message."
 CANT_MAKE_RULE = "Rivet can't make a rule for this."
+MODEL_LABELS: dict[Provider, str] = {"perplexity": "Perplexity", "groq": "Groq"}
+MODEL_BUSY = "Rivet is busy. Change the model when it finishes."
 
 ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
+
+
+class ModelChoice:
+    """The model the user picked for Rivet's own agent: durable in the session's storage, else the default."""
+
+    def __init__(self, backend: Storage, session_id: str, settings: BrainSettings) -> None:
+        self._backend = backend
+        self.key = f"session/{session_id}/rivet/model.json"
+        self.available = available_providers(settings)
+        self.current = default_provider(settings)
+
+    async def load(self) -> bool:
+        """Read the stored choice; True when it changes ``current`` (a stored model that isn't set up is ignored)."""
+        raw = await self._backend.read(self.key)
+        try:
+            stored = json.loads(raw).get("model") if raw else None
+        except (ValueError, AttributeError):
+            stored = None
+        provider = PROVIDERS.get(stored) if isinstance(stored, str) else None
+        if provider is None or provider not in self.available or provider == self.current:
+            return False
+        self.current = provider
+        return True
+
+    async def save(self, provider: Provider) -> None:
+        await self._backend.write(self.key, json.dumps({"model": provider}).encode())
+        self.current = provider
+
+    def event(self) -> dict[str, Any]:
+        return {"type": "model", "model": self.current, "available": list(self.available)}
 
 
 class _Session:
@@ -124,22 +171,26 @@ class _Session:
     def __init__(
         self,
         session_id: str,
-        supervisor_factory: Callable[[_Session], SessionSupervisor],
+        supervisor_factory: Callable[[_Session, Provider], SessionSupervisor],
         *,
         rules: StandingRules,
+        models: ModelChoice,
         telnyx: TelnyxRunner | None = None,
         call_poll: float = POLL_SECONDS,
     ) -> None:
         self.rules = rules
+        self.models = models
+        self.make_supervisor = supervisor_factory
         self.bridge = DeviceBridge(session_id)
         self.socket: WebSocket | None = None
         self.buffer: deque[dict[str, Any]] = deque(maxlen=BUFFER_LIMIT)
         self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self.send_lock = asyncio.Lock()
         self.tasks: set[asyncio.Task[Any]] = set()
+        self.work: set[asyncio.Task[Any]] = set()
         self.turn_ids: deque[str] = deque(maxlen=TURN_MEMORY)
         self.calls = LiveCalls(self.emit, self.spawn, telnyx=telnyx, poll=call_poll)
-        self.supervisor = supervisor_factory(self)
+        self.supervisor = supervisor_factory(self, models.current)
         self.failed: str | None = None
         self.started = self.spawn(self._start())
         self.writer = self.spawn(self._write())
@@ -191,7 +242,10 @@ class _Session:
         if self.failed is not None:
             self.emit({"type": "error", "error": self.failed})
             return
-        if kind == "turn" and isinstance(message.get("text"), str) and message["text"].strip():
+        text = message.get("text")
+        text = text if kind == "turn" and isinstance(text, str) else ""
+        attachments = search_tools.parse_attachments(message.get("attachments")) if kind == "turn" else []
+        if kind == "turn" and (text.strip() or attachments):
             turn_id = message.get("turn_id")
             self.emit({"type": "turn.accepted", "turn_id": turn_id})
             # The phone re-sends turns it never saw accepted; the supervisor also refuses its latest turn id.
@@ -199,16 +253,17 @@ class _Session:
                 if turn_id in self.turn_ids:
                     return
                 self.turn_ids.append(turn_id)
-            self.spawn(self._guard(self.supervisor.send(message["text"], turn_id=turn_id), turn_id))
+            prompt = search_tools.with_attachments(text, attachments)
+            self._run(self._guard(self.supervisor.send(prompt, turn_id=turn_id, untrusted=bool(attachments)), turn_id))
         elif kind == "approval.response" and isinstance(message.get("answers"), dict):
             lane = str(message.get("lane") or "default")
             answers: dict[str, object] = message["answers"]
             pending = self.supervisor.pending_approvals(lane)
             if await apply_answers(self.rules, pending, answers, now=time.time(), on_refused=self._refused("set")):
                 self.emit(dict(self.rules.event()))
-            self.spawn(self._guard(self.supervisor.respond(answers, lane_id=lane), None))
+            self._run(self._guard(self.supervisor.respond(answers, lane_id=lane), None))
         elif kind == "task" and isinstance(message.get("goal"), str):
-            self.spawn(
+            self._run(
                 self._guard(
                     self.supervisor.run_task(
                         message["goal"],
@@ -226,8 +281,11 @@ class _Session:
             await self._set_rule(message.get("decision"), message.get("tool"), message.get("scope"))
         elif kind == "rules.revoke":
             await self._revoke_rule(message.get("key"), message.get("tool"), message.get("scope"))
+        elif kind == "model.set":
+            await self._set_model(message.get("model"))
         elif kind == "resume":
             self.emit(dict(self.rules.event()))
+            self.emit(self.models.event())
             for lane in self.supervisor.lanes:
                 approvals = self.supervisor.pending_approvals(lane)
                 if approvals:
@@ -266,13 +324,30 @@ class _Session:
             await self.rules.revoke(key)
         self.emit(dict(self.rules.event()))
 
+    async def _set_model(self, value: object) -> None:
+        """Rebuild the supervisor on another provider; history carries over through the session snapshots."""
+        provider = PROVIDERS.get(value) if isinstance(value, str) else None
+        if provider is None or provider not in self.models.available:
+            label = MODEL_LABELS[provider] if provider is not None else "That model"
+            self.emit({"type": "model.refused", "error": f"{label} isn't set up on Rivet's brain."})
+            return
+        if provider != self.models.current:
+            if self.work or self.supervisor.busy:
+                self.emit({"type": "model.refused", "error": MODEL_BUSY})
+                return
+            await self.models.save(provider)
+            await self.supervisor.close()
+            self.supervisor = self.make_supervisor(self, provider)
+            await self.supervisor.start()
+        self.emit(self.models.event())
+
     def _refused(self, request: RuleRequest) -> Callable[[str], None]:
         return lambda error: self.emit({"type": "rules.refused", "request": request, "error": error})
 
     def follow_up_call(self, received_at: float) -> None:
         """Start a background task that works out what to do about a message Rivet took on a call."""
         task_id = f"call-{int(received_at * 1000)}"
-        self.spawn(self._follow_up(task_id))
+        self._run(self._follow_up(task_id))
 
     async def _follow_up(self, task_id: str) -> None:
         await self.started
@@ -298,6 +373,8 @@ class _Session:
     async def _start(self) -> None:
         try:
             await self.rules.load()
+            if await self.models.load():
+                self.supervisor = self.make_supervisor(self, self.models.current)
             await self.supervisor.start()
         except SessionLockedError as error:
             self.failed = str(error)
@@ -308,6 +385,12 @@ class _Session:
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
         return task
+
+    def _run(self, coroutine: Coroutine[Any, Any, Any]) -> None:
+        """Spawn supervisor work; while any runs, the model can't change."""
+        task = self.spawn(coroutine)
+        self.work.add(task)
+        task.add_done_callback(self.work.discard)
 
     async def _guard(self, coroutine: Coroutine[Any, Any, Any], turn_id: Any) -> None:
         try:
@@ -370,11 +453,12 @@ class SessionHub:
         session = self.sessions.get(session_id)
         if session is None:
             rules = StandingRules(self.backend, session_id)
+            models = ModelChoice(self.backend, session_id, self.settings)
 
-            def factory(owner: _Session) -> SessionSupervisor:
+            def factory(owner: _Session, provider: Provider) -> SessionSupervisor:
                 tools = self.tools_for(owner.bridge) if self.tools_for else ()
                 return SessionSupervisor(
-                    self.settings,
+                    replace(self.settings, model_provider=provider),
                     session_id,
                     backend=self.backend,
                     approvals=self.approvals.bound(rules, on_rule=lambda applied: owner.emit(dict(applied))),
@@ -383,7 +467,9 @@ class SessionHub:
                     build=self.build,
                 )
 
-            session = _Session(session_id, factory, rules=rules, telnyx=self.telnyx, call_poll=self.call_poll)
+            session = _Session(
+                session_id, factory, rules=rules, models=models, telnyx=self.telnyx, call_poll=self.call_poll
+            )
             self.sessions[session_id] = session
         return session
 
@@ -406,6 +492,7 @@ def create_app(
     call_telnyx: TelnyxRunner | None = None,
     call_poll: float = POLL_SECONDS,
     elevenlabs_transport: httpx.AsyncBaseTransport | None = None,
+    search: BraveSearch | None = None,
 ) -> Starlette:
     """The gateway ASGI app.
 
@@ -421,6 +508,8 @@ def create_app(
         call_telnyx: Telnyx connection for live calls (transcript and take-over); closed with the app.
         call_poll: Seconds between live transcript reads.
         elevenlabs_transport: HTTP transport for ElevenLabs credential requests (tests inject a fake here).
+        search: Brave Search for the search routes; closed with the app. Without one every search route answers
+            503.
     """
     token = device_token or os.environ.get(DEVICE_TOKEN_ENV, "")
     if len(token) < MIN_TOKEN_LENGTH:
@@ -436,6 +525,7 @@ def create_app(
     )
     expected = f"Bearer {token}".encode()
     inbox = call_inbox or CallInbox(Path(settings.session_dir).parent / "calls")
+    brave = search or BraveSearch(SearchKeys())
 
     async def healthz(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ok"})
@@ -490,6 +580,35 @@ def create_app(
             {"mode": mode, "agent_id": agent_id, returned: credential}, headers={"Cache-Control": "no-store"}
         )
 
+    def brave_route(
+        run: Callable[[Request], Awaitable[dict[str, object]]],
+    ) -> Callable[[Request], Awaitable[JSONResponse]]:
+        """A Brave route: the device bearer, plain-sentence errors, and nothing cached on the way."""
+
+        async def route(request: Request) -> JSONResponse:
+            if not hmac.compare_digest(request.headers.get("authorization", "").encode(), expected):
+                return _private({"error": "unauthorized"}, 401)
+            try:
+                return _private(await run(request))
+            except SearchError as error:
+                return _private(error.body(), error.status)
+
+        return route
+
+    async def run_search(request: Request) -> dict[str, object]:
+        kind = KINDS.get(request.path_params["kind"])
+        if kind is None:
+            raise _UnknownSearch("There's no search of that kind.")
+        return (await brave.search(kind, SearchQuery.parse(kind, request.query_params))).to_json()
+
+    async def run_suggest(request: Request) -> dict[str, object]:
+        q = query_text(request.query_params.get("q"))
+        return {"query": q, "suggestions": await brave.suggest(q, suggest_count(request.query_params.get("count")))}
+
+    async def run_spellcheck(request: Request) -> dict[str, object]:
+        q = query_text(request.query_params.get("q"))
+        return {"query": q, "corrected": await brave.spellcheck(q)}
+
     async def call_webhook(request: Request) -> JSONResponse:
         """Telnyx's answering assistant: ``start`` when it picks up a call, ``message`` when it took one,
         ``summary`` after the call ended."""
@@ -530,6 +649,7 @@ def create_app(
             yield
         finally:
             await hub.close()
+            await brave.aclose()
             if call_telnyx is not None:
                 await call_telnyx.close()
 
@@ -538,6 +658,9 @@ def create_app(
             Route("/healthz", healthz),
             WebSocketRoute("/v1/sessions/{session_id}", session_socket),
             Route("/v1/agent/session", agent_session),
+            Route("/v1/search/{kind}", brave_route(run_search)),
+            Route("/v1/suggest", brave_route(run_suggest)),
+            Route("/v1/spellcheck", brave_route(run_spellcheck)),
             Route("/v1/calls/{session_id}/{token}/{kind}", call_webhook, methods=["POST"]),
         ],
         lifespan=lifespan,
@@ -546,13 +669,39 @@ def create_app(
     return app
 
 
+class _UnknownSearch(SearchError):
+    status = 404
+
+
+def _private(body: dict[str, object], status: int = 200) -> JSONResponse:
+    return JSONResponse(body, status_code=status, headers={"Cache-Control": "no-store"})
+
+
+class _NoQueryStrings(logging.Filter):
+    """Cuts the query string from uvicorn's access lines (``client, method, path, version, status``)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            client, method, path, version, status = record.args
+            record.args = (client, method, str(path).partition("?")[0], version, status)
+        return True
+
+
+def configure_logging() -> None:
+    """Log at ``RIVET_LOG_LEVEL``. Search URLs carry what the user typed, so httpx's request lines are off and
+    uvicorn's access lines lose their query strings."""
+    logging.basicConfig(
+        level=os.environ.get("RIVET_LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.access").addFilter(_NoQueryStrings())
+
+
 def main() -> None:
     """``rivet-brain``: serve the gateway (``RIVET_HOST``/``PORT``)."""
     import uvicorn
 
-    logging.basicConfig(
-        level=os.environ.get("RIVET_LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    configure_logging()
     settings = BrainSettings.from_env()
     public_url = os.environ.get("RIVET_PUBLIC_URL", "").strip()
     line = (
@@ -572,22 +721,27 @@ def main() -> None:
         logger.info("imap=<%s>, smtp=<%s> | email tools enabled", account.imap_host, account.smtp_host)
     # Live calls run fixed code on a Telnyx connection of their own (see live_calls.TelnyxRunner).
     telnyx = TelnyxRunner(lambda: build_telnyx_client(settings, Wiring())) if line else None
+    search = BraveSearch(SearchKeys.from_env())
 
     def tools_for(bridge: DeviceBridge) -> list[Any]:
         return [
             *device_tools.tools_for(bridge),
             *calls.tools_for(bridge, bridge.session_id, line, inbox),
             *email_tools.tools_for(mailbox),
+            *search_tools.tools_for(search),
         ]
 
     app = create_app(
         settings,
         tools_for=tools_for,
-        approvals=RivetApprovals({**device_tools.POLICIES, **calls.POLICIES, **email_tools.POLICIES}),
+        approvals=RivetApprovals(
+            {**device_tools.POLICIES, **calls.POLICIES, **email_tools.POLICIES, **search_tools.POLICIES}
+        ),
         call_inbox=inbox,
         follow_up_calls=os.environ.get("RIVET_CALL_FOLLOW_UP", "1") != "0",
         call_telnyx=telnyx,
         call_poll=float(os.environ.get("RIVET_CALL_POLL") or POLL_SECONDS),
+        search=search,
     )
     uvicorn.run(
         app,
