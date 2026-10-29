@@ -37,7 +37,8 @@ ended_at, duration, summary, outcome, taken_over}, ``session.ready``, ``pong``, 
 
 Brave Search, same bearer, ``Cache-Control: no-store``, nothing kept (see ``search.py``):
 ``GET /v1/search/{web|news|images|videos|places|context|answers}?q=&count=&freshness=&location=&lat=&long=&max_tokens=``
-returns {kind, query, altered, items, answer, center}; ``GET /v1/suggest?q=&count=`` returns {query, suggestions};
+returns {kind, query, altered, items, answer, center, citations} (``citations`` [{number, url, snippet}]
+for an answer, whose text marks each as ``[number]``); ``GET /v1/suggest?q=&count=`` returns {query, suggestions};
 ``GET /v1/spellcheck?q=`` returns {query, corrected}. Errors are {error} with a plain sentence: 400 bad parameters,
 401, 404 unknown kind, 429 {retry_after} Brave is busy, 502 {upstream} Brave answered wrongly, 503 not set up, 504
 Brave timed out.

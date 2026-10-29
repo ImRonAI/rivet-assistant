@@ -14,15 +14,17 @@ ones at any time.
 
 from __future__ import annotations
 
+import asyncio
 import html
+import json
 import logging
 import math
 import os
 import re
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, TypeVar
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -43,10 +45,11 @@ Freshness = Literal["pd", "pw", "pm", "py"]
 _FRESHNESS: dict[str, Freshness] = {"pd": "pd", "pw": "pw", "pm": "pm", "py": "py"}
 
 BRAVE_API = "https://api.search.brave.com/res"
-SEARCH_TIMEOUT = 15.0
-ANSWERS_TIMEOUT = 20.0
+SEARCH_TIMEOUT = 10.0
+ANSWERS_TIMEOUT = 12.0
 SUGGEST_TIMEOUT = 4.0
-"""Seconds for one Brave call. The phone's client tools have 30 s in all, so the brain answers well inside it."""
+"""Seconds for one whole Brave call, reading included. The ElevenLabs agents cut a search tool at 20 s and the phone
+waits 15 s for the brain, so the brain answers inside both."""
 
 QUERY_LIMIT = 400
 COUNTS: dict[SearchKind, tuple[int, int]] = {
@@ -55,14 +58,15 @@ COUNTS: dict[SearchKind, tuple[int, int]] = {
     "images": (12, 50),
     "videos": (8, 20),
     "places": (8, 20),
+    "context": (5, 20),
 }
-"""Default and maximum ``count`` per kind, within Brave's own ranges."""
+"""Default and maximum ``count`` per kind, within Brave's own ranges. For context it is the number of pages."""
 SUGGEST_COUNTS = (5, 10)
 CONTEXT_TOKENS = (2048, 1024, 8192)
 """Default, minimum and maximum ``maximum_number_of_tokens`` for LLM context."""
-CONTEXT_URLS = 5
 SNIPPETS = 5
 SNIPPET_CHARS = 1000
+CITATION_CHARS = 300
 
 NO_QUERY = "Type something to search for."
 NO_PLACE = "Say where to look for places, like 'austin tx united states'."
@@ -70,6 +74,10 @@ NOT_SET_UP = "Search isn't set up on Rivet's brain yet."
 
 _YOUTUBE_WATCH = re.compile(r"^https://www\.youtube\.com/watch\?")
 _YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+_CITATION = re.compile(r"<citation>(.*?)</citation>", re.DOTALL)
+_USAGE = re.compile(r"<usage>.*?</usage>", re.DOTALL)
+
+_T = TypeVar("_T")
 
 
 class SearchError(Exception):
@@ -179,6 +187,8 @@ class SearchQuery:
     def parse(cls, kind: SearchKind, raw: Mapping[str, object]) -> SearchQuery:
         """Read ``q``, ``count``, ``freshness``, ``location``, ``lat``/``long`` and ``max_tokens`` for ``kind``.
 
+        A place search may give ``q`` alone; Brave then searches without a location bias.
+
         Raises:
             SearchInvalid: ``q`` is missing or too long (places may go without one when given a location), the
                 freshness is not ``pd``/``pw``/``pm``/``py``, or only one coordinate is given.
@@ -205,7 +215,7 @@ class SearchQuery:
     def upstream(self, kind: SearchKind) -> tuple[str, dict[str, str]]:
         """Brave's path and query parameters for this search (not answers, which is a POST)."""
         params: dict[str, str] = {"q": self.q} if self.q else {}
-        if self.count is not None:
+        if self.count is not None and kind != "context":
             params["count"] = str(self.count)
         if self.freshness is not None:
             params["freshness"] = self.freshness
@@ -219,7 +229,7 @@ class SearchQuery:
                 params["latitude"], params["longitude"] = str(self.lat), str(self.lng)
         if kind == "context":
             params["maximum_number_of_tokens"] = str(self.max_tokens)
-            params["maximum_number_of_urls"] = str(CONTEXT_URLS)
+            params["maximum_number_of_urls"] = str(self.count or COUNTS["context"][0])
             params["enable_source_metadata"] = "true"
         return _PATHS[kind], params
 
@@ -338,6 +348,15 @@ class Center:
     name: str | None
 
 
+@dataclass(frozen=True)
+class Citation:
+    """A source Brave's answer cites; the answer marks it as ``[number]``."""
+
+    number: int
+    url: str
+    snippet: str | None
+
+
 SearchItem = WebItem | ImageItem | VideoItem | PlaceItem | ContextItem
 
 
@@ -351,6 +370,7 @@ class SearchResults:
     items: list[SearchItem]
     answer: str | None = None
     center: Center | None = None
+    citations: list[Citation] = field(default_factory=list)
 
     def to_json(self) -> dict[str, object]:
         """The envelope as JSON-ready data."""
@@ -377,18 +397,20 @@ class BraveSearch:
         """
         key = self.keys.for_kind(kind)
         if kind == "answers":
-            body = {"messages": [{"role": "user", "content": query.q}], "stream": False}
-            data = await self._call(kind, key, "POST", _PATHS[kind], ANSWERS_TIMEOUT, json=body)
-            return SearchResults(kind, query.q, None, [], answer=_answer(data))
+            # Brave sends citations only on a stream.
+            body = {"messages": [{"role": "user", "content": query.q}], "stream": True, "enable_citations": True}
+            parts = await self._call(kind, key, "POST", _PATHS[kind], ANSWERS_TIMEOUT, _stream, json=body)
+            answer, citations = _answer(parts)
+            return SearchResults(kind, query.q, None, [], answer=answer, citations=citations)
         path, params = query.upstream(kind)
-        data = await self._call(kind, key, "GET", path, SEARCH_TIMEOUT, params=params)
+        data = await self._call(kind, key, "GET", path, SEARCH_TIMEOUT, _json, params=params)
         return _results(kind, query.q, data)
 
     async def suggest(self, q: str, count: int) -> list[str]:
         """Query completions for ``q``, deduplicated in Brave's order."""
         params = {"q": q, "count": str(count)}
         data = await self._call(
-            "suggest", self.keys.suggest, "GET", "/v1/suggest/search", SUGGEST_TIMEOUT, params=params
+            "suggest", self.keys.suggest, "GET", "/v1/suggest/search", SUGGEST_TIMEOUT, _json, params=params
         )
         seen: dict[str, None] = {}
         for item in _list(data.get("results")):
@@ -401,7 +423,7 @@ class BraveSearch:
         """Brave's correction of ``q``, or ``None`` when there is none or it only changes case or spacing."""
         params = {"q": q}
         data = await self._call(
-            "spellcheck", self.keys.spellcheck, "GET", "/v1/spellcheck/search", SUGGEST_TIMEOUT, params=params
+            "spellcheck", self.keys.spellcheck, "GET", "/v1/spellcheck/search", SUGGEST_TIMEOUT, _json, params=params
         )
         results = _list(data.get("results"))
         corrected = _text(_obj(results[0]).get("query")) if results else None
@@ -419,36 +441,38 @@ class BraveSearch:
         method: str,
         path: str,
         timeout: float,
+        read: Callable[[httpx.Response], Awaitable[_T]],
         *,
         params: Mapping[str, str] | None = None,
         json: object = None,
-    ) -> Mapping[str, object]:
+    ) -> _T:
+        """One Brave call within ``timeout`` seconds in all; ``read`` reads a 200 response's body."""
         if key is None:
             raise SearchUnavailable()
         headers = {"X-Subscription-Token": key, "Accept": "application/json"}
+        request = self._http.build_request(method, path, params=params, json=json, headers=headers, timeout=timeout)
         started = time.monotonic()
+        status = "ok"
         try:
-            response = await self._http.request(
-                method, path, params=params, json=json, headers=headers, timeout=timeout
-            )
-        except httpx.TimeoutException:
-            self._log(kind, "timeout", started)
+            async with asyncio.timeout(timeout):
+                response = await self._http.send(request, stream=True)
+                try:
+                    status = str(response.status_code)
+                    if response.status_code == 429:
+                        raise SearchBusy(_retry_after(response.headers.get("x-ratelimit-reset")))
+                    if response.status_code != 200:
+                        raise SearchRejected(response.status_code)
+                    return await read(response)
+                finally:
+                    await response.aclose()
+        except (TimeoutError, httpx.TimeoutException):
+            status = "timeout"
             raise SearchTimeout() from None
         except httpx.HTTPError as error:
-            self._log(kind, type(error).__name__, started)
+            status = type(error).__name__
             raise SearchRejected(None) from None
-        self._log(kind, str(response.status_code), started)
-        if response.status_code == 429:
-            raise SearchBusy(_retry_after(response.headers.get("x-ratelimit-reset")))
-        if response.status_code != 200:
-            raise SearchRejected(response.status_code)
-        try:
-            data = response.json()
-        except ValueError:
-            raise SearchRejected(response.status_code) from None
-        if not isinstance(data, dict):
-            raise SearchRejected(response.status_code)
-        return data
+        finally:
+            self._log(kind, status, started)
 
     @staticmethod
     def _log(kind: str, status: str, started: float) -> None:
@@ -720,6 +744,52 @@ def _results(kind: SearchKind, q: str, data: Mapping[str, object]) -> SearchResu
     return SearchResults(kind, original, altered, items, center=center)
 
 
-def _answer(data: Mapping[str, object]) -> str | None:
-    choices = _list(data.get("choices"))
-    return _text(_obj(_obj(choices[0]).get("message")).get("content")) if choices else None
+async def _json(response: httpx.Response) -> Mapping[str, object]:
+    await response.aread()
+    try:
+        data = response.json()
+    except ValueError:
+        raise SearchRejected(response.status_code) from None
+    if not isinstance(data, dict):
+        raise SearchRejected(response.status_code)
+    return data
+
+
+async def _stream(response: httpx.Response) -> list[str]:
+    """The ``delta.content`` of each ``data:`` chunk of a server-sent event stream, up to ``data: [DONE]``."""
+    parts: list[str] = []
+    async for line in response.aiter_lines():
+        if not line.startswith("data:"):
+            continue
+        payload = line.removeprefix("data:").strip()
+        if payload == "[DONE]":
+            break
+        try:
+            chunk = json.loads(payload)
+        except ValueError:
+            raise SearchRejected(response.status_code) from None
+        choices = _list(_obj(chunk).get("choices"))
+        content = _obj(_obj(choices[0]).get("delta")).get("content") if choices else None
+        if isinstance(content, str):
+            parts.append(content)
+    return parts
+
+
+def _answer(parts: list[str]) -> tuple[str | None, list[Citation]]:
+    """The streamed answer with each ``<citation>`` tag swapped for its ``[number]`` and ``<usage>`` dropped."""
+    citations: dict[int, Citation] = {}
+
+    def cite(match: re.Match[str]) -> str:
+        try:
+            raw = _obj(json.loads(match.group(1)))
+        except ValueError:
+            return ""
+        number, url = _count(raw.get("number")), _text(raw.get("url"))
+        if number is None or url is None:
+            return ""
+        snippet = _text(raw.get("snippet"))
+        citations.setdefault(number, Citation(number, url, snippet[:CITATION_CHARS] if snippet else None))
+        return f"[{number}]"
+
+    text = _CITATION.sub(cite, _USAGE.sub("", "".join(parts)))
+    return _text(text), sorted(citations.values(), key=lambda citation: citation.number)

@@ -90,8 +90,8 @@ SPECS: tuple[SearchToolSpec, ...] = (
     SearchToolSpec(
         "search_answer",
         "answers",
-        "Ask Brave for a short answer to a question, written from a web search. The answer appears on the user's "
-        "screen.",
+        "Ask Brave for a short answer to a question, written from a web search, with its sources numbered like "
+        "[1]. The answer appears on the user's screen.",
         {"q": {"type": "string", "description": "The question."}},
         ToolPolicy("read", "Look up an answer", untrusted_output=True),
     ),
@@ -102,6 +102,7 @@ SPECS: tuple[SearchToolSpec, ...] = (
         "on the user's screen as numbered cards.",
         {
             "q": _Q,
+            "count": {"type": "integer", "description": "How many pages, 1 to 20 (optional)."},
             "freshness": _FRESHNESS,
             "max_tokens": {"type": "integer", "description": "Text budget, 1024 to 8192 (default 2048)."},
         },

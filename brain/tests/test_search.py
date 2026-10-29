@@ -6,9 +6,10 @@ real results.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
+from rivet_brain import search
 from rivet_brain.gateway import configure_logging, create_app
 from rivet_brain.search import BraveSearch, SearchKeys
 from tests.chaos import Aux, fast_settings, make_build
@@ -156,19 +158,42 @@ CONTEXT = {
         "https://docs.example/nometa": {"hostname": "docs.example", "age": []},
     },
 }
-ANSWER = {
-    "id": "a1",
-    "object": "chat.completion",
-    "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "K2 &amp; more."}}],
-    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+
+
+def sse(*contents: str) -> bytes:
+    """An Answers stream: one ``chat.completion.chunk`` per content, then ``[DONE]``."""
+    chunks = [
+        {"id": "a1", "object": "chat.completion.chunk", "choices": [{"delta": {"content": c}, "index": 0}]}
+        for c in contents
+    ]
+    return "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks).encode() + b"data: [DONE]\n\n"
+
+
+K2 = {
+    "start_index": 0,
+    "end_index": 2,
+    "number": 1,
+    "url": "https://peaks.example/k2",
+    "favicon": "https://peaks.example/f.ico",
+    "snippet": "K2 is 8,611 m &amp; second.",
 }
+ANSWER = sse(
+    "K2 &amp; more",
+    f"<citation>{json.dumps(K2)}</citation>",
+    " than Kangchenjunga",
+    '<citation>{"number": 2, "url": "https://peaks.example/list"}</citation>',
+    '<citation>{"number": 1, "url": "https://peaks.example/k2"',
+    "}</citation>.",
+    '<citation>{"number": 3}</citation>',
+    '<usage>{"X-Request-Total-Cost": 0.01567}</usage>',
+)
 SUGGEST = {
     "type": "suggest",
     "query": {"original": "albert"},
     "results": [{"query": "albert einstein"}, {"query": "albertsons"}, {"query": "albert einstein"}, {}],
 }
 SPELLCHECK = {"type": "spellcheck", "query": {"original": "artifical"}, "results": [{"query": "artificial"}]}
-FIXTURES = {
+FIXTURES: dict[str, object] = {
     "/res/v1/web/search": WEB,
     "/res/v1/news/search": NEWS,
     "/res/v1/images/search": IMAGES,
@@ -192,7 +217,10 @@ class FakeBrave:
         self.requests.append(request)
         if self.respond is not None:
             return self.respond(request)
-        return httpx.Response(200, json=FIXTURES[request.url.path])
+        fixture = FIXTURES[request.url.path]
+        if isinstance(fixture, bytes):
+            return httpx.Response(200, content=fixture, headers={"content-type": "text/event-stream"})
+        return httpx.Response(200, json=fixture)
 
     @property
     def last(self) -> httpx.Request:
@@ -335,6 +363,12 @@ def test_places_swap_nothing_and_map_every_field(client: TestClient, brave: Fake
     assert dict(brave.last.url.params) == {"q": "coffee", "count": "8", "location": "San Francisco CA United States"}
 
 
+def test_places_by_query_alone_search_without_a_location(client: TestClient, brave: FakeBrave) -> None:
+    body = _get(client, "/v1/search/places", q="blue bottle coffee", count=10).json()
+    assert body["items"][0]["title"] == "Blue Cup"
+    assert dict(brave.last.url.params) == {"q": "blue bottle coffee", "count": "10"}
+
+
 def test_places_by_coordinates_or_location_alone(client: TestClient, brave: FakeBrave) -> None:
     _get(client, "/v1/search/places", lat="30.27", long="-97.74")
     assert dict(brave.last.url.params) == {"count": "8", "latitude": "30.27", "longitude": "-97.74"}
@@ -369,23 +403,58 @@ def test_context_keeps_five_short_snippets_and_the_relative_age(client: TestClie
     }
 
 
-def test_answers_post_one_blocking_question_on_the_answers_key(client: TestClient, brave: FakeBrave) -> None:
+def test_context_count_is_the_number_of_pages(client: TestClient, brave: FakeBrave) -> None:
+    _get(client, "/v1/search/context", q="x", count=10)
+    assert brave.last.url.params["maximum_number_of_urls"] == "10" and "count" not in brave.last.url.params
+    _get(client, "/v1/search/context", q="x", count=99)
+    assert brave.last.url.params["maximum_number_of_urls"] == "20"
+
+
+def test_answers_stream_one_question_and_keep_the_citations(client: TestClient, brave: FakeBrave) -> None:
     body = _get(client, "/v1/search/answers", q="What is the second highest mountain?").json()
     assert body == {
         "kind": "answers",
         "query": "What is the second highest mountain?",
         "altered": None,
         "items": [],
-        "answer": "K2 & more.",
+        "answer": "K2 & more[1] than Kangchenjunga[2][1].",
         "center": None,
+        "citations": [
+            {"number": 1, "url": "https://peaks.example/k2", "snippet": "K2 is 8,611 m & second."},
+            {"number": 2, "url": "https://peaks.example/list", "snippet": None},
+        ],
     }
     request = brave.last
     assert request.method == "POST" and request.url.path == "/res/v1/chat/completions"
     assert request.headers["x-subscription-token"] == "answers-key-2"
     assert json.loads(request.content) == {
         "messages": [{"role": "user", "content": "What is the second highest mountain?"}],
-        "stream": False,
+        "stream": True,
+        "enable_citations": True,
     }
+
+
+def test_an_answer_stream_that_is_not_json_is_502(tmp_path: Path) -> None:
+    fake = FakeBrave(lambda request: httpx.Response(200, content=b"data: {oops\n\n"))
+    with _client(tmp_path, BraveSearch(KEYS, transport=httpx.MockTransport(fake))) as client:
+        response = _get(client, "/v1/search/answers", q="x")
+    assert response.status_code == 502 and response.json()["upstream"] == 200
+
+
+class _Stalls(httpx.AsyncByteStream):
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield sse("K2")[:20]
+        await asyncio.sleep(5)
+
+
+def test_an_answer_stream_that_stalls_is_504_within_the_whole_call_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(search, "ANSWERS_TIMEOUT", 0.2)
+    fake = FakeBrave(lambda request: httpx.Response(200, stream=_Stalls()))
+    with _client(tmp_path, BraveSearch(KEYS, transport=httpx.MockTransport(fake))) as client:
+        response = _get(client, "/v1/search/answers", q="x")
+    assert response.status_code == 504 and response.json() == {"error": "Brave Search took too long."}
 
 
 def test_suggest_dedupes_and_spellcheck_corrects(client: TestClient, brave: FakeBrave) -> None:
