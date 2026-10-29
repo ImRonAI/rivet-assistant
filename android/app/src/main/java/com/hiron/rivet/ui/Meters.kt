@@ -106,10 +106,15 @@ fun HaloTalkKey(state: TalkState, onClick: () -> Unit, description: String, modi
         Box(Modifier.size(box).background(Brush.radialGradient(listOf(p.accent.copy(alpha = 0.10f), Color.Transparent))))
         if (ping != null) {
             val base = if (large) 160.dp else 52.dp
+            val ring = p.accent.copy(alpha = if (large) 0.10f else 0.5f)
+            val fill = p.accent.copy(alpha = if (large) 0.10f else 0.15f)
             Box(
-                Modifier.size(base).graphicsLayer { scaleX = 1f + ping; scaleY = 1f + ping; alpha = 0.9f * (1f - ping) }
-                    .border(1.dp, p.accent.copy(alpha = if (large) 0.10f else 0.5f), CircleShape)
-                    .background(p.accent.copy(alpha = if (large) 0.10f else 0.15f), CircleShape),
+                Modifier.size(base).drawBehind {
+                    val r = size.minDimension / 2 * (1f + ping)
+                    val fade = 0.9f * (1f - ping)
+                    drawCircle(fill.copy(alpha = fill.alpha * fade), r)
+                    drawCircle(ring.copy(alpha = ring.alpha * fade), r - 0.5.dp.toPx(), style = Stroke(1.dp.toPx()))
+                },
             )
         }
         if (large && !listening) {

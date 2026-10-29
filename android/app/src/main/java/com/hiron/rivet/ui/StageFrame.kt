@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -82,7 +83,7 @@ fun StageFrame(
     }
     Box(
         modifier.testTag(STAGE_TAG)
-            .then(if (framed) Modifier.clip(shape).border(1.dp, p.edge, shape) else Modifier)
+            .then(if (framed) Modifier.clip(shape).border(1.dp, p.edge, shape) else Modifier.clipToBounds())
             .background(p.bg)
             .then(if (framed) Modifier.topShade() else Modifier),
     ) {

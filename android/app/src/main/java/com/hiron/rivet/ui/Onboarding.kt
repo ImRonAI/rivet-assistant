@@ -148,7 +148,7 @@ fun Onboarding(runtime: RivetRuntime, onFinish: () -> Unit) {
             StepIndicator(step, STEPS)
         }
         StageFrame(Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(stage), caption = "Rivet", hint = if (hintFits()) HINT else null) {
-            RobotView(runtime, p.dark, Modifier.fillMaxSize())
+            RobotView(runtime, p.dark, Modifier.fillMaxSize(), focus = "card")
         }
         AnimatedContent(
             step,

@@ -3,6 +3,7 @@ package com.hiron.rivet.app
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -215,6 +216,42 @@ class AppFlowTest {
         shot("07-settings-call-answering")
         compose.onNode(hasText("Open Rivet's app info")).performScrollTo().assertIsDisplayed()
         shot("08-settings-bottom")
+    }
+
+    @Test
+    fun firstRunWalksEveryStepAndTheVoiceSetupOpensFromOnboardingAndSettings() {
+        compose.onNodeWithText("Get Started").performClick()
+        compose.onNodeWithText("Save & Continue").assertIsDisplayed()
+
+        // The voice link on step 2 opens the voice setup over onboarding; skipping it lands back on step 2.
+        compose.onNodeWithText("Choose Rivet's voice").performClick()
+        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+        shot("09-voice-from-onboarding")
+        compose.onAllNodesWithText("Skip voice setup")[0].performClick()
+        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+
+        compose.onNodeWithText("Save & Continue").performClick()
+        compose.onNodeWithText("Skip for now").performClick()
+        compose.onNodeWithText("Customize later in Settings").performClick()
+        compose.waitForIdle()
+        assertTrue(compose.activity.rivet.settings.onboarded)
+
+        // Settings' Voice section opens the same setup.
+        compose.onNodeWithTag(TAB_TAG_PREFIX + "settings").performClick()
+        compose.onNodeWithText("Not chosen yet").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Set up Rivet's voice").performScrollTo().performClick()
+        compose.onNodeWithText("Choose or make a voice").performClick()
+        compose.onNodeWithText("PRESET LIBRARY.").assertIsDisplayed()
+        compose.onNodeWithText("Sol").performClick()
+        compose.onNodeWithText("Continue").performClick()
+        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+
+        // Back closes the setup, and the Voice section shows the saved voice.
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        compose.onNodeWithText("Sol").performScrollTo().assertIsDisplayed()
+        shot("10-settings-voice-chosen")
     }
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onAllNodesWithTextCount(text: String): Int =
