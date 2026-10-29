@@ -36,10 +36,10 @@ fun shot(rule: ComposeTestRule, activity: Activity, name: String) {
     }
 }
 
-@Suppress("UNCHECKED_CAST")
-private fun windowRoots(): List<View> {
+/** The root view of every window on screen, in z-order. */
+internal fun windowRoots(): List<View> {
     val global = Class.forName("android.view.WindowManagerGlobal")
     val instance = global.getMethod("getInstance").invoke(null)
-    val views = global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<View>
-    return views.filter { it.isShown && it.width > 0 }
+    val views = global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<*>
+    return views.filterIsInstance<View>().filter { it.isShown && it.width > 0 }
 }

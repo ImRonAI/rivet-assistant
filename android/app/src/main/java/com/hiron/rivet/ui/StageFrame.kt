@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.hiron.rivet.core.Activity
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -100,6 +101,19 @@ fun StageFrame(
                 Text(hint.uppercase(), style = Type.labelSm.copy(letterSpacing = 0.14.em), color = p.ink2, maxLines = 1)
             }
         }
+    }
+}
+
+/** The stage lights in the colour of what Rivet is doing: cyan working, amber waiting on you, green done, crimson listening or stuck. */
+@Composable
+internal fun moodColor(activity: Activity): Color? {
+    val p = LocalPalette.current
+    return when (activity) {
+        Activity.Listening, Activity.Failed -> p.rec
+        Activity.Waiting -> p.amb
+        Activity.Done -> p.ok
+        Activity.Thinking, Activity.Searching, Activity.Working, Activity.Texting, Activity.Emailing, Activity.Calling -> p.cy
+        Activity.Idle -> null
     }
 }
 

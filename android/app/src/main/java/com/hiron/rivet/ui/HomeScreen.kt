@@ -151,7 +151,7 @@ fun HomeScreen(
             mood = moodColor(state.activity),
         ) {
             // While the greeting shows, Rivet stands in the upper part of the stage with the words under its feet.
-            RobotView(runtime, p.dark, Modifier.fillMaxSize(), focus = if (idle) "greet" else "stage")
+            RobotView(runtime, Modifier.fillMaxSize(), focus = if (idle) RobotFocus.Greet else RobotFocus.Stage)
             // The stage melts into what sits below it, and the greeting stays legible over the floor.
             Box(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(fade)
@@ -191,19 +191,6 @@ fun HomeScreen(
 }
 
 const val STAGE_TAG = "stage"
-
-/** The stage lights in the colour of what Rivet is doing: cyan working, amber waiting on you, green done, crimson listening or stuck. */
-@Composable
-private fun moodColor(activity: Activity): Color? {
-    val p = LocalPalette.current
-    return when (activity) {
-        Activity.Listening, Activity.Failed -> p.rec
-        Activity.Waiting -> p.amb
-        Activity.Done -> p.ok
-        Activity.Thinking, Activity.Searching, Activity.Working, Activity.Texting, Activity.Emailing, Activity.Calling -> p.cy
-        Activity.Idle -> null
-    }
-}
 
 @Composable
 private fun BoxScope.StageGreeting(visible: Boolean, state: RivetState, voice: Boolean) {

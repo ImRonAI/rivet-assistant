@@ -54,12 +54,15 @@ import com.hiron.rivet.ui.HomeScreen
 import com.hiron.rivet.ui.HudHeader
 import com.hiron.rivet.ui.LocalOpenVoiceSetup
 import com.hiron.rivet.ui.LocalPalette
+import com.hiron.rivet.ui.LocalRobotStage
+import com.hiron.rivet.ui.MiniStage
 import com.hiron.rivet.ui.Onboarding
 import com.hiron.rivet.ui.PendantTab
 import com.hiron.rivet.ui.PendantTabs
 import com.hiron.rivet.ui.RivetTheme
 import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.SettingsScreen
+import com.hiron.rivet.ui.rememberRobotStage
 import com.hiron.rivet.ui.VoiceSetup
 import com.hiron.rivet.voice.AgentMode
 import com.hiron.rivet.voice.LocalVoiceStudio
@@ -189,11 +192,17 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
     val studio = remember { PhoneVoiceStudio(context, runtime.settings) }
     DisposableEffect(studio) { onDispose { studio.stopPreview() } }
     var voiceSetup by rememberSaveable { mutableStateOf(false) }
+    // One robot page for the whole activity, lent to whichever screen is in front.
+    val stage = rememberRobotStage(runtime)
 
-    CompositionLocalProvider(LocalOpenVoiceSetup provides { voiceSetup = true }, LocalVoiceStudio provides studio) {
+    CompositionLocalProvider(
+        LocalOpenVoiceSetup provides { voiceSetup = true },
+        LocalVoiceStudio provides studio,
+        LocalRobotStage provides stage,
+    ) {
         Box(Modifier.fillMaxSize()) {
             if (onboarded) MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests) else Onboarding(runtime, onFinish = finish)
-            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false })
+            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state) })
         }
     }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {
@@ -231,6 +240,7 @@ private fun MainUi(
             },
             rule = tab != Tab.Rivet,
         )
+        MiniStage(runtime, state, visible = tab != Tab.Rivet, onOpen = { onTab(Tab.Rivet) })
         Crossfade(tab, Modifier.weight(1f).fillMaxWidth(), animationSpec = tween(220), label = "tab") { shown ->
             when (shown) {
                 Tab.Rivet -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = onReviewApprovals, focusRequests = focusRequests)

@@ -13,7 +13,7 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 |---|---|
 | App | **0.3.0** (versionCode 6) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the interface redesigned from the owner's 11 Stitch screens (4 onboarding steps, 7 voice setup screens) plus the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. |
 | Brain on Fly | `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, the owner's personal Fly organization) runs the brain with the ElevenLabs session endpoint (deployed 2026-10-28; `/healthz` ok, both agent credentials verified live). `RIVET_DEVICE_TOKEN` and `ELEVENLABS_API_KEY` are set; **`PERPLEXITY_API_KEY` and `HORIZON_API_KEY` are not yet**, so chat and Telnyx don't work there until the owner sets them. Call answering still points at the old app `rivet-brain-hiron`, which keeps running until the owner shuts it down. Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1` (Fly's remote builder isn't reachable from cloud sessions). If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
-| Tests | Brain: 239 pass (`-m "not live"`), ruff, format and mypy clean. Android: 89 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
+| Tests | Brain: 239 pass (`-m "not live"`), ruff, format and mypy clean. Android: 157 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
 | Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
 | ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. Off until the user turns on Settings › "Use ElevenLabs agents". |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
@@ -111,7 +111,8 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
 - **Robot** (`ui/RobotView.kt`, `android/robot/bridge.js`, built into assets by `tools/build_robot_asset.py`):
   - the bundled page runs offline;
   - moves, the trace HUD and the email and text cards follow what Rivet is doing;
-  - lip sync follows text-to-speech, and the stage glow follows Rivet's mood.
+  - lip sync follows text-to-speech, and the stage glow follows Rivet's mood;
+  - the robot stays in view: the big stage on Home and a short band on Activity, Settings and the voice setup, sharing one page, so its moves, mood and mouth carry across screens. Built and tested in Robolectric only; not yet checked on a phone.
 - **Launcher** (`res/`, `widget/RivetWidgets.kt`):
   - an adaptive icon with a themed monochrome layer (`tools/build_icon.py`);
   - long-press shortcuts: Talk, Ask, Catch me up, My day;
@@ -143,7 +144,7 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   agent design: two platform agents (voice `agent_2901m620nzwrev2r7ekqpydcxe25`, text
   `agent_9601m623qa72ffs9cyy3ezc0p6tb`) with the phone tools as client tools. Approvals for those tools run on the
   phone, not in the brain. Which model the agents run on is the owner's call in the ElevenLabs platform settings
-  (never an Anthropic model). The persistent robot stage is not built.
+  (never an Anthropic model). The persistent robot stage is built (one shared page, a mini-stage off Home) but not yet checked on a phone.
 - **Design notes:**
   - Keep the brain as the single decision-maker and keep approvals intact. The ElevenLabs agent should call the brain as a custom LLM or through server or client tools, never act on its own.
   - Get private-agent conversation tokens from the brain; the ElevenLabs API key never goes on the phone.

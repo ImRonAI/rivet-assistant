@@ -1,8 +1,13 @@
 package com.hiron.rivet.app
 
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,8 +20,12 @@ import com.hiron.rivet.core.Connection
 import com.hiron.rivet.core.rivet
 import com.hiron.rivet.testing.FakeAndroidKeyStore
 import com.hiron.rivet.testing.shot
+import com.hiron.rivet.testing.windowRoots
 import com.hiron.rivet.ui.COMPOSER_TAG
+import com.hiron.rivet.ui.MINI_STAGE_TAG
+import com.hiron.rivet.ui.STAGE_TAG
 import com.hiron.rivet.ui.TAB_TAG_PREFIX
+import androidx.webkit.WebViewFeature
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -25,15 +34,20 @@ import okhttp3.mockwebserver.MockWebServer
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+
+private const val ROBOT_PAGE = "https://appassets.androidplatform.net/assets/rivet/index.html"
 
 /**
  * Drives the real app (MainActivity, runtime, gateway client, screens) against a stand-in brain over a real
@@ -253,6 +267,133 @@ class AppFlowTest {
         compose.onNodeWithText("Sol").performScrollTo().assertIsDisplayed()
         shot("10-settings-voice-chosen")
     }
+
+    /** Skips the power-on screens; with no baked-in brain the app then opens on Settings. */
+    private fun skipOnboarding() {
+        compose.onNodeWithText("Not now").performClick()
+        compose.waitForIdle()
+        assertTrue(compose.activity.rivet.settings.onboarded)
+    }
+
+    private fun tab(name: String) {
+        compose.onNodeWithTag(TAB_TAG_PREFIX + name).performClick()
+        compose.waitForIdle()
+    }
+
+    private fun webViews(): List<WebView> = windowRoots().flatMap(::webViewsIn)
+
+    private fun webViewsIn(view: View): List<WebView> = when (view) {
+        is WebView -> listOf(view)
+        is ViewGroup -> (0 until view.childCount).flatMap { webViewsIn(view.getChildAt(it)) }
+        else -> emptyList()
+    }
+
+    /** The robot page on screen is [first], still alive, and the only one. */
+    private fun assertOnlyPage(first: WebView, step: String) {
+        compose.waitForIdle()
+        val shown = webViews()
+        assertEquals("one robot page after $step", 1, shown.size)
+        assertSame("the same robot page after $step", first, shown.single())
+        assertFalse("the page survived $step", shadowOf(first).wasDestroyCalled())
+        assertEquals(ROBOT_PAGE, shadowOf(first).lastLoadedUrl)
+    }
+
+    private fun openVoiceSetupFromSettings() {
+        compose.onNodeWithText("Rivet's voice").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+    }
+
+    private fun pressBack() {
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun oneRobotPageAcrossScreens() {
+        compose.waitForIdle()
+        val first = webViews().single()
+        assertOnlyPage(first, "launch")
+        skipOnboarding()
+        assertOnlyPage(first, "finishing onboarding")
+
+        tab("activity")
+        assertOnlyPage(first, "Activity")
+        compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
+        tab("settings")
+        assertOnlyPage(first, "Settings")
+        compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
+        tab("rivet")
+        assertOnlyPage(first, "Home")
+        compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
+        tab("settings")
+        assertOnlyPage(first, "back to Settings")
+
+        openVoiceSetupFromSettings()
+        assertOnlyPage(first, "opening the voice setup")
+        // The voice setup's band over the one Settings keeps underneath it.
+        compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(2)
+        pressBack()
+        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        assertOnlyPage(first, "closing the voice setup")
+        compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
+
+        tab("rivet")
+        assertOnlyPage(first, "Home again")
+        compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun miniStageOpensHome() {
+        skipOnboarding()
+        tab("activity")
+        compose.onNodeWithTag(MINI_STAGE_TAG).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(STAGE_TAG).assertIsDisplayed()
+        compose.onNodeWithTag(COMPOSER_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun commandsReachThePageOffHome() {
+        // Robolectric's WebView has no message listener, so the host takes the page as ready once it finishes loading.
+        assertFalse(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))
+        compose.waitForIdle()
+        val page = webViews().single()
+        compose.runOnUiThread { shadowOf(page).webViewClient.onPageFinished(page, ROBOT_PAGE) }
+        assertEquals("""window.rivet && window.rivet.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
+        skipOnboarding()
+        tab("settings")
+        assertOnlyPage(page, "Settings")
+
+        compose.activity.rivet.listening(true)
+        compose.waitForIdle()
+        assertEquals("""window.rivet && window.rivet.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
+
+        // Opening the voice setup frames Rivet for its band and replays the state there.
+        openVoiceSetupFromSettings()
+        assertEquals("""window.rivet && window.rivet.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
+        compose.activity.rivet.listening(false)
+        compose.waitForIdle()
+        assertEquals("""window.rivet && window.rivet.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
+    }
+
+    private fun miniStageScreens(suffix: String) {
+        skipOnboarding()
+        tab("activity")
+        shot("app-activity-mini-stage$suffix")
+        tab("settings")
+        shot("app-settings-mini-stage$suffix")
+        openVoiceSetupFromSettings()
+        shot("app-voice-setup-mini-stage$suffix")
+    }
+
+    @Test
+    fun miniStageScreens() = miniStageScreens("")
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi", fontScale = 1.3f)
+    fun miniStageScreensNarrowLargeText() = miniStageScreens("-360-font130")
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onAllNodesWithTextCount(text: String): Int =
         onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().size
