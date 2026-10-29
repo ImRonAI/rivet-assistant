@@ -54,3 +54,13 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Live call (after setting up call answering again, and with your own number in Settings): the ongoing
       notification shows what the caller and Rivet say; **Take over** (after unlocking) rings your phone and
       connects you to the caller; when the call ends, the summary replaces the notification and appears in Activity.
+- [ ] Approvals (0.4.0): "Text Dana …" shows the contact's name and "You asked: …"; tick "Don't ask again" and
+      **Always deny**: the next identical request is declined without a sheet and Activity says "Declined by your
+      rule"; **Always allow** asks for biometrics; Settings › Approval rules lists both and **Remove** works while
+      connected (disabled offline). A purchase offers only Deny.
+- [ ] Notifications (0.4.0): two pending approvals show a "2 things need your OK" summary that goes away at one; a
+      call keeps one notification from "answering" to its summary, with the caller's message in it; opening Rivet
+      clears approval notifications. Grouping and alert-once behaviour are verified only under Robolectric.
+- [ ] Recommended settings (0.4.0): from the power-on screen and Settings, the sheet lists only what would change;
+      Apply runs the permission prompt and then Android's default apps screen; Settings › **Undo recommended
+      settings** puts the settings back.

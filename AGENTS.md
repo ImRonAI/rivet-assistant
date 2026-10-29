@@ -11,9 +11,9 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 
 | Area | State |
 |---|---|
-| App | **0.3.0** (versionCode 6) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the interface redesigned from the owner's 11 Stitch screens (4 onboarding steps, 7 voice setup screens) plus the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. |
+| App | **0.4.0** (versionCode 7) on branch `alerts-rules` (from `ccr-22d59ed7-dzijhh`, draft PR #3): tasks 3 and 4, plain alerts with "Don't ask again", standing approval rules, one notification per call, grouped notifications and recommended settings, on top of the v0.3 interface and the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. The brain on Fly does not run this code yet: the app and the brain ship together (rules messages need the new brain). |
 | Brain on Fly | `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, the owner's personal Fly organization) runs the brain with the ElevenLabs session endpoint (deployed 2026-10-28; `/healthz` ok, both agent credentials verified live). `RIVET_DEVICE_TOKEN` and `ELEVENLABS_API_KEY` are set; **`PERPLEXITY_API_KEY` and `HORIZON_API_KEY` are not yet**, so chat and Telnyx don't work there until the owner sets them. Call answering still points at the old app `rivet-brain-hiron`, which keeps running until the owner shuts it down. Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1` (Fly's remote builder isn't reachable from cloud sessions). If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
-| Tests | Brain: 239 pass (`-m "not live"`), ruff, format and mypy clean. Android: 89 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
+| Tests | Brain: 340 pass (`-m "not live"`), ruff, format and mypy clean. Android: 174 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
 | Telnyx | The answering number +17608769757 is routed to the Rivet call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
 | ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. Off until the user turns on Settings › "Use ElevenLabs agents". |
 | Email | Built and tested against fake TLS servers. Off until the owner sets `RIVET_EMAIL_ADDRESS` and `RIVET_EMAIL_PASSWORD` (an app password) as Fly secrets. |
@@ -71,8 +71,10 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
 - **Approvals** (`approvals.py`):
   - Tiers: read, send, write, destructive, purchase, unknown.
   - Telnyx `execute` code is parsed, and each `call_tool` target is looked up in the generated operation catalog.
-  - A turn that reads untrusted content (messages, mail, web, screens) is "tainted"; remembered approvals are suspended for it.
-  - Remembered approvals are scoped per recipient.
+  - Each approval says in plain words what Rivet wants to do, to whom, and why (`alerts.py`: a headline, typed field/quote/note blocks and a "because" line), and the model gets a plain result when a call is declined, times out or is superseded.
+  - Standing rules (`rules.py`): "Don't ask again" with Approve or Deny makes an always-allow or always-decline per action and recipient, stored per session in the session's storage (`session/<id>/rivet/approval-rules.json`) and checked deterministically before anything is asked. Purchases, deletes, unrecognised actions, app taps and Telnyx code can only be always declined; an always-decline tells the model why.
+  - A turn that reads untrusted content (messages, mail, web, screens) is "tainted": always-allows are suspended for it and the sheet offers only Deny. Always-declines still apply.
+  - The gateway adds `rules`, `rules.list`, `rules.set`, `rules.revoke`, `rules.refused` and `rules.applied`, and a task's `reason`.
 - **Phone tools** (`device_tools.py`), 18 of them, run on the phone over the WebSocket:
   - SMS send and list, contacts, recent calls, placing a call;
   - calendar list and create;
@@ -92,7 +94,8 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
 
 ### Android app (`android/app/src/main/java/com/hiron/rivet/`)
 - **Interface (`ui/`)**: the Rivet design system — dark graphite, safety orange, and cyan/green/amber/crimson status; Big Shoulders, IBM Plex Sans and Plex Mono. The shared kit is in `Theme.kt`, `Kit.kt` and `Chrome.kt`.
-  - **Power-on screen** on first run (`Onboarding.kt`): a checklist with one "Turn everything on" key.
+  - **Power-on screen** on first run (`Onboarding.kt`): four steps, starting with "Use recommended settings", "Set up step by step" and "Not now".
+  - **Recommended settings** (`ui/Recommended.kt`, `core/Recommended.kt`): a sheet from the power-on screen and from Settings listing only what would change (connect automatically, a quiet overlay, offer replies, answer only missed calls, the missing permissions in one prompt, the default assistant screen, and "Stop asking" for prompts this user declined 3 times in 30 days and never approved), each with a switch and its value now and after; Apply changes only what is chosen, and Settings can undo it.
   - **Home** (`HomeScreen.kt`):
     - a telemetry header (MODE, LINK, QUEUE) and the robot stage, which glows by state;
     - a display-type greeting, and a transcript sheet you drag over the robot;
@@ -100,11 +103,12 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
     - the dock: quick keys (Catch me up, My day, Texts, Calls), a Task latch, the composer and an orange talk key;
     - replies render markdown and citations (`Rich.kt`).
   - **Live call plate** (`LiveCallCard.kt`): live transcript lines, Take over, and the summary when the call ends.
-  - **Approval sheet** (`ApprovalSheet.kt`): readable fields, a risk meter, and biometrics for high-risk actions.
+  - **Approval sheet** (`ApprovalSheet.kt`): the plain headline with contact names in place of numbers, why Rivet is asking, a risk meter, the message as a quote, Rivet's notes formatted, technical details folded away, and "Don't ask again" (Always allow / Always deny). Biometrics for high-risk actions and for every always-allow.
   - **Activity** (`ActivityScreen.kt`): today's counters, then the activity trace grouped by day.
   - **Settings** (`SettingsScreen.kt`): numbered plates for:
     - link and connection details;
-    - behaviour toggles;
+    - behaviour toggles, with "Use recommended settings" and its undo, and reading replies aloud in the overlay;
+    - approval rules: each always-allow and always-decline, removable while connected;
     - call answering: number, mode, carrier codes, own number;
     - permissions, with "Allow all";
     - the unit plate.
@@ -121,12 +125,12 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
 - **Voice**: speech input through `RecognizerIntent` / `SpeechRecognizer`, and replies spoken with Android TextToSpeech (`voice/Speaker.kt`).
 - **ElevenLabs agents** (`voice/RivetAgent.kt`), behind Settings › "Use ElevenLabs agents" (off by default):
   - the talk key starts or stops a voice session; the composer sends text to the text agent;
-  - the agents call the 18 phone tools as client tools; sends, calls, message replies, calendar writes and commit-point taps wait for the approval sheet, and a deny or a 20-second timeout refuses;
+  - the agents call the 18 phone tools as client tools; sends, calls, message replies, calendar writes and commit-point taps follow the brain's standing rules (a read-only copy on the phone) or wait for the approval sheet, and a deny or a 20-second timeout refuses; reading texts, the calendar, notifications or the screen suspends always-allows until the user speaks again;
   - agent speech moves the robot's mouth, and messages land in the transcript;
   - built and unit-tested only, not verified against a live agent or on a phone.
 - **Service**: a foreground WebSocket client with resume and an offline queue (`service/RivetService.kt`, `core/GatewayClient.kt`).
   - The action ledger never repeats a device action.
-  - Notifications cover approvals (with Approve/Deny that need the phone unlocked), live calls (Take over), call summaries and reminders.
+  - Notifications cover approvals (titled with what Rivet wants, with Approve/Deny that need the phone unlocked), calls, reminders and things ready to open. Each call is one notification that moves from answering to live to its summary and carries the caller's message; approval notifications clear when the app comes to the front; each kind is grouped, with a summary only while two or more are showing. Verified under Robolectric only.
 - **Device access**: SMS, contacts, calendar, call log, notification listener (reply in any app), call screening, and an accessibility "app operator" that shows a Stop overlay and asks at commit points.
 
 ## Remaining work (owner's list, in priority order)
@@ -182,7 +186,12 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   - Fly.io machines and volumes: https://fly.io/docs/machines/ and https://fly.io/docs/volumes/
   - Android Custom Tabs: https://developer.chrome.com/docs/android/custom-tabs
 
-### 3. Less noise: plain-language, formatted alerts with "Don't ask again"
+### 3. Less noise: plain-language, formatted alerts with "Don't ask again" (built in 0.4.0)
+- **Status:** built and tested in the brain and the app (see "Everything Rivet can do today"); not yet checked on a
+  real phone or against the deployed brain. Open points: the ElevenLabs agents may have server-side tools the phone
+  can't see, so the phone path can only taint on its own phone tools (only texts, calls and calendar events can be
+  always-allowed there); the model learns of an always-decline only when it tries the action; notification grouping
+  and alert-once behaviour on real launchers is unverified.
 - **Problem:** at the highest access level, Rivet raises many approvals and notifications written in jargon. Examples
   are tool ids such as `sms_send` and `telnyx_execute`, tier names, and raw operation names.
 - **Goal:**
@@ -205,7 +214,11 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   - Notification grouping: https://developer.android.com/develop/ui/views/notifications/group
   - Material writing guidance: https://m3.material.io/foundations/content-design/style-guide/ux-writing-best-practices
 
-### 4. Recommended settings
+### 4. Recommended settings (built in 0.4.0)
+- **Status:** built and tested (Robolectric). The default assistant cannot be requested by an app (the role is not
+  requestable), so the recommendation opens Android's default apps screen. Changing the call answering mode does not
+  change carrier forwarding. A fresh install has no "Stop asking" suggestions until the user has declined something
+  three times.
 - **Goal:** a one-tap "Use recommended settings" choice, shown on the power-on screen and in Settings. It sets safe,
   low-noise defaults:
   - connect automatically;
@@ -285,7 +298,7 @@ When a feature lands, update "Everything Rivet can do today" and the status tabl
 built but unverified on a real phone or live service, say so.
 
 ## Before launch (checklist)
-1. Tasks 3 (plain alerts and "Don't ask again"), 4 (recommended settings) and 5 (the real search widget) above; task 1 (ElevenLabs voice) if voice is part of the launch.
+1. Task 5 (the real search widget) above; task 1 (ElevenLabs voice) if voice is part of the launch. Tasks 3 and 4 are built; deploy the matching brain and check them on a phone.
 2. Task 6 (Telnyx KV storage) and task 7 (routines).
 3. **On-device pass** on a real phone. See "Verification gaps" below and the checklist in `android/README.md`.
 4. **Live services:**
@@ -302,6 +315,11 @@ built but unverified on a real phone or live service, say so.
 
 ## Verification gaps to close on a real phone
 - **Widgets:** both widgets on a real launcher.
+- **Alerts and rules:** contact names in approvals (needs Contacts); "Always allow" with biometrics; an always-decline
+  stopping a later request; removing a rule in Settings; the ElevenLabs path following a rule.
+- **Notifications:** grouping and summaries on a real launcher; one notification per call from answering to summary;
+  an urgent message alerting once; approval notifications clearing when Rivet opens.
+- **Recommended settings:** the permission prompt and the default apps screen returning to Rivet; undo.
 - **Assistant overlay:**
   - it appears over other apps;
   - the first-use microphone grant works;
