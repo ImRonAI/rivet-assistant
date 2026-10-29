@@ -115,9 +115,14 @@ private val DESCRIBE_CHIPS = listOf(
 
 private val REVIEW_WAVE = listOf(0.35f, 0.6f, 0.9f, 0.5f, 0.75f, 0.4f, 0.85f, 0.6f, 0.3f, 0.55f, 0.8f, 0.45f, 0.25f, 0.5f)
 
-/** Choosing Rivet's voice, shown over the whole app. */
+/** Choosing Rivet's voice, shown over the whole app. [stage] sits under the header and stays put while pages change. */
 @Composable
-fun VoiceSetup(studio: VoiceStudio, onClose: () -> Unit, start: VoiceScreen = VoiceScreen.Selector) {
+fun VoiceSetup(
+    studio: VoiceStudio,
+    onClose: () -> Unit,
+    start: VoiceScreen = VoiceScreen.Selector,
+    stage: @Composable () -> Unit = {},
+) {
     val p = LocalPalette.current
     var path by rememberSaveable { mutableStateOf(start.name) }
     val stack = path.split(',').map(VoiceScreen::valueOf)
@@ -162,64 +167,66 @@ fun VoiceSetup(studio: VoiceStudio, onClose: () -> Unit, start: VoiceScreen = Vo
     BackHandler { back() }
 
     val reduce = rememberReduceMotion()
-    AnimatedContent(
-        targetState = screen,
-        modifier = Modifier.fillMaxSize().background(p.bg),
-        transitionSpec = {
-            if (reduce) {
-                fadeIn(tween(0)) togetherWith fadeOut(tween(0))
-            } else {
-                val forward = targetState.ordinal > initialState.ordinal
-                (slideInHorizontally(tween(Motion.SLOW, easing = Motion.Emphasized)) { (if (forward) it else -it) / 6 } + fadeIn(tween(Motion.BASE))) togetherWith
-                    fadeOut(tween(Motion.QUICK))
-            }
-        },
-        label = "voice",
-    ) { at ->
-        when (at) {
-            VoiceScreen.Selector -> SelectorPage(studio, saved, ::go, ::back, ::close) { close() }
-            VoiceScreen.Describe -> DescribePage(
-                studio, description, { description = it }, ::back, ::close,
-            ) { choose(VoiceChoice.Described(description.trim())) }
-            VoiceScreen.Presets -> PresetsPage(studio, picked, { picked = it }, ::back, ::close) { preset ->
-                choose(VoiceChoice.Preset(preset))
-            }
-            VoiceScreen.Record -> RecordPage(recorder, sample != null, notice, { notice = it }, ::back, ::close, onStarted = {
-                go(VoiceScreen.Capturing)
-            }) { go(VoiceScreen.Review) }
-            VoiceScreen.Capturing -> CapturingPage(
-                recorder, ::back,
-                onFinish = {
-                    val done = recorder.stop()
-                    if (done == null) {
+    Column(Modifier.fillMaxSize().background(p.bg)) {
+        StickyHeader(if (screen == VoiceScreen.Selector) "01 / 02" else "02 / 02", onBack = ::back)
+        stage()
+        AnimatedContent(
+            targetState = screen,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            transitionSpec = {
+                if (reduce) {
+                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                } else {
+                    val forward = targetState.ordinal > initialState.ordinal
+                    (slideInHorizontally(tween(Motion.SLOW, easing = Motion.Emphasized)) { (if (forward) it else -it) / 6 } + fadeIn(tween(Motion.BASE))) togetherWith
+                        fadeOut(tween(Motion.QUICK))
+                }
+            },
+            label = "voice",
+        ) { at ->
+            when (at) {
+                VoiceScreen.Selector -> SelectorPage(studio, saved, ::go, ::close) { close() }
+                VoiceScreen.Describe -> DescribePage(
+                    studio, description, { description = it }, ::close,
+                ) { choose(VoiceChoice.Described(description.trim())) }
+                VoiceScreen.Presets -> PresetsPage(studio, picked, { picked = it }, ::close) { preset ->
+                    choose(VoiceChoice.Preset(preset))
+                }
+                VoiceScreen.Record -> RecordPage(recorder, sample != null, notice, { notice = it }, ::close, onStarted = {
+                    go(VoiceScreen.Capturing)
+                }) { go(VoiceScreen.Review) }
+                VoiceScreen.Capturing -> CapturingPage(
+                    recorder,
+                    onFinish = {
+                        val done = recorder.stop()
+                        if (done == null) {
+                            replace(VoiceScreen.Record)
+                            notice = "That recording didn't save. Try again."
+                        } else {
+                            samplePath = done.file.path
+                            sampleSeconds = done.seconds
+                            replace(VoiceScreen.Review)
+                        }
+                    },
+                    onCancel = {
+                        recorder.cancel()
                         replace(VoiceScreen.Record)
-                        notice = "That recording didn't save. Try again."
-                    } else {
-                        samplePath = done.file.path
-                        sampleSeconds = done.seconds
-                        replace(VoiceScreen.Review)
-                    }
-                },
-                onCancel = {
-                    recorder.cancel()
-                    replace(VoiceScreen.Record)
-                },
-            )
-            VoiceScreen.Review -> ReviewPage(studio, sample, ::back, notice, onRerecord = {
-                if (stack.getOrNull(stack.lastIndex - 1) == VoiceScreen.Record) show(stack.dropLast(1)) else replace(VoiceScreen.Record)
-            }) { s -> choose(VoiceChoice.Recorded(s)) }
-            VoiceScreen.Upload -> UploadPage(notice, { notice = it }, ::back, ::close) { uri, name -> choose(VoiceChoice.Uploaded(uri, name)) }
+                    },
+                )
+                VoiceScreen.Review -> ReviewPage(studio, sample, notice, onRerecord = {
+                    if (stack.getOrNull(stack.lastIndex - 1) == VoiceScreen.Record) show(stack.dropLast(1)) else replace(VoiceScreen.Record)
+                }) { s -> choose(VoiceChoice.Recorded(s)) }
+                VoiceScreen.Upload -> UploadPage(notice, { notice = it }, ::close) { uri, name -> choose(VoiceChoice.Uploaded(uri, name)) }
+            }
         }
     }
 }
 
-/** Header, eyebrow, hero title and subline over scrolling content, with the keys in a fade footer. */
+/** Eyebrow, hero title and subline over scrolling content, with the keys in a fade footer. */
 @Composable
 private fun VoicePage(
     title: String,
     sub: String,
-    counter: String = "02 / 02",
-    onBack: (() -> Unit)? = null,
     centered: Boolean = false,
     eyebrow: @Composable () -> Unit = { Eyebrow("VOICE CONFIGURATION") },
     footer: @Composable ColumnScope.() -> Unit,
@@ -230,7 +237,6 @@ private fun VoicePage(
     // The last of the content clears the footer however tall it grows.
     var footerHeight by remember { mutableStateOf(160.dp) }
     Column(Modifier.fillMaxSize().background(p.bg)) {
-        StickyHeader(counter, onBack = onBack)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
@@ -312,7 +318,6 @@ private fun SelectorPage(
     studio: VoiceStudio,
     saved: String?,
     go: (VoiceScreen) -> Unit,
-    onBack: () -> Unit,
     onSkip: () -> Unit,
     onContinue: () -> Unit,
 ) {
@@ -320,8 +325,6 @@ private fun SelectorPage(
     VoicePage(
         title = "RIVET'S VOICE",
         sub = "Pick a ready-made voice or make one that's yours.",
-        counter = "01 / 02",
-        onBack = onBack,
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display)
             SecondaryKey(SKIP, onSkip)
@@ -356,7 +359,6 @@ private fun DescribePage(
     studio: VoiceStudio,
     text: String,
     onText: (String) -> Unit,
-    onBack: () -> Unit,
     onSkip: () -> Unit,
     onContinue: () -> Unit,
 ) {
@@ -364,7 +366,6 @@ private fun DescribePage(
     VoicePage(
         title = "DESCRIBE A VOICE",
         sub = "Describe how Rivet should sound, in plain words.",
-        onBack = onBack,
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display, enabled = text.isNotBlank())
             SecondaryKey(SKIP, onSkip)
@@ -411,7 +412,6 @@ private fun PresetsPage(
     studio: VoiceStudio,
     picked: String?,
     onPick: (String) -> Unit,
-    onBack: () -> Unit,
     onSkip: () -> Unit,
     onChoose: (VoicePreset) -> Unit,
 ) {
@@ -423,7 +423,6 @@ private fun PresetsPage(
     VoicePage(
         title = "PRESET LIBRARY",
         sub = "Choose from ${presets.size} ready-made voices.",
-        onBack = onBack,
         footer = {
             PrimaryKey("Continue", { chosen?.let(onChoose) }, style = CtaStyle.Display, enabled = chosen != null)
             SecondaryKey(SKIP, onSkip)
@@ -500,7 +499,6 @@ private fun RecordPage(
     hasSample: Boolean,
     notice: String?,
     onNotice: (String?) -> Unit,
-    onBack: () -> Unit,
     onSkip: () -> Unit,
     onStarted: () -> Unit,
     onContinue: () -> Unit,
@@ -516,7 +514,6 @@ private fun RecordPage(
     VoicePage(
         title = "RECORD SAMPLE",
         sub = "Tap the microphone to start recording.",
-        onBack = onBack,
         eyebrow = { Eyebrow("VOICE SAMPLE") },
         centered = true,
         footer = {
@@ -548,7 +545,7 @@ private fun RecordPage(
 }
 
 @Composable
-private fun CapturingPage(recorder: SampleRecorder, onBack: () -> Unit, onFinish: () -> Unit, onCancel: () -> Unit) {
+private fun CapturingPage(recorder: SampleRecorder, onFinish: () -> Unit, onCancel: () -> Unit) {
     val p = LocalPalette.current
     var elapsedMs by remember { mutableLongStateOf(0L) }
     val levels = remember { mutableStateListOf<Float>() }
@@ -584,7 +581,6 @@ private fun CapturingPage(recorder: SampleRecorder, onBack: () -> Unit, onFinish
     VoicePage(
         title = "CAPTURING",
         sub = "Speak naturally, up to 30 seconds.",
-        onBack = onBack,
         eyebrow = {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Eyebrow("RECORDING", tone = Tone.Red, live = true)
@@ -649,7 +645,6 @@ private fun CapturingPage(recorder: SampleRecorder, onBack: () -> Unit, onFinish
 private fun ReviewPage(
     studio: VoiceStudio,
     sample: VoiceSample?,
-    onBack: () -> Unit,
     notice: String?,
     onRerecord: () -> Unit,
     onUse: (VoiceSample) -> Unit,
@@ -661,7 +656,6 @@ private fun ReviewPage(
     VoicePage(
         title = "SAMPLE REVIEW",
         sub = "Recording done. Listen back, or record it again.",
-        onBack = onBack,
         centered = true,
         footer = {
             PrimaryKey("Use sample", { sample?.let(onUse) }, style = CtaStyle.Display, enabled = sample != null)
@@ -731,7 +725,6 @@ private data class PickedFile(val uri: Uri, val name: String, val seconds: Int?)
 private fun UploadPage(
     notice: String?,
     onNotice: (String?) -> Unit,
-    onBack: () -> Unit,
     onSkip: () -> Unit,
     onChoose: (Uri, String) -> Unit,
 ) {
@@ -747,7 +740,6 @@ private fun UploadPage(
     VoicePage(
         title = "UPLOAD A RECORDING",
         sub = "Use a recording you already have of the voice you want.",
-        onBack = onBack,
         footer = {
             PrimaryKey("Continue", { picked?.let { onChoose(it.uri, it.name) } }, style = CtaStyle.Display, enabled = picked != null)
             TextKey(SKIP, onSkip)

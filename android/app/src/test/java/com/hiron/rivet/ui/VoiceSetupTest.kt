@@ -8,15 +8,23 @@ import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityOptionsCompat
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -277,6 +285,22 @@ class VoiceSetupTest {
         show(FakeStudio(label = "Copper"), VoiceScreen.Presets)
         compose.onNode(androidx.compose.ui.test.hasText("Copper") and androidx.compose.ui.test.hasClickAction(), useUnmergedTree = false)
             .assertIsSelected()
+    }
+
+    @Test
+    fun withAStage() {
+        compose.setContent {
+            RivetTheme {
+                VoiceSetup(FakeStudio(), onClose = {}, stage = { Box(Modifier.fillMaxWidth().height(112.dp).testTag("slot")) })
+            }
+        }
+        val back = compose.onNodeWithContentDescription("Back").getUnclippedBoundsInRoot()
+        val slot = compose.onNodeWithTag("slot").getUnclippedBoundsInRoot()
+        val title = compose.onNodeWithText("RIVET'S VOICE.").getUnclippedBoundsInRoot()
+        assertTrue("the slot sits under the header", slot.top >= back.bottom)
+        assertTrue("the page starts under the slot", title.top >= slot.bottom)
+        assertEquals(112.dp, slot.bottom - slot.top)
+        shot(compose, compose.activity, "voice-setup-with-stage")
     }
 
     @Test
