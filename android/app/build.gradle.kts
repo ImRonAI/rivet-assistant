@@ -14,8 +14,8 @@ android {
         applicationId = "com.hiron.rivet"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.4.0"
+        versionCode = 8
+        versionName = "0.4.1"
         // Ready-to-use defaults from rivet.local.properties (never committed); all stay editable in Settings.
         val local = Properties().apply {
             rootProject.file("rivet.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }

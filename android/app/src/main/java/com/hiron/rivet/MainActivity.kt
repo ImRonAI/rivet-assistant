@@ -56,7 +56,6 @@ import com.hiron.rivet.ui.HudHeader
 import com.hiron.rivet.ui.LocalImages
 import com.hiron.rivet.ui.LocalOpenVoiceSetup
 import com.hiron.rivet.ui.LocalPalette
-import com.hiron.rivet.ui.LocalRobotStage
 import com.hiron.rivet.ui.MiniStage
 import com.hiron.rivet.ui.Onboarding
 import com.hiron.rivet.ui.PendantTab
@@ -66,8 +65,6 @@ import com.hiron.rivet.ui.Quick
 import com.hiron.rivet.ui.ResultsRequest
 import com.hiron.rivet.ui.ResultsScreen
 import com.hiron.rivet.ui.SettingsScreen
-import com.hiron.rivet.ui.StageLayer
-import com.hiron.rivet.ui.rememberRobotStage
 import com.hiron.rivet.ui.VoiceSetup
 import com.hiron.rivet.voice.AgentMode
 import com.hiron.rivet.voice.LocalVoiceStudio
@@ -219,13 +216,10 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
     LaunchedEffect(searchRequests) {
         if (searchRequests > 0) results = ResultsRequest.Sheet
     }
-    // One robot page for the whole activity, lent to whichever screen is in front.
-    val stage = rememberRobotStage(runtime)
 
     CompositionLocalProvider(
         LocalOpenVoiceSetup provides { voiceSetup = true },
         LocalVoiceStudio provides studio,
-        LocalRobotStage provides stage,
         LocalImages provides runtime.images,
     ) {
         Box(Modifier.fillMaxSize()) {
@@ -241,7 +235,7 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
                     onAsk = runtime::ask, onAdd = runtime::addContext, onClose = { results = null },
                 )
             }
-            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state, layer = StageLayer.Overlay) })
+            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state) })
         }
     }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {

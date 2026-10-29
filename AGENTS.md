@@ -11,7 +11,7 @@ changes or deletes waits for the user's approval. Its face is the Rivet robot (`
 
 | Area | State |
 |---|---|
-| App | **0.4.0** (versionCode 7) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the robot kept in view on every screen (a mini stage on other tabs), tasks 3 and 4: plain alerts with "Don't ask again", standing approval rules, one notification per call, grouped notifications and recommended settings, on top of the v0.3 interface and the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. The brain on Fly does not run this code yet: the app and the brain ship together (rules messages need the new brain). |
+| App | **0.4.1** (versionCode 8) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the robot kept in view on every screen (a mini stage on other tabs, each with its own page, and a plain sentence with Retry when the page fails), tasks 3 and 4: plain alerts with "Don't ask again", standing approval rules, one notification per call, grouped notifications and recommended settings, on top of the v0.3 interface and the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. The brain on Fly does not run this code yet: the app and the brain ship together (rules messages need the new brain). |
 | Brain on Fly | `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, the owner's personal Fly organization) runs the brain with the ElevenLabs session endpoint (deployed 2026-10-28; `/healthz` ok, both agent credentials verified live). `RIVET_DEVICE_TOKEN` and `ELEVENLABS_API_KEY` are set; **`PERPLEXITY_API_KEY` and `HORIZON_API_KEY` are not yet**, so chat and Telnyx don't work there until the owner sets them. Call answering still points at the old app `rivet-brain-hiron`, which keeps running until the owner shuts it down. Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1` (Fly's remote builder isn't reachable from cloud sessions). If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
 | Search and models (brain) | The Brave search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`), the brain's `search_*` tools with `search.results` events, turn attachments ("Add to Rivet"), and Groq `qwen/qwen3.8-27b` as a per-session model choice (`model.set`). Tested with fakes; each search route was probed once live against Brave through a local brain (all 200, 2026-10-29), and the streamed answers with citations once more (200 in 2.4 s, 11 citations, 2026-10-29). Deployed on `rivet-assistant` with the four `BRAVE_*` keys and `GROQ_API_KEY` set (2026-10-29); every search, suggest and spellcheck route answered 200 live there, and 401 without the device token. Groq has run only against fakes, never live, and switching models mid-session is covered by fakes only. |
 | Tests | Brain: 403 pass (`-m "not live"`), ruff, format and mypy clean. Android: 278 pass and 1 is skipped (the live test, run with `RIVET_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/rivet.local.properties`, as CI does. |
@@ -136,7 +136,7 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
   - the bundled page runs offline;
   - moves, the trace HUD and the email and text cards follow what Rivet is doing;
   - lip sync follows text-to-speech, and the stage glow follows Rivet's mood;
-  - the robot stays in view: the big stage on Home and a short band on Activity, Settings and the voice setup, sharing one page, so its moves, mood and mouth carry across screens. Built and tested in Robolectric only; not yet checked on a phone.
+  - the robot stays in view: the big stage on Home and a short band on Activity, Settings and the voice setup. Each slot has its own page, which picks up Rivet's state when it loads; a page that fails to load or start, or keeps crashing (3 times), says why in a plain sentence with Retry. Built and tested in Robolectric only; not yet checked on a phone.
 - **Launcher** (`res/`, `widget/RivetWidgets.kt`):
   - an adaptive icon with a themed monochrome layer (`tools/build_icon.py`);
   - long-press shortcuts: Talk, Ask, Catch me up, My day;
@@ -171,7 +171,7 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   agent design: two platform agents (voice `agent_2901m620nzwrev2r7ekqpydcxe25`, text
   `agent_9601m623qa72ffs9cyy3ezc0p6tb`) with the phone tools as client tools. Approvals for those tools run on the
   phone, not in the brain. Which model the agents run on is the owner's call in the ElevenLabs platform settings
-  (never an Anthropic model). The persistent robot stage is built (one shared page, a mini-stage off Home) but not yet checked on a phone.
+  (never an Anthropic model). The persistent robot stage is built (a page per slot, a mini-stage off Home) but not yet checked on a phone.
 - **Design notes:**
   - Keep the brain as the single decision-maker and keep approvals intact. The ElevenLabs agent should call the brain as a custom LLM or through server or client tools, never act on its own.
   - Get private-agent conversation tokens from the brain; the ElevenLabs API key never goes on the phone.

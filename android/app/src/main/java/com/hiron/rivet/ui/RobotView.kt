@@ -4,23 +4,40 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.Stable
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
@@ -32,6 +49,12 @@ import org.json.JSONObject
 
 private const val ORIGIN = "https://appassets.androidplatform.net"
 private const val PAGE = "$ORIGIN/assets/rivet/index.html"
+
+/** A slot gives up on a renderer that dies this many times and offers Retry instead. */
+internal const val MAX_ROBOT_CRASHES = 3
+
+/** How long a loaded page has to say `ready` before the slot says it didn't start. */
+private const val START_TIMEOUT_MS = 4_000L
 
 /** How the page frames Rivet; [wire] is the `window.rivet.focus` mode it sends. */
 enum class RobotFocus(val wire: String) {
@@ -45,115 +68,64 @@ enum class RobotFocus(val wire: String) {
     Greet("greet"),
 }
 
-/** Where a slot sits: a slot on an overlay drawn over the whole app outranks any slot on the screens under it. */
-enum class StageLayer { Screen, Overlay }
-
-/** Identifies one slot's claim on the stage. */
-data class StageClaim(val id: Long, val layer: StageLayer)
-
 /**
- * Which slot holds the robot page: the claim on the highest layer that hasn't been released, the newest of
- * those first. Snapshot state, so a change recomposes the slots that read [owner].
+ * The robot, on its own page in this slot; the page replays Rivet's state once it loads. [focus] frames the camera.
+ * A renderer that dies brings a fresh page, up to [MAX_ROBOT_CRASHES] times; a page that fails says why, with Retry.
  */
-@Stable
-class StageClaims {
-    private val held = mutableStateListOf<StageClaim>()
-    private var next = 0L
-
-    val owner: StageClaim? get() = held.maxWithOrNull(compareBy<StageClaim> { it.layer }.thenBy { it.id })
-
-    fun claim(layer: StageLayer = StageLayer.Screen): StageClaim = StageClaim(next++, layer).also { held.add(it) }
-
-    /** Releasing a claim that isn't held does nothing. */
-    fun release(claim: StageClaim) {
-        held.remove(claim)
-    }
-}
-
-/**
- * The activity's one robot page, lent to whichever slot is in front so Rivet keeps its moves, mood and mouth
- * across screens. Commands reach the page whether or not a slot shows it.
- */
-@Stable
-class RobotStage internal constructor(private val context: Context, private val runtime: RivetRuntime) {
-    internal val claims = StageClaims()
-
-    // Declared before [host]: its initializer reads them.
-    private var dark = true
-    private var focus = RobotFocus.Stage
-
-    /** Replaced when the renderer dies; the owning slot keys its view on it. */
-    internal var host: RobotHost by mutableStateOf(newHost())
-        private set
-
-    fun run(command: RobotCommand) = host.run(command)
-
-    fun theme(dark: Boolean) {
-        this.dark = dark
-        host.theme(dark)
-    }
-
-    /** Frames Rivet for the slot that now holds the page, and replays its state there. */
-    internal fun adopt(focus: RobotFocus) {
-        this.focus = focus
-        host.focus(focus)
-        host.replay()
-    }
-
-    internal fun destroy() = host.destroy()
-
-    private fun newHost(): RobotHost = RobotHost(context, runtime, dark, focus) {
-        host.destroy()
-        host = newHost()
-    }
-}
-
-/** The stage the app provides; null outside the app (previews, screen tests), where a slot makes its own. */
-val LocalRobotStage = staticCompositionLocalOf<RobotStage?> { null }
-
-/** Builds the activity's stage, feeds it the runtime's robot commands, and destroys it with the composition. */
 @Composable
-fun rememberRobotStage(runtime: RivetRuntime): RobotStage {
+fun RobotView(runtime: RivetRuntime, modifier: Modifier = Modifier, focus: RobotFocus = RobotFocus.Stage) {
     val context = LocalContext.current
     val dark = LocalPalette.current.dark
-    val stage = remember(context, runtime) { RobotStage(context, runtime) }
-    LaunchedEffect(stage) { runtime.robot.collect(stage::run) }
-    LaunchedEffect(stage, dark) { stage.theme(dark) }
-    DisposableEffect(stage) { onDispose { stage.destroy() } }
-    return stage
+    var generation by remember { mutableIntStateOf(0) }
+    var crashes by remember { mutableIntStateOf(0) }
+    Box(modifier) {
+        if (crashes >= MAX_ROBOT_CRASHES) {
+            RobotProblem(CRASHING, Modifier.align(Alignment.TopCenter)) {
+                crashes = 0
+                generation++
+            }
+        } else {
+            key(generation) {
+                val host = remember {
+                    RobotHost(context, runtime, dark, focus) {
+                        crashes++
+                        generation++
+                    }
+                }
+                LaunchedEffect(host) { runtime.robot.collect(host::run) }
+                LaunchedEffect(host, dark) { host.theme(dark) }
+                LaunchedEffect(host, focus) { host.focus(focus) }
+                DisposableEffect(host) { onDispose { host.destroy() } }
+                AndroidView(factory = { host.webView }, modifier = Modifier.fillMaxSize())
+                host.problem?.let { RobotProblem(it, Modifier.align(Alignment.TopCenter)) { generation++ } }
+            }
+        }
+    }
 }
 
-/**
- * The robot, drawn in this slot whenever it holds the app's stage. [focus] frames the camera for this slot;
- * [layer] is where the slot sits.
- */
+private const val CRASHING = "Rivet's robot keeps crashing on this phone."
+
+/** Why the robot isn't showing, in one plain sentence, with a key that loads it again. */
 @Composable
-fun RobotView(
-    runtime: RivetRuntime,
-    modifier: Modifier = Modifier,
-    focus: RobotFocus = RobotFocus.Stage,
-    layer: StageLayer = StageLayer.Screen,
-) {
-    val stage = LocalRobotStage.current ?: rememberRobotStage(runtime)
-    // Claimed in an effect, so composing a slot writes no state.
-    var claim by remember(stage) { mutableStateOf<StageClaim?>(null) }
-    DisposableEffect(stage, layer) {
-        val held = stage.claims.claim(layer)
-        claim = held
-        onDispose { stage.claims.release(held) }
-    }
-    val owned = claim != null && stage.claims.owner == claim
-    LaunchedEffect(owned, focus) { if (owned) stage.adopt(focus) }
-    if (owned) {
-        // No onReset (a slot is never reused) and no onRelease: the stage, not the slot, destroys the WebView.
-        key(stage.host) { AndroidView(factory = { stage.host.adopt() }, modifier = modifier) }
+private fun RobotProblem(text: String, modifier: Modifier = Modifier, onRetry: () -> Unit) {
+    val p = LocalPalette.current
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier.fillMaxWidth().padding(8.dp).background(p.raised, shape).border(1.dp, p.edgeSoft, shape)
+            .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = Tone.Amber.color(), modifier = Modifier.size(16.dp))
+        Text(text, Modifier.weight(1f), style = Type.cardBody, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        TextKey("Retry", onRetry)
     }
 }
 
 /**
- * Owns the WebView. Pages load only from the app's assets (no network, no file access) and talk back only
+ * Owns one WebView. Pages load only from the app's assets (no network, no file access) and talk back only
  * through the `RivetHost` listener for the asset origin. Commands sent before the page says `ready` are
- * dropped in favour of a full state replay once it does.
+ * dropped in favour of a full state replay once it does. [problem] says why the page isn't showing, if it isn't.
  */
 internal class RobotHost(
     context: Context,
@@ -163,6 +135,11 @@ internal class RobotHost(
     private val onCrash: () -> Unit,
 ) {
     private var ready = false
+    private var destroyed = false
+    private var lastError: String? = null
+
+    var problem: String? by mutableStateOf(null)
+        private set
 
     @SuppressLint("SetJavaScriptEnabled")
     val webView: WebView = WebView(context).apply {
@@ -183,9 +160,13 @@ internal class RobotHost(
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
 
+            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                if (request.isForMainFrame) problem = "Rivet's robot didn't load (error ${errorResponse.statusCode})."
+            }
+
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                // The renderer died (OOM or crash): the stage drops this WebView and builds a fresh one.
-                ready = false
+                // The renderer died (OOM or crash): this WebView can't be used again, so it goes, and the slot builds a fresh one.
+                destroy()
                 onCrash()
                 return true
             }
@@ -193,6 +174,13 @@ internal class RobotHost(
             override fun onPageFinished(view: WebView, url: String?) {
                 // Old WebViews without the message listener never hear "ready"; the bridge has run by now.
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) onMessage("""{"type":"ready"}""")
+                view.postDelayed({ if (!ready && !destroyed) problem = notStarted() }, START_TIMEOUT_MS)
+            }
+        }
+        webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) lastError = "${message.message()} (line ${message.lineNumber()})"
+                return false
             }
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
@@ -217,27 +205,24 @@ internal class RobotHost(
         run(RobotCommand("focus", listOf(mode.wire)))
     }
 
-    /** Sends the theme, framing and robot state again; before `ready` the handshake does this anyway. */
-    fun replay() {
-        if (!ready) return
-        theme(dark)
-        focus(focus)
-        runtime.robotSnapshot().forEach(::run)
-    }
-
-    /** Hands the WebView to a new slot, taking it out of the one that showed it before. */
-    fun adopt(): WebView = webView.also { (it.parent as? ViewGroup)?.removeView(it) }
-
     fun destroy() {
+        if (destroyed) return
+        destroyed = true
         ready = false
         (webView.parent as? ViewGroup)?.removeView(webView)
         webView.destroy()
     }
 
+    private fun notStarted(): String =
+        lastError?.let { "Rivet's robot didn't start: $it" } ?: "Rivet's robot didn't start on this phone."
+
     private fun onMessage(data: String) {
         val type = runCatching { JSONObject(data).optString("type") }.getOrDefault("")
-        if (type != "ready") return
+        if (type != "ready" || destroyed) return
         ready = true
-        replay()
+        problem = null
+        theme(dark)
+        focus(focus)
+        runtime.robotSnapshot().forEach(::run)
     }
 }

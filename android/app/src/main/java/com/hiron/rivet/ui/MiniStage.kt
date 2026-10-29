@@ -47,7 +47,7 @@ const val MINI_STAGE_TAG = "mini-stage"
 /**
  * Rivet in a short band at the top of a screen that isn't Home, so it stays in view. Tapping it runs [onOpen]
  * when given (back to Home); without it the band only shows Rivet. It steps aside while the keyboard is up and
- * on short windows. [layer] is where the band sits.
+ * on short windows.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -56,7 +56,6 @@ fun MiniStage(
     state: RivetState,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
-    layer: StageLayer = StageLayer.Screen,
     onOpen: (() -> Unit)? = null,
 ) {
     val p = LocalPalette.current
@@ -79,8 +78,8 @@ fun MiniStage(
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp).height(h),
         ) {
             StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, mood = moodColor(state.activity)) {
-                // A leaving band lets go of the page at once, so the screen it uncovers gets Rivet back.
-                if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card, layer = layer)
+                // A leaving band drops its page at once.
+                if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card)
             }
             // The cover sits over the WebView, so a drag or pinch in the band never orbits the robot.
             val status = stageStatus(state)
