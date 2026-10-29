@@ -145,10 +145,9 @@ installing and the on-device checklist.
   (talk, type, catch me up, my day) and two home-screen widgets: a search bar ("Ask Rivet anything" with
   a talk key) and a panel with link status, Rivet's latest reply and quick keys. Widgets and shortcuts open
   the app through fixed actions; a quick key carries only its name, never free text.
-- **Robot**: the original `Rivet_the_Robot.html`, bundled with offline fonts and a small bridge
-  (`android/robot/bridge.js`) so the app drives its moves, trace HUD, email and text cards, lip sync from
-  text-to-speech, and a stage glow in the colour of what Rivet is doing. Served from app assets only (no
-  network, no file access).
+- **Robot**: `Rivet_the_Robot.html`, bundled with offline fonts and a small bridge (`android/robot/bridge.js`)
+  so the app drives its moves, lip sync from text-to-speech, and a stage glow in the colour of what Rivet is
+  doing. Served from app assets only (no network, no file access).
 - **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
   reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
 - **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that

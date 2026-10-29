@@ -1,8 +1,7 @@
-"""Builds app/src/main/assets/rivet/index.html from the original robot page.
+"""Builds app/src/main/assets/rivet/index.html from the robot page.
 
 Three changes, nothing else: Google Fonts links become local @font-face rules (the app works offline),
-an ``embedded`` class hides the page's own move dock, telemetry strip and hint (the app draws its own), and bridge.js is appended
-after the page script.
+an ``embedded`` class makes the stage fill the WebView, and bridge.js is appended after the page script.
 
 Usage: python3 tools/build_robot_asset.py  (from android/)
 """
@@ -19,16 +18,11 @@ BRIDGE = ROOT / "robot" / "bridge.js"
 OUT = ROOT / "app" / "src" / "main" / "assets" / "rivet" / "index.html"
 
 FONTS = [
-    ("Big Shoulders Display", 700, "big_shoulders_display_bold"),
-    ("Big Shoulders Display", 800, "big_shoulders_display_extrabold"),
-    ("IBM Plex Mono", 400, "ibm_plex_mono_regular"),
     ("IBM Plex Mono", 500, "ibm_plex_mono_medium"),
     ("IBM Plex Sans", 400, "ibm_plex_sans_regular"),
-    ("IBM Plex Sans", 500, "ibm_plex_sans_medium"),
     ("IBM Plex Sans", 600, "ibm_plex_sans_semibold"),
 ]
 EMBEDDED_CSS = (
-    "html.embedded .hud,html.embedded .dock,html.embedded .hint{display:none}"
     "html.embedded .app{grid-template-rows:minmax(0,1fr);height:100%}"
     "html.embedded,html.embedded body{overflow:hidden}"
 )
