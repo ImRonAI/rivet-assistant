@@ -268,6 +268,12 @@ def test_rules_set_and_revoke_from_the_phone(tmp_path: Path) -> None:
         socket.send_json({"type": "rules.revoke", "key": "nothing"})
         rules, _ = _until(socket, "rules")
         assert rules["revision"] == 3
+        socket.send_json({"type": "rules.revoke", "tool": "sms_send", "scope": {"to": "+1 (801) 555-0100"}})
+        rules, _ = _until(socket, "rules")
+        assert rules["revision"] == 4 and rules["rules"] == []
+        socket.send_json({"type": "rules.revoke", "tool": "mystery", "scope": {}})
+        rules, _ = _until(socket, "rules")
+        assert rules["revision"] == 4
 
         with client.websocket_connect("/v1/sessions/phone-2", headers=AUTH) as other:
             other.send_json({"type": "rules.list"})

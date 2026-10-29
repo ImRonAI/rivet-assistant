@@ -360,7 +360,7 @@ object AgentTools {
     }
 
     /** The risk tier the brain gives this call (device_tools.py policies). */
-    fun tier(name: String, input: JSONObject): Tier = when (name) {
+    internal fun tier(name: String, input: JSONObject): Tier = when (name) {
         "sms_send", "phone_call", "notification_reply" -> Tier.Send
         "calendar_create" -> Tier.Write
         "screen_act" -> screenActTier(input)
@@ -386,7 +386,7 @@ object AgentTools {
     val NAVIGATION = setOf("back", "home", "recents", "notifications", "scroll_down", "scroll_up")
 
     /** device_tools.screen_act_tier: navigation and typing run freely; a tap asks when its label reads like a commit point. */
-    fun screenActTier(input: JSONObject): Tier {
+    internal fun screenActTier(input: JSONObject): Tier {
         val action = if (input.isNull("action")) "" else input.optString("action")
         val label = (if (input.isNull("label")) "" else input.optString("label")).trim()
         if (action in NAVIGATION || action == "type") return Tier.Read

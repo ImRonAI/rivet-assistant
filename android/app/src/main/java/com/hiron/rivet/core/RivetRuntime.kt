@@ -220,10 +220,19 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
         note("settings", "Applied recommended settings: ${chosen.joinToString(", ") { it.title }}")
     }
 
-    /** Puts back what the last recommended settings changed and asks the brain to remove the rules they made. */
+    /**
+     * Puts back what the last recommended settings changed and asks the brain to remove the rules they made, also
+     * ones this phone hasn't seen listed yet. False, changing nothing, when there is nothing to undo or when there
+     * are rules to remove while offline, since only the brain can remove them.
+     */
     fun undoRecommended(): Boolean {
+        val pending = settings.recommendedUndo ?: return false
+        if (pending.ruleTargets.isNotEmpty() && state.value.connection != Connection.Online) return false
         val undo = Recommended.undo(settings) ?: return false
-        undo.ruleTargets.mapNotNull { state.value.rules.match(it) }.forEach { gateway.send(Protocol.rulesRevoke(it.key)) }
+        for (target in undo.ruleTargets) {
+            val rule = state.value.rules.match(target)
+            if (rule == null || !revokeRule(rule)) gateway.send(Protocol.rulesRevoke(target))
+        }
         note("settings", "Undid recommended settings")
         return true
     }

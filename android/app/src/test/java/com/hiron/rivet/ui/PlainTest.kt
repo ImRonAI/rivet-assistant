@@ -45,6 +45,7 @@ class PlainTest {
         assertEquals("Text Dana: “hi”", Plain.people("Text +18015550100: “hi”", names))
         assertEquals("Dana · +1 801-555-0100", Plain.people("+18015550100", names, withNumber = true))
         assertEquals("Call +1 801-555-0199", Plain.people("Call +18015550199", names))
+        assertEquals("Text Dana: “Call +18015550100 or +18015550199”", Plain.people("Text +18015550100: “Call +18015550100 or +18015550199”", names))
         assertEquals(listOf("+18015550100", "+18015550199"), Plain.numbersIn("+18015550100, +18015550199 and +18015550100"))
     }
 

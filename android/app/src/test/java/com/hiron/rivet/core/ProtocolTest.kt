@@ -73,7 +73,7 @@ class ProtocolTest {
         ) as ServerEvent.Rules
         assertEquals(RuleSet(3, listOf(StandingRule("sms_send?to=%2B1", RuleTarget("sms_send", mapOf("to" to "+1")), Decision.Deny, "Texts to +1", 5.5))), rules.set)
         assertEquals(
-            ServerEvent.RulesRefused("set", "This kind of action can't be always allowed."),
+            ServerEvent.RulesRefused(RuleRequest.Set, "This kind of action can't be always allowed."),
             Protocol.parse("""{"type":"rules.refused","request":"set","error":"This kind of action can't be always allowed."}"""),
         )
         assertEquals(

@@ -7,8 +7,10 @@ allow|deny}}, lane?} (``standing`` makes the answer a standing rule when the she
 before the turn resumes), ``task`` {goal, task_id?, max_attempts?, timeout?, reason?} (``reason``, at most 140
 characters, is why the task exists; its approvals show it), ``rules.list``, ``rules.set`` {decision: allow|deny,
 tool, scope} (a rule the phone makes for its own approvals; the brain recomputes the offer and refuses what it
-would not offer), ``rules.revoke`` {key}, ``device.result`` {action_id, result}, ``call.take_over`` {call_id, to}
-(transfer a live call to ``to``, the user's own E.164 number; the tap is the approval), ``resume``, ``ping``.
+would not offer), ``rules.revoke`` {key} or {tool, scope} (by target, for a rule the phone asked for before its
+``rules`` event arrived; messages run in order, so it follows that ``rules.set``), ``device.result`` {action_id,
+result}, ``call.take_over`` {call_id, to} (transfer a live call to ``to``, the user's own E.164 number; the tap is
+the approval), ``resume``, ``ping``.
 
 Brain to phone: ``turn.accepted``, ``turn.started``, the agent's UI events (``text``, ``thinking``,
 ``searching``, ``sources``, ``tool``, ...), ``approval.request`` (each approval is {id, name, request, because?},
@@ -47,7 +49,7 @@ from collections import deque
 from collections.abc import AsyncIterator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from starlette.applications import Starlette
@@ -80,6 +82,9 @@ from .rules import RuleRefusedError, StandingRules, admit, apply_answers
 from .supervisor import BuildFn, NoPendingApprovalError, SessionLockedError, SessionSupervisor
 
 logger = logging.getLogger(__name__)
+
+RuleRequest = Literal["set", "revoke"]
+"""Which phone request a ``rules.refused`` event answers."""
 
 DEVICE_TOKEN_ENV = "RIVET_DEVICE_TOKEN"
 MIN_TOKEN_LENGTH = 24
@@ -219,9 +224,8 @@ class _Session:
             self.emit(dict(self.rules.event()))
         elif kind == "rules.set":
             await self._set_rule(message.get("decision"), message.get("tool"), message.get("scope"))
-        elif kind == "rules.revoke" and isinstance(message.get("key"), str):
-            await self.rules.revoke(message["key"])
-            self.emit(dict(self.rules.event()))
+        elif kind == "rules.revoke":
+            await self._revoke_rule(message.get("key"), message.get("tool"), message.get("scope"))
         elif kind == "resume":
             self.emit(dict(self.rules.event()))
             for lane in self.supervisor.lanes:
@@ -250,7 +254,19 @@ class _Session:
             return
         self.emit(dict(self.rules.event()))
 
-    def _refused(self, request: str) -> Callable[[str], None]:
+    async def _revoke_rule(self, key: object, tool: object, scope: object) -> None:
+        """Remove the rule with ``key``, or the rule about the target ``tool`` and ``scope`` make; none is no change."""
+        if not isinstance(key, str):
+            fields = _str_fields(scope)
+            offer = None
+            if isinstance(tool, str) and fields is not None:
+                offer = self.supervisor.approvals.offer_for(tool, fields)
+            key = offer.target.key if offer is not None else None
+        if key is not None:
+            await self.rules.revoke(key)
+        self.emit(dict(self.rules.event()))
+
+    def _refused(self, request: RuleRequest) -> Callable[[str], None]:
         return lambda error: self.emit({"type": "rules.refused", "request": request, "error": error})
 
     def follow_up_call(self, received_at: float) -> None:

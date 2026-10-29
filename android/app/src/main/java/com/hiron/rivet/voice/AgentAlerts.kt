@@ -7,21 +7,29 @@ import com.hiron.rivet.core.RuleOffer
 import com.hiron.rivet.core.RuleScope
 import com.hiron.rivet.core.Tier
 import org.json.JSONObject
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.util.UUID
 
 /**
  * What the phone's own approvals say (the ElevenLabs agents' phone tools). The copy is the brain's, byte for byte
- * (brain/src/rivet_brain/alerts.py `alert_for` and rules.py labels), so both paths read the same.
+ * (brain/src/rivet_brain/alerts.py `alert_for` and rules.py labels), so both paths read the same. Event times are
+ * the one exception: [eventTime] reads the ISO-8601 forms java.time's ISO parsers take, a subset of what the brain's
+ * `datetime.fromisoformat` takes, and shows any other text as written.
  */
 object AgentAlerts {
     private const val HEADLINE_LIMIT = 80
     private const val NOT_CHECKED = "Rivet can't tell what this does, so it asks first."
+    private val DAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    private val ISO_DATE = Regex("""^\d{4}-\d{2}-\d{2}""")
 
     /** Tools whose calls can become standing allows on this path; the others can only be standing denies. */
     val ALLOWS = setOf("sms_send", "phone_call", "calendar_create")
 
     /** The approval this call needs before it runs, or null when the brain would run it without asking. */
-    fun request(name: String, input: JSONObject, tainted: Boolean, lastAsked: String?): ApprovalRequest? {
+    internal fun request(name: String, input: JSONObject, tainted: Boolean, lastAsked: String?): ApprovalRequest? {
         val tier = AgentTools.tier(name, input)
         if (tier == Tier.Read) return null
         val (headline, blocks) = alert(name, input)
@@ -43,8 +51,13 @@ object AgentAlerts {
     }
 
     /** The headline and blocks for one call. */
-    fun alert(name: String, input: JSONObject): Pair<String, List<AlertBlock>> {
-        fun text(key: String): String = if (!input.has(key) || input.isNull(key)) "" else input.opt(key).toString()
+    internal fun alert(name: String, input: JSONObject): Pair<String, List<AlertBlock>> {
+        // Python's str(): booleans read True and False.
+        fun text(key: String): String = when (val v = if (input.isNull(key)) null else input.opt(key)) {
+            null -> ""
+            is Boolean -> if (v) "True" else "False"
+            else -> v.toString()
+        }
         return when (name) {
             "sms_send" -> "Text ${text("to")}: “${clip(text("body"))}”" to
                 listOf(AlertBlock.Field("To", text("to")), AlertBlock.Quote("Message", text("body")))
@@ -53,7 +66,7 @@ object AgentAlerts {
             "notification_reply" -> "Reply to a message: “${clip(text("text"))}”" to
                 listOf(AlertBlock.Quote("Reply", text("text")), AlertBlock.Note("Sent from the app the message came from."))
             "calendar_create" -> "Add “${text("title")}” to your calendar" to listOfNotNull(
-                AlertBlock.Field("When", text("start")),
+                AlertBlock.Field("When", eventTime(text("start"), text("end"))),
                 text("location").takeIf { it.isNotEmpty() }?.let { AlertBlock.Field("Where", it) },
                 text("description").takeIf { it.isNotEmpty() }?.let { AlertBlock.Quote("Notes", it) },
             )
@@ -73,6 +86,30 @@ object AgentAlerts {
         "calendar_create" -> "Adding events to your calendar"
         "screen_act" -> scope["label"]?.let { "Tapping “$it” in apps" }
         else -> null
+    }
+
+    /** alerts.py `when`: "Tue Oct 27, 9:00 AM to 10:00 AM" in fixed English; [start] as written when it isn't ISO-8601. */
+    fun eventTime(start: String, end: String = ""): String {
+        val begins = moment(start) ?: return start
+        val text = "${day(begins)}, ${clock(begins)}"
+        val ends = (if (end.isEmpty()) null else moment(end)) ?: return text
+        if (ends.toLocalDate() == begins.toLocalDate()) return "$text to ${clock(ends)}"
+        return "$text to ${day(ends)}, ${clock(ends)}"
+    }
+
+    /** The wall-clock time as written (an offset is kept, not converted), as Python's `datetime.fromisoformat` reads it. */
+    private fun moment(value: String): LocalDateTime? {
+        if (!ISO_DATE.containsMatchIn(value)) return null
+        return runCatching { OffsetDateTime.parse(value).toLocalDateTime() }.getOrNull()
+            ?: runCatching { LocalDateTime.parse(value) }.getOrNull()
+            ?: runCatching { LocalDate.parse(value).atStartOfDay() }.getOrNull()
+    }
+
+    private fun day(moment: LocalDateTime): String = "${DAYS[moment.dayOfWeek.value - 1]} ${MONTHS[moment.monthValue - 1]} ${moment.dayOfMonth}"
+
+    private fun clock(moment: LocalDateTime): String {
+        val hour = (moment.hour % 12).takeIf { it != 0 } ?: 12
+        return "$hour:${moment.minute.toString().padStart(2, '0')} ${if (moment.hour < 12) "AM" else "PM"}"
     }
 
     /** `text` for a headline: on one line, cut at a space and ended with an ellipsis past 80 characters. */

@@ -59,8 +59,8 @@ sealed interface ServerEvent {
     /** Every standing rule of the session (on `resume` and after every change). */
     data class Rules(val set: RuleSet) : ServerEvent
 
-    /** The brain refused a `rules.set` or `rules.revoke`; [error] is plain text for the user. */
-    data class RulesRefused(val request: String, val error: String) : ServerEvent
+    /** The brain refused a `rules.set` or `rules.revoke` ([request] is null for a kind this app doesn't know); [error] is plain text for the user. */
+    data class RulesRefused(val request: RuleRequest?, val error: String) : ServerEvent
 
     /** A standing rule decided one of the brain's calls without asking. */
     data class RulesApplied(val decision: Decision, val key: String, val label: String, val tool: String) : ServerEvent
@@ -121,7 +121,7 @@ object Protocol {
                 o.optStringOrNull("outcome") ?: "unknown", o.optBoolean("taken_over", false),
             )
             "rules" -> ServerEvent.Rules(RuleCodec.set(o))
-            "rules.refused" -> ServerEvent.RulesRefused(o.optString("request"), o.optStringOrNull("error") ?: "Rivet couldn't change that rule.")
+            "rules.refused" -> ServerEvent.RulesRefused(RuleRequest.of(o.optStringOrNull("request")), o.optStringOrNull("error") ?: "Rivet couldn't change that rule.")
             "rules.applied" -> Decision.of(o.optStringOrNull("decision"))?.let {
                 ServerEvent.RulesApplied(it, o.optString("key"), o.optString("label"), o.optString("tool"))
             } ?: ServerEvent.Unknown(type)
@@ -159,6 +159,11 @@ object Protocol {
         .toString()
 
     fun rulesRevoke(key: String): String = JSONObject().put("type", "rules.revoke").put("key", key).toString()
+
+    /** Revokes the rule about [target], for one the phone asked for before the brain's `rules` event listed it. */
+    fun rulesRevoke(target: RuleTarget): String = JSONObject()
+        .put("type", "rules.revoke").put("tool", target.tool).put("scope", JSONObject(target.scope))
+        .toString()
 
     fun rulesList(): String = JSONObject().put("type", "rules.list").toString()
 

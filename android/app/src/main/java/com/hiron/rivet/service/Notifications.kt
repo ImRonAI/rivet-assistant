@@ -37,14 +37,17 @@ object Notifications {
     const val CALLS = "rivet.calls"
     const val SERVICE_ID = 1
     const val APPROVAL_SUMMARY_ID = 999
-    const val ACTION_SUMMARY_ID = 4999
-    const val REMINDER_SUMMARY_ID = 9999
+    const val ACTION_SUMMARY_ID = 998
+    const val REMINDER_SUMMARY_ID = 997
     const val CALL_SUMMARY_ID = 19999
-    private const val APPROVAL_BASE = 1000
-    private const val ACTION_BASE = 5000
-    private const val REMINDER_BASE = 9000
-    private const val CALL_MESSAGE_BASE = 10000
-    private const val CALL_BASE = 20000
+    private val APPROVAL_IDS = 1000..4999
+    private val ACTION_IDS = 5000..8999
+    private val REMINDER_IDS = 9000..9999
+    private val CALL_MESSAGE_IDS = 10000..13999
+    private val CALL_IDS = 20000..23999
+
+    /** The id ranges single notifications hash into; the service and group summary ids sit outside all of them. */
+    internal val CHILD_ID_RANGES: List<IntRange> = listOf(APPROVAL_IDS, ACTION_IDS, REMINDER_IDS, CALL_MESSAGE_IDS, CALL_IDS)
     private const val CALL_ANSWERING_TIMEOUT = 10 * 60_000L
     private const val CALL_LIVE_TIMEOUT = 35 * 60_000L
     private const val TRANSFERRING = "Transferring the call to you…"
@@ -140,10 +143,10 @@ object Notifications {
         refresh(context, Group.Approvals)
     }
 
-    fun approvalId(id: String): Int = APPROVAL_BASE + id.hashCode().mod(4000)
+    fun approvalId(id: String): Int = slot(APPROVAL_IDS, id)
 
     fun reminder(context: Context, id: String, text: String) = post(
-        context, REMINDER_BASE + id.hashCode().mod(1000),
+        context, slot(REMINDER_IDS, id),
         NotificationCompat.Builder(context, REMINDERS)
             .setSmallIcon(R.drawable.ic_rivet)
             .setContentTitle("Reminder")
@@ -157,7 +160,7 @@ object Notifications {
     )
 
     /** The id of [callId]'s one notification, which moves from answering to live to its summary. */
-    fun callId(callId: String): Int = CALL_BASE + callId.hashCode().mod(4000)
+    fun callId(callId: String): Int = slot(CALL_IDS, callId)
 
     /** The call has just been picked up; [alert] posts it so that it sounds again (an urgent message arrived). */
     fun callAnswering(context: Context, callId: String, note: CallNote, alert: Boolean = false) {
@@ -180,7 +183,7 @@ object Notifications {
 
     /** A message for a call this phone has no notification for: its own notification in the calls group. */
     fun callMessage(context: Context, event: ServerEvent.CallMessage) = post(
-        context, CALL_MESSAGE_BASE + (event.callbackNumber + event.message).hashCode().mod(4000),
+        context, slot(CALL_MESSAGE_IDS, event.callbackNumber + event.message),
         NotificationCompat.Builder(context, CALLS)
             .setSmallIcon(R.drawable.ic_rivet)
             .setContentTitle((if (event.urgent) "Urgent message from " else "Message from ") + CallText.caller(event))
@@ -243,7 +246,7 @@ object Notifications {
     }
 
     fun action(context: Context, title: String, text: String, intent: Intent) {
-        val id = ACTION_BASE + (title + text).hashCode().mod(4000)
+        val id = slot(ACTION_IDS, title + text)
         post(
             context, id,
             NotificationCompat.Builder(context, ACTIONS)
@@ -279,6 +282,8 @@ object Notifications {
             .setAutoCancel(true)
         notify(context, group.summaryId, builder)
     }
+
+    private fun slot(ids: IntRange, key: String): Int = ids.first + key.hashCode().mod(ids.last - ids.first + 1)
 
     private fun messageLines(message: String, urgent: Boolean): List<String> =
         if (message.isBlank()) emptyList() else listOf((if (urgent) "Urgent message: " else "Message: ") + message)

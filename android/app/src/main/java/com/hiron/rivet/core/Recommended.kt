@@ -24,6 +24,14 @@ object PermissionGroups {
 
 enum class RecId { AutoConnect, QuietOverlay, OfferReplies, UnansweredCalls, Permissions, Assistant, StopAsking }
 
+/** The settings a [Recommendation.Setting] changes. */
+enum class SettingId(val rec: RecId) {
+    AutoConnect(RecId.AutoConnect),
+    QuietOverlay(RecId.QuietOverlay),
+    OfferReplies(RecId.OfferReplies),
+    UnansweredCalls(RecId.UnansweredCalls),
+}
+
 /** What the recommendations are compared against. */
 data class Current(
     val autoConnect: Boolean,
@@ -46,13 +54,15 @@ sealed interface Recommendation {
 
     /** A setting Rivet changes itself; [now] and [after] are its readouts. */
     data class Setting(
-        override val id: RecId,
+        val setting: SettingId,
         override val title: String,
         override val change: String,
         override val undo: String,
         val now: String,
         val after: String,
-    ) : Recommendation
+    ) : Recommendation {
+        override val id = setting.rec
+    }
 
     /** One Android permission request for every missing group. */
     data class AskPermissions(val groups: List<PermissionGroup>) : Recommendation {
@@ -116,7 +126,7 @@ object Recommended {
         if (!current.autoConnect) {
             add(
                 Recommendation.Setting(
-                    RecId.AutoConnect, "Connect automatically", "Rivet reconnects by itself, also after your phone restarts.",
+                    SettingId.AutoConnect, "Connect automatically", "Rivet reconnects by itself, also after your phone restarts.",
                     "Turns automatic connection off again.", OFF, ON,
                 ),
             )
@@ -124,7 +134,7 @@ object Recommended {
         if (current.speakInOverlay) {
             add(
                 Recommendation.Setting(
-                    RecId.QuietOverlay, "Quiet assistant overlay",
+                    SettingId.QuietOverlay, "Quiet assistant overlay",
                     "Replies in the assistant overlay are shown, not read aloud. Replies in the app are unchanged.",
                     "Reads overlay replies aloud again.", "Read aloud", "Shown",
                 ),
@@ -133,7 +143,7 @@ object Recommended {
         if (!current.offerReplies) {
             add(
                 Recommendation.Setting(
-                    RecId.OfferReplies, "Offer replies to new messages",
+                    SettingId.OfferReplies, "Offer replies to new messages",
                     "When a message arrives, Rivet drafts a reply and asks you before it sends anything.", "Stops offering replies.", OFF, ON,
                 ),
             )
@@ -146,7 +156,7 @@ object Recommended {
             }
             add(
                 Recommendation.Setting(
-                    RecId.UnansweredCalls, "Answer only calls you miss",
+                    SettingId.UnansweredCalls, "Answer only calls you miss",
                     "Rivet's line takes the calls you don't pick up, which is what lets you take a call over.$carrier",
                     "Goes back to answering every call (your carrier settings don't change).", "Every call", "Missed calls",
                 ),
@@ -165,18 +175,22 @@ object Recommended {
     fun apply(chosen: List<Recommendation>, prefs: RecommendedPrefs, now: Long): RecommendedUndo {
         var undo = RecommendedUndo(at = now)
         for (item in chosen) {
-            when (item.id) {
-                RecId.AutoConnect -> { undo = undo.copy(autoConnect = prefs.autoConnect); prefs.autoConnect = true }
-                RecId.QuietOverlay -> { undo = undo.copy(speakInOverlay = prefs.speakInOverlay); prefs.speakInOverlay = false }
-                RecId.OfferReplies -> { undo = undo.copy(offerReplies = prefs.offerReplies); prefs.offerReplies = true }
-                RecId.UnansweredCalls -> { undo = undo.copy(answeringMode = prefs.answeringMode); prefs.answeringMode = ForwardMode.Unanswered }
-                RecId.Permissions, RecId.Assistant -> Unit
-                RecId.StopAsking -> if (item is Recommendation.StopAsking) undo = undo.copy(ruleTargets = undo.ruleTargets + item.candidate.target)
+            when (item) {
+                is Recommendation.Setting -> undo = applySetting(item.setting, prefs, undo)
+                is Recommendation.StopAsking -> undo = undo.copy(ruleTargets = undo.ruleTargets + item.candidate.target)
+                is Recommendation.AskPermissions, Recommendation.OpenAssistantSettings -> Unit
             }
         }
         val changed = undo.titles().isNotEmpty()
         if (changed) prefs.recommendedUndo = undo
         return undo
+    }
+
+    private fun applySetting(setting: SettingId, prefs: RecommendedPrefs, undo: RecommendedUndo): RecommendedUndo = when (setting) {
+        SettingId.AutoConnect -> undo.copy(autoConnect = prefs.autoConnect).also { prefs.autoConnect = true }
+        SettingId.QuietOverlay -> undo.copy(speakInOverlay = prefs.speakInOverlay).also { prefs.speakInOverlay = false }
+        SettingId.OfferReplies -> undo.copy(offerReplies = prefs.offerReplies).also { prefs.offerReplies = true }
+        SettingId.UnansweredCalls -> undo.copy(answeringMode = prefs.answeringMode).also { prefs.answeringMode = ForwardMode.Unanswered }
     }
 
     /** Puts back what [RecommendedPrefs.recommendedUndo] recorded and clears it; returns it (the caller revokes its rules). */

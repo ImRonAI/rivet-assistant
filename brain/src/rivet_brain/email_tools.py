@@ -770,7 +770,14 @@ def _reply_label(scope: Mapping[str, str]) -> str:
 _MARK_LABELS = {"read": "Marking emails as read", "unread": "Marking emails as unread", "archive": "Archiving emails"}
 
 SEND_STANDING = Standing((("to", "emails"), ("cc", "emails")), frozenset({"to"}), True, _send_label)
-REPLY_STANDING = Standing((("to", "emails"), ("reply_all", "flag")), frozenset({"to"}), True, _reply_label)
+# Reply-all also goes to everyone the original was sent to, a list the email's sender set, so it is deny-only.
+REPLY_STANDING = Standing(
+    (("to", "emails"), ("reply_all", "flag")),
+    frozenset({"to"}),
+    True,
+    _reply_label,
+    allow_only=(("reply_all", "false"),),
+)
 MARK_STANDING = Standing(
     (("action", "text"),),
     frozenset({"action"}),

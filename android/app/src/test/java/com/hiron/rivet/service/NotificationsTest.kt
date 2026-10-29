@@ -80,6 +80,15 @@ class NotificationsTest {
     }
 
     @Test
+    fun summaryIdsSitOutsideEveryChildRange() {
+        val ranges = Notifications.CHILD_ID_RANGES
+        ranges.forEachIndexed { i, a -> ranges.drop(i + 1).forEach { b -> assertTrue("$a overlaps $b", a.last < b.first || b.last < a.first) } }
+        val fixed = Notifications.Group.entries.map { it.summaryId } + Notifications.SERVICE_ID
+        assertEquals(fixed.size, fixed.toSet().size)
+        fixed.forEach { id -> assertTrue("$id is inside a child range", ranges.none { id in it }) }
+    }
+
+    @Test
     fun aSummaryExistsOnlyForTwoOrMore() {
         Notifications.approval(app, textApproval("a1"))
         assertNull(active().firstOrNull { it.id == Notifications.APPROVAL_SUMMARY_ID })

@@ -1,5 +1,6 @@
 package com.hiron.rivet.voice
 
+import com.hiron.rivet.core.AlertBlock
 import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.Decision
 import com.hiron.rivet.core.GatewayConfig
@@ -143,6 +144,7 @@ class AgentToolsTest {
         assertEquals(null, call.because)
         val event = requireNotNull(AgentAlerts.request("calendar_create", JSONObject().put("title", "Dentist").put("start", "2026-10-27T09:00"), false, null))
         assertEquals("Add “Dentist” to your calendar", event.headline)
+        assertEquals(AlertBlock.Field("When", "Tue Oct 27, 9:00 AM"), event.blocks.first())
         assertEquals("Adding events to your calendar", event.offer?.label)
         val reply = requireNotNull(AgentAlerts.request("notification_reply", JSONObject().put("key", "k").put("text", "ok"), false, null))
         assertEquals("Reply to a message: “ok”", reply.headline)
@@ -158,6 +160,20 @@ class AgentToolsTest {
         )) {
             assertTrue(line, line in alerts)
         }
+    }
+
+    @Test
+    fun eventTimesReadAsTheBrainReadsThem() {
+        // brain/tests/test_alerts.py test_shared_time_vectors
+        val vectors = JSONArray(File("../../brain/tests/fixtures/alert_times.json").readText())
+        assertTrue(vectors.length() > 0)
+        for (i in 0 until vectors.length()) {
+            val v = vectors.getJSONObject(i)
+            assertEquals(v.toString(), v.getString("text"), AgentAlerts.eventTime(v.getString("start"), v.getString("end")))
+        }
+        val event = AgentAlerts.alert("calendar_create", JSONObject().put("title", "x").put("start", "2026-10-27T09:00").put("end", "2026-10-27T10:00"))
+        assertEquals(AlertBlock.Field("When", "Tue Oct 27, 9:00 AM to 10:00 AM"), event.second.first())
+        assertEquals("Call True", AgentAlerts.alert("phone_call", JSONObject().put("number", true)).first)
     }
 
     @Test

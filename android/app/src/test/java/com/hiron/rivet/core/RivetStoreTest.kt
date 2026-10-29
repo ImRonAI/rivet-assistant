@@ -194,7 +194,7 @@ class RivetStoreTest {
         assertEquals("Declined: Text +18015550100: “Friday at 9 works!”", RivetStore.answer(text, Protocol.Answer(false)))
 
         s = s.copy(removingRules = setOf("k"))
-        s = RivetStore.reduce(s, ServerEvent.RulesRefused("revoke", "No such rule."), 5)
+        s = RivetStore.reduce(s, ServerEvent.RulesRefused(RuleRequest.Revoke, "No such rule."), 5)
         assertEquals("No such rule.", s.rulesError)
         assertTrue(s.removingRules.isEmpty())
         s = RivetStore.reduce(s, ServerEvent.Rules(RuleSet.EMPTY), 6)

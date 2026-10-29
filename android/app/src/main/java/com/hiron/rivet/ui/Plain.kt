@@ -79,10 +79,15 @@ object Plain {
     /**
      * [text] with each international number replaced by its contact's name from [names] ("Dana"), or with the name
      * and the grouped number when [withNumber] ("Dana · +1 801-555-0100"); numbers without a name are grouped.
+     * Everything from the first “ on is a quote of what will be sent and is kept exactly as written.
      */
-    fun people(text: String, names: Map<String, String>, withNumber: Boolean = false): String = NUMBER.replace(text) { m ->
-        val name = names[m.value] ?: return@replace phone(m.value)
-        if (withNumber) "$name · ${phone(m.value)}" else name
+    fun people(text: String, names: Map<String, String>, withNumber: Boolean = false): String {
+        val quote = text.indexOf('“')
+        val head = if (quote < 0) text else text.substring(0, quote)
+        return NUMBER.replace(head) { m ->
+            val name = names[m.value] ?: return@replace phone(m.value)
+            if (withNumber) "$name · ${phone(m.value)}" else name
+        } + text.substring(head.length)
     }
 
     /** One line on what kind of thing the action does and whether it can be taken back. */

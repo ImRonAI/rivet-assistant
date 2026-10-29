@@ -31,7 +31,6 @@ from strands.types.tools import ToolResult
 
 from .alerts import ALERT_TOOLS, Alert, alert_for, operation_summary
 from .rules import (
-    NEVER_ALLOW,
     Decision,
     NoAllow,
     RuleOffer,
@@ -490,7 +489,7 @@ class RivetApprovals(InterventionHandler):
             preview=code[:PREVIEW_LIMIT],
             target=rule_target,
             alert=alert,
-            changes=changes if known else (),
+            changes=tuple(name for name in changes if name in self.catalog.operations),
         )
 
     def offer(self, assessment: Assessment, *, tainted: bool) -> RuleOffer | None:
@@ -499,7 +498,7 @@ class RivetApprovals(InterventionHandler):
         if standing is None or assessment.target is None:
             return None
         no_allow: NoAllow | None = _NO_ALLOW_TIERS.get(assessment.tier)
-        if no_allow is None and not standing.allow:
+        if no_allow is None and not standing.allows(assessment.target):
             no_allow = "kind"
         if no_allow is None and tainted:
             no_allow = "untrusted"
@@ -539,12 +538,14 @@ class RivetApprovals(InterventionHandler):
         if denied is not None:
             self._applied(denied)
             return Deny(reason=STANDING_DENY.format(label=denied.label))
+        offer = self.offer(assessment, tainted=tainted)
         allowed = self.rules.match(assessment.target) if assessment.target is not None else None
-        if allowed is not None and allowed.decision == "allow" and assessment.tier not in NEVER_ALLOW and not tainted:
+        # A stored allow counts only where the offer would grant one now, whatever the store holds.
+        if allowed is not None and allowed.decision == "allow" and offer is not None and offer.allow:
             self._applied(allowed)
             return Proceed(reason="standing rule")
         return Confirm(
-            prompt=assessment.prompt(tainted=tainted, offer=self.offer(assessment, tainted=tainted)),
+            prompt=assessment.prompt(tainted=tainted, offer=offer),
             evaluate=partial(self._evaluate, str(event.tool_use["toolUseId"]), assessment),
         )
 

@@ -22,6 +22,15 @@ enum class Decision(val wire: String) {
     }
 }
 
+/** Which phone request a `rules.refused` event answers (brain/src/rivet_brain/gateway.py `RuleRequest`). */
+enum class RuleRequest(val wire: String) {
+    Set("set"), Revoke("revoke");
+
+    companion object {
+        fun of(wire: String?): RuleRequest? = entries.firstOrNull { it.wire == wire }
+    }
+}
+
 /** Why a rule offer can only be a standing deny (brain/src/rivet_brain/rules.py `NoAllow`). */
 enum class NoAllow(val wire: String) {
     Purchase("purchase"), Destructive("destructive"), Unknown("unknown"), Kind("kind"), Untrusted("untrusted");

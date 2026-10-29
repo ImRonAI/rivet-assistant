@@ -15,7 +15,7 @@ object RuleScope {
     fun text(v: String): String = v.trim()
 
     /** The rule target of one call, or null when it can't have a rule. */
-    fun target(tool: String, input: JSONObject): RuleTarget? = when (tool) {
+    internal fun target(tool: String, input: JSONObject): RuleTarget? = when (tool) {
         "sms_send" -> string(input, "to")?.let(::phone)?.takeIf { it.isNotEmpty() }?.let { RuleTarget(tool, mapOf("to" to it)) }
         "phone_call" -> string(input, "number")?.let(::phone)?.takeIf { it.isNotEmpty() }?.let { RuleTarget(tool, mapOf("number" to it)) }
         "calendar_create" -> RuleTarget(tool, emptyMap())

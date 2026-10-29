@@ -6,8 +6,9 @@ fields make up the scope, is declared per tool with a ``Standing`` on its ``Tool
 
 Rules are written only through ``admit``, which refuses an ``allow`` the brain's own offer did not grant: purchases,
 destructive and unrecognised actions, deny-only kinds of action (app taps, Telnyx code) and turns that read
-third-party content can only ever be standing denies. ``StandingRules`` keeps one session's rules in the session's
-``Storage`` backend, so they move with everything else the session stores.
+third-party content can only ever be standing denies. A stored allow is followed only where that offer would grant
+one at the time of the call, so a rule that reached storage some other way fails closed. ``StandingRules`` keeps
+one session's rules in the session's ``Storage`` backend, so they move with everything else the session stores.
 """
 
 from __future__ import annotations
@@ -18,13 +19,10 @@ import logging
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict, TypeGuard
+from typing import Literal, NotRequired, TypedDict, TypeGuard
 from urllib.parse import quote
 
 from strands.storage import InMemoryStorage, Storage
-
-if TYPE_CHECKING:
-    from .approvals import Tier
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +30,6 @@ Decision = Literal["allow", "deny"]
 NoAllow = Literal["purchase", "destructive", "unknown", "kind", "untrusted"]
 Normalizer = Literal["phone", "emails", "text", "flag"]
 
-NEVER_ALLOW: frozenset[Tier] = frozenset({"purchase", "destructive", "unknown"})
-"""Tiers that always ask: a rule can only decline them."""
 RULES_LIMIT = 200
 RULES_FORMAT = 1
 _PHONE_NOISE = str.maketrans("", "", " \t\n\r\f\x0b().-")
@@ -100,6 +96,8 @@ class Standing:
         allow: False when this kind of action can only be standing-denied.
         label: Noun phrase for a target, from its normalized scope ("Texts to +18015550100").
         when: Raw input fields that must hold one of these string values for a call to be eligible.
+        allow_only: Normalized scope values a target must have to be standing-allowed; any other target of this
+            tool can only be standing-denied.
     """
 
     fields: tuple[tuple[str, Normalizer], ...]
@@ -107,6 +105,12 @@ class Standing:
     allow: bool
     label: Callable[[Mapping[str, str]], str]
     when: tuple[tuple[str, frozenset[str]], ...] = ()
+    allow_only: tuple[tuple[str, str], ...] = ()
+
+    def allows(self, target: Target) -> bool:
+        """Whether ``target`` may be standing-allowed at all."""
+        scope = target.scope_dict()
+        return self.allow and all(scope.get(name) == value for name, value in self.allow_only)
 
     def target(self, tool: str, tool_input: object) -> Target | None:
         """The rule target of one call, or ``None`` when the call can't have a rule."""

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -36,6 +38,14 @@ def test_when() -> None:
     assert when("2026-10-27T23:30", "2026-10-28T00:15") == "Tue Oct 27, 11:30 PM to Wed Oct 28, 12:15 AM"
     assert when("2026-10-27T12:05-07:00", "soon") == "Tue Oct 27, 12:05 PM"
     assert when("tomorrow morning") == "tomorrow morning"
+
+
+def test_shared_time_vectors() -> None:
+    # android AgentToolsTest reads the same vectors, so the phone's own approvals give the same times.
+    vectors = json.loads((Path(__file__).parent / "fixtures" / "alert_times.json").read_text(encoding="utf-8"))
+    assert vectors
+    for vector in vectors:
+        assert when(vector["start"], vector["end"]) == vector["text"], vector
 
 
 def test_operation_summary_fallback() -> None:
@@ -171,11 +181,12 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
             {"number": "+18015550100"},
             "Set up call answering on +18015550100",
             [
+                {"kind": "field", "label": "Number", "value": "+18015550100"},
                 {
                     "kind": "note",
                     "markdown": "Creates Rivet's answering assistant on your Telnyx account and sends calls to "
-                    "+18015550100 to it.",
-                }
+                    "this number to it.",
+                },
             ],
         ),
         (
@@ -183,10 +194,11 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
             {"number": "+18015550100", "reassign": True},
             "Move +18015550100 to Rivet's call answering",
             [
+                {"kind": "field", "label": "Number", "value": "+18015550100"},
                 {
                     "kind": "note",
-                    "markdown": "Calls to +18015550100 stop going where they go now, and Rivet answers them instead.",
-                }
+                    "markdown": "Calls to this number stop going where they go now, and Rivet answers them instead.",
+                },
             ],
         ),
         (
@@ -228,10 +240,29 @@ def test_telnyx_alerts() -> None:
     assert two.blocks[0]["markdown"] == ("- Send a message\n- Delete a messaging profile\nRuns on your Telnyx account.")
     odd = _telnyx("await call_tool('SendMessage', {})\nawait call_tool('NoSuchTool', {})")
     assert odd.headline == "Run code on your Telnyx account that Rivet can't check"
-    assert odd.blocks[0]["markdown"] == (
-        "- Send a message\n- Something Rivet doesn't recognise (`NoSuchTool`)\nRuns on your Telnyx account."
+    assert odd.blocks == (
+        {"kind": "field", "label": "Not recognised", "value": "NoSuchTool"},
+        {
+            "kind": "note",
+            "markdown": "- Send a message\n- Something Rivet doesn't recognise\nRuns on your Telnyx account.",
+        },
     )
     computed = _telnyx("n = 'SendMessage'\nawait call_tool(n, {})")
     assert computed.headline == "Run code on your Telnyx account that Rivet can't check"
+    assert computed.blocks[0] == {"kind": "field", "label": "Not recognised", "value": "<computed>"}
+
+
+@pytest.mark.parametrize(
+    ("tool", "tool_input"),
+    [
+        ("call_answering_setup", {"number": "[Tap here](https://evil.example)\n- Safe"}),
+        ("call_answering_setup", {"number": "[Tap here](https://evil.example)", "reassign": True}),
+        ("telnyx_execute", {"code": "await call_tool('x`\\n- Safe [Details](https://evil.example)', {})"}),
+    ],
+)
+def test_a_note_never_holds_tool_input(tool: str, tool_input: dict[str, Any]) -> None:
+    alert = RivetApprovals().assess(tool, tool_input).alert if tool == "telnyx_execute" else _alert(tool, tool_input)
+    notes = [block["markdown"] for block in alert.blocks if block["kind"] == "note"]
+    assert notes and not any("evil.example" in note or "Safe" in note for note in notes)
     missing = RivetApprovals().assess("telnyx_execute", {}).alert
     assert missing.headline == "Run code on your Telnyx account that Rivet can't check"

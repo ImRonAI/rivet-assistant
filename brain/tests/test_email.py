@@ -580,6 +580,17 @@ def test_email_rules_cover_the_same_recipients_and_replies_the_same_sender() -> 
     }
 
 
+def test_reply_all_can_only_be_standing_denied() -> None:
+    approvals = RivetApprovals(POLICIES)
+    reply = {"uid": 7, "to": "ada@example.com", "body": "Yes"}
+    one = approvals.offer(approvals.assess("email_reply", reply), tainted=False)
+    everyone = approvals.offer(approvals.assess("email_reply", {**reply, "reply_all": True}), tainted=False)
+    assert one is not None and one.allow and one.no_allow is None
+    assert everyone is not None and not everyone.allow and everyone.deny and everyone.no_allow == "kind"
+    asked = approvals.offer_for("email_reply", {"to": "ada@example.com", "reply_all": "true"})
+    assert asked is not None and not asked.allow
+
+
 def _until(socket: Any, kind: str, limit: int = 300) -> dict[str, Any]:
     for _ in range(limit):
         event = socket.receive_json()

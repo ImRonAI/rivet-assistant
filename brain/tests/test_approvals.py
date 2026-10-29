@@ -206,6 +206,19 @@ def calendar_create(title: str, start: str) -> str:
     return "added"
 
 
+@tool
+def screen_act(action: str, node: int, label: str) -> str:
+    """Act in the app on screen.
+
+    Args:
+        action: What to do.
+        node: Element number.
+        label: The element's label.
+    """
+    executed.append(f"{action} {label}")
+    return "done"
+
+
 SEND = "await call_tool('SendMessage', {'to': '+15551234', 'text': 'late'})"
 BUY = "await call_tool('CreateNumberOrder', {'phone_numbers': [{'phone_number': '+18015550100'}]})"
 DELETE = "await call_tool('DeleteMessagingProfile', {'id': 'p1'})"
@@ -217,6 +230,7 @@ def policies() -> dict[str, ToolPolicy]:
         "read_sms": ToolPolicy("read", "Read SMS", untrusted_output=True),
         "sms_send": PHONE_POLICIES["sms_send"],
         "calendar_create": PHONE_POLICIES["calendar_create"],
+        "screen_act": PHONE_POLICIES["screen_act"],
     }
 
 
@@ -227,7 +241,7 @@ def make_agent(fake: FakePerplexity, approvals: RivetApprovals | None = None) ->
     approvals = approvals or RivetApprovals(policies())
     agent = Agent(
         model=model,
-        tools=[fake_execute, read_sms, sms_send, calendar_create],
+        tools=[fake_execute, read_sms, sms_send, calendar_create, screen_act],
         interventions=[approvals],
         callback_handler=None,
     )
@@ -362,6 +376,7 @@ def test_read_only_code_runs_without_asking() -> None:
         ("sms_send", TEXT, Target.of("sms_send", {"to": "+18015550100"})),
         ("telnyx_execute", {"code": BUY}, telnyx("CreateNumberOrder")),
         ("telnyx_execute", {"code": DELETE}, telnyx("DeleteMessagingProfile")),
+        ("telnyx_execute", {"code": f"n = 'GetUserBalance'\n{SEND}\nawait call_tool(n, {{}})"}, telnyx("SendMessage")),
     ],
 )
 def test_a_standing_deny_declines_without_asking(name: str, tool_input: dict[str, Any], target: Target) -> None:
@@ -421,6 +436,25 @@ def test_an_allow_is_ignored_for_a_purchase_even_when_one_is_stored() -> None:
     assert result.stop_reason == "interrupt" and executed == [] and applied == []
     sheet = json.loads(result.interrupts[0].reason)
     assert sheet["high"] is True and sheet["offer"]["allow"] is False and sheet["offer"]["no_allow"] == "purchase"
+
+
+@pytest.mark.parametrize(
+    ("name", "tool_input", "target"),
+    [
+        ("telnyx_execute", {"code": SEND}, telnyx("SendMessage")),
+        ("telnyx_execute", {"code": "await call_tool('UpdateMessagingProfile', {})"}, telnyx("UpdateMessagingProfile")),
+        ("screen_act", {"action": "tap", "node": 3, "label": "Send"}, Target.of("screen_act", {"label": "Send"})),
+    ],
+)
+def test_an_allow_is_ignored_for_a_deny_only_kind_even_when_one_is_stored(
+    name: str, tool_input: dict[str, Any], target: Target
+) -> None:
+    approvals, applied = with_rules((target, "allow"))
+    fake = FakePerplexity([SSE().function_call(name, tool_input).completed()])
+    result = make_agent(fake, approvals)("do it")
+    assert result.stop_reason == "interrupt" and executed == [] and applied == []
+    sheet = json.loads(result.interrupts[0].reason)
+    assert sheet["offer"]["allow"] is False and sheet["offer"]["no_allow"] == "kind"
 
 
 def test_untrusted_content_suspends_allows_but_not_denies() -> None:

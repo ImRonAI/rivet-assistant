@@ -1,7 +1,8 @@
 """What an approval says, in plain words: one headline and typed blocks, composed from the call's own input.
 
 The copy is fixed text (no model writes it). Blocks are typed so the phone styles only Rivet's own ``note``
-markdown, never a message's text. Values are shown as the tool will receive them; only headlines are clipped.
+markdown, never a message's text: a note never holds a value from the call's input, which goes in a field or a
+quote. Values are shown as the tool will receive them; only headlines are clipped.
 """
 
 from __future__ import annotations
@@ -191,11 +192,19 @@ def alert_for(tool: str, tool_input: object, tier: Tier, operations: Sequence[Ma
         if data.get("reassign") is True:
             return Alert(
                 f"Move {number} to Rivet's call answering",
-                (_note(f"Calls to {number} stop going where they go now, and Rivet answers them instead."),),
+                (
+                    _field("Number", number),
+                    _note("Calls to this number stop going where they go now, and Rivet answers them instead."),
+                ),
             )
         return Alert(
             f"Set up call answering on {number}",
-            (_note(f"Creates Rivet's answering assistant on your Telnyx account and sends calls to {number} to it."),),
+            (
+                _field("Number", number),
+                _note(
+                    "Creates Rivet's answering assistant on your Telnyx account and sends calls to this number to it."
+                ),
+            ),
         )
     if tool == "telnyx_execute":
         return _telnyx_alert(tier, operations)
@@ -231,8 +240,12 @@ def _telnyx_alert(tier: Tier, operations: Sequence[Mapping[str, str]]) -> Alert:
     changes = [op for op in operations if op.get("tier") != "read"]
     lines = [_operation_line(op) for op in changes]
     note = _note("\n".join([*lines, _ON_TELNYX]))
-    if tier == "unknown" or any(op.get("tier") == "unknown" for op in changes):
-        return Alert("Run code on your Telnyx account that Rivet can't check", (note,))
+    unknown = list(dict.fromkeys(op.get("name", "") for op in changes if op.get("tier") == "unknown"))
+    if tier == "unknown" or unknown:
+        blocks: tuple[Block, ...] = (note,)
+        if unknown:
+            blocks = (_field("Not recognised", ", ".join(unknown)), note)
+        return Alert("Run code on your Telnyx account that Rivet can't check", blocks)
     if len(changes) == 1:
         only = changes[0]
         return Alert(
@@ -242,10 +255,9 @@ def _telnyx_alert(tier: Tier, operations: Sequence[Mapping[str, str]]) -> Alert:
 
 
 def _operation_line(op: Mapping[str, str]) -> str:
-    name = op.get("name", "")
     if op.get("tier") == "unknown":
-        return f"- Something Rivet doesn't recognise (`{name}`)"
-    return f"- {operation_summary(name, op.get('summary', ''))}"
+        return "- Something Rivet doesn't recognise"
+    return f"- {operation_summary(op.get('name', ''), op.get('summary', ''))}"
 
 
 def _day(moment: datetime) -> str:

@@ -300,7 +300,8 @@ private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
     var offer by remember(version) { mutableStateOf(s.offerReplies) }
     var agents by remember { mutableStateOf(s.elevenLabsAgents) }
     var undo by remember(version) { mutableStateOf(s.recommendedUndo) }
-    var undone by remember { mutableStateOf(false) }
+    // True once undone; false when it couldn't be, because the rules need Rivet connected.
+    var undone by remember { mutableStateOf<Boolean?>(null) }
     var recommending by rememberSaveable { mutableStateOf(false) }
     FeatureCard(
         Icons.Outlined.Tune, "Use recommended settings", "See what Rivet suggests and choose what to change.",
@@ -309,8 +310,7 @@ private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
             {
                 Column {
                     TextKey("Undo recommended settings", {
-                        runtime.undoRecommended()
-                        undone = true
+                        undone = runtime.undoRecommended()
                         version++
                         onChanged()
                     }, Modifier.offset { IntOffset(-8.dp.roundToPx(), 0) })
@@ -319,11 +319,15 @@ private fun Behaviour(runtime: RivetRuntime, onChanged: () -> Unit) {
             }
         },
     )
-    if (undone) InfoStrip("Recommended settings undone.", icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
+    when (undone) {
+        true -> InfoStrip("Recommended settings undone.", icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
+        false -> InfoStrip("Connect to Rivet to undo. Only Rivet can remove the rules these settings made.", tone = Tone.Amber)
+        null -> Unit
+    }
     if (recommending) {
         RecommendedFlow(runtime) { applied ->
             recommending = false
-            if (applied) undone = false
+            if (applied) undone = null
             version++
             onChanged()
         }
