@@ -20,7 +20,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache, partial
 from importlib import resources
-from typing import Any, Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict, override
 
 from strands.agent.state import AgentState
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent
@@ -146,10 +146,31 @@ def _call_action_tier(action: str) -> Tier:
     return "send"
 
 
+class CatalogOperation(TypedDict):
+    """A generated Telnyx tool's route, as ``telnyx_operations.json`` lists it."""
+
+    method: str
+    path: str
+    summary: NotRequired[str]
+
+
+class CatalogHelper(TypedDict, total=False):
+    """A Telnyx tool not generated from the schema (a workspace, an app backend or the polling task)."""
+
+    visibility: list[str] | None
+
+
+class CatalogData(TypedDict):
+    """``telnyx_operations.json``, as far as the catalog reads it."""
+
+    operations: dict[str, CatalogOperation]
+    helpers: dict[str, CatalogHelper]
+
+
 class TelnyxCatalog:
     """Tool names reachable through ``telnyx_execute``'s ``call_tool``, with their routes."""
 
-    def __init__(self, data: Mapping[str, Any]) -> None:
+    def __init__(self, data: CatalogData) -> None:
         self.operations = {
             name: TelnyxOperation(name, op["method"], op["path"], op.get("summary", ""))
             for name, op in data["operations"].items()
@@ -159,7 +180,6 @@ class TelnyxCatalog:
         self.read_helpers = frozenset(
             name for name, helper in data["helpers"].items() if helper.get("visibility") != ["app"]
         )
-        self.sha256: str = data.get("sha256", "")
 
     @staticmethod
     @cache
@@ -167,10 +187,6 @@ class TelnyxCatalog:
         """The catalog shipped in ``rivet_brain/data``."""
         text = resources.files("rivet_brain.data").joinpath("telnyx_operations.json").read_text("utf-8")
         return TelnyxCatalog(json.loads(text))
-
-    def known(self, name: str) -> bool:
-        """``name`` is a generated operation or a read helper."""
-        return name in self.operations or name in self.read_helpers
 
     def describe(self, name: str | None) -> tuple[Tier, dict[str, str]]:
         """Tier and display fields for one ``call_tool`` target (``None`` = not a literal name)."""
@@ -249,7 +265,6 @@ INTERNAL_POLICIES: dict[str, ToolPolicy] = {
     "todo_write": ToolPolicy("read", "Update the task list"),
     "skills": ToolPolicy("read", "Load a skill"),
     "search_memory": ToolPolicy("read", "Search memory", untrusted_output=True),
-    "add_memory": ToolPolicy("read", "Save to memory"),
     "retrieve_context": ToolPolicy("read", "Re-read an offloaded tool result", untrusted_output=True),
     "retrieve_offloaded_content": ToolPolicy("read", "Re-read an earlier tool result", untrusted_output=True),
 }
@@ -257,8 +272,6 @@ _TELNYX_READ_TOOLS = {
     f"{TELNYX_PREFIX}search": "Search the Telnyx catalog",
     f"{TELNYX_PREFIX}get_schema": "Read Telnyx tool schemas",
     f"{TELNYX_PREFIX}tags": "List Telnyx categories",
-    f"{TELNYX_PREFIX}search_prefab_components": "Search UI components",
-    f"{TELNYX_PREFIX}generate_prefab_ui": "Render a UI (sandboxed, no tool access)",
 }
 
 
@@ -409,11 +422,13 @@ class RivetApprovals(InterventionHandler):
         return RivetApprovals(self.policies, catalog=self.catalog, clock=self._clock, rules=rules, on_rule=on_rule)
 
     @property
+    @override
     def name(self) -> str:
         """Interrupt name; with the tool use id it fixes each approval's interrupt id."""
         return "rivet-approval"
 
     @property
+    @override
     def on_error(self) -> OnError:
         """A broken policy check denies the call."""
         return "deny"
@@ -526,6 +541,7 @@ class RivetApprovals(InterventionHandler):
             return None
         return self.offer(Assessment(tool, tier, "", target=target), tainted=False)
 
+    @override
     def before_tool_call(self, event: BeforeToolCallEvent, **kwargs: object) -> Proceed | Deny | Confirm:
         """Run reads; follow a standing rule; ask for everything else."""
         if event.selected_tool is None:
@@ -549,6 +565,7 @@ class RivetApprovals(InterventionHandler):
             evaluate=partial(self._evaluate, str(event.tool_use["toolUseId"]), assessment),
         )
 
+    @override
     def after_tool_call(self, event: AfterToolCallEvent, **kwargs: object) -> Proceed | Transform:
         """Taint the turn once it has read third-party content; tell the model plainly why a call didn't run."""
         use = event.tool_use

@@ -36,7 +36,7 @@ from rivet_brain.email_tools import (
     search_criteria,
     tools_for,
 )
-from rivet_brain.factory import RIVET_INSTRUCTIONS, instructions_for, rivet_instructions
+from rivet_brain.factory import instructions_for, rivet_instructions
 from rivet_brain.gateway import create_app
 from tests.chaos import FAST, Aux, fast_settings, make_build
 from tests.mail_server import ADDRESS, PASSWORD, FakeImap, FakeSmtp, SilentServer, throwaway_tls
@@ -192,8 +192,9 @@ def test_ports_that_would_not_use_tls_are_refused(overrides: dict[str, str]) -> 
 
 def test_without_a_mailbox_there_are_no_email_tools_and_email_goes_through_the_phone() -> None:
     assert tools_for(None) == []
-    assert RIVET_INSTRUCTIONS == rivet_instructions() == instructions_for({"sms_send", "email_draft"})
-    assert "`email_draft` (the user sends it)" in RIVET_INSTRUCTIONS and "email_send" not in RIVET_INSTRUCTIONS
+    plain = rivet_instructions()
+    assert plain == instructions_for({"sms_send", "email_draft"})
+    assert "`email_draft` (the user sends it)" in plain and "email_send" not in plain
     with_mailbox = instructions_for({"sms_send", "email_draft", *TOOL_NAMES})
     assert with_mailbox == rivet_instructions(mailbox=True) and email_tools.INSTRUCTIONS in with_mailbox
     assert "rather than notification previews" in with_mailbox and "(the user sends it)" not in with_mailbox

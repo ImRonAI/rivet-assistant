@@ -9,10 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
 
 from strands.tools import PythonAgentTool
-from strands.types.tools import ToolResult, ToolSpec
+from strands.types.tools import ToolResult, ToolSpec, ToolUse
 
 from .approvals import ToolPolicy
 from .search import BraveSearch, SearchError, SearchKind, SearchQuery
@@ -33,12 +32,12 @@ class SearchToolSpec:
     name: str
     kind: SearchKind
     description: str
-    properties: Mapping[str, Any]
+    properties: Mapping[str, Mapping[str, object]]
     policy: ToolPolicy
     required: tuple[str, ...] = ("q",)
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> dict[str, object]:
         """JSON schema for the tool input."""
         return {"type": "object", "properties": dict(self.properties), "required": list(self.required)}
 
@@ -127,7 +126,7 @@ def tools_for(search: BraveSearch | None) -> list[PythonAgentTool]:
 
 
 def _tool(search: BraveSearch, spec: SearchToolSpec) -> PythonAgentTool:
-    async def run(tool_use: Any, **_: Any) -> ToolResult:
+    async def run(tool_use: ToolUse, **_: object) -> ToolResult:
         tool_use_id = tool_use["toolUseId"]
         data = tool_use.get("input")
         try:

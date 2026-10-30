@@ -12,7 +12,7 @@ from strands_harness import HARNESS_CONTRACT
 
 from rivet_brain.approvals import TURN_KEY, RivetApprovals, ToolPolicy
 from rivet_brain.config import BrainSettings, available_providers, default_provider
-from rivet_brain.factory import RIVET_INSTRUCTIONS, Generation, build_agent, build_models
+from rivet_brain.factory import Generation, build_agent, build_models, rivet_instructions
 from rivet_brain.models.groq import GroqModel
 from rivet_brain.models.perplexity import PerplexityAgentModel, build_perplexity_model
 from rivet_brain.storage import FenceHolder
@@ -72,12 +72,12 @@ def test_build_connects_telnyx_and_configures_the_harness(tmp_path: Path, telnyx
             "telnyx_get_schema",
             "telnyx_execute",
             "telnyx_tags",
-            "telnyx_generate_prefab_ui",
-            "telnyx_search_prefab_components",
             "todo_write",
             "search_memory",
         } <= names
         assert not names & {
+            "telnyx_generate_prefab_ui",
+            "telnyx_search_prefab_components",
             "shell",
             "read",
             "write",
@@ -90,7 +90,7 @@ def test_build_connects_telnyx_and_configures_the_harness(tmp_path: Path, telnyx
         }
         assert generation.tool_timeouts["telnyx_execute"] == 150 and generation.tool_timeouts["telnyx_search"] == 120
         prompt = agent.system_prompt or ""
-        assert prompt.startswith(HARNESS_CONTRACT[:40]) and RIVET_INSTRUCTIONS in prompt and INSTRUCTIONS in prompt
+        assert prompt.startswith(HARNESS_CONTRACT[:40]) and rivet_instructions() in prompt and INSTRUCTIONS in prompt
         assert agent.agent_id == "default" and generation.number == 0
     finally:
         agent.cleanup()
@@ -144,7 +144,7 @@ def test_next_generation_restores_the_session_with_a_fresh_prompt(tmp_path: Path
     second = _build(tmp_path, telnyx.url, fake, fence)
     try:
         assert second.number == 1 and [m["role"] for m in second.agent.messages] == ["user", "assistant"]
-        assert second.agent.system_prompt != "stale" and RIVET_INSTRUCTIONS in (second.agent.system_prompt or "")
+        assert second.agent.system_prompt != "stale" and rivet_instructions() in (second.agent.system_prompt or "")
         second.agent("still there?")
         assert len(second.agent.messages) == 4
     finally:

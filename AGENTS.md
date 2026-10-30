@@ -66,7 +66,7 @@ RIVET_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.rivet.core.LiveBrain
 - **Agent** (`factory.py`): `create_harness()` on `PerplexityAgentModel` (`models/perplexity.py`), or on `GroqModel` (`models/groq.py`, `qwen/qwen3.8-27b`, a Groq Preview model, stateless) when the session's model is Groq.
   - Native search runs server-side on Perplexity: web, URL fetch, image, finance, people. Groq has none, so its instructions leave that out.
   - `RIVET_MODEL_PROVIDER` sets the default; a provider is offered only when its key is set. The phone picks per session with `model.set`, stored in `session/<id>/rivet/model.json`; the agent is rebuilt on the new provider and the conversation carries over. Refused while a turn or task runs or an approval waits; work that arrives during the switch, such as a call follow-up, waits for the new agent.
-  - Memory, todos, an auto context manager and snapshot sessions on fenced storage.
+  - Memory on the plain storage backend; todos, an auto context manager and snapshot sessions on fenced storage.
   - No shell, file or subagent tools.
   - Instructions follow the tools actually registered.
 - **Supervisor** (`supervisor.py`):

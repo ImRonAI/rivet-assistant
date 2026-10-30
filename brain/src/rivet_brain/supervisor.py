@@ -29,21 +29,24 @@ from collections import deque
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, Any, Literal, cast
+from typing import IO, Literal, Never, NotRequired, Protocol, TypedDict, cast
 
 import openai
-from strands import Agent
+from strands import Agent, Snapshot
 from strands.agent.agent_result import AgentResult
+from strands.agent.state import AgentState
 from strands.hooks import (
     AfterInvocationEvent,
     AfterModelCallEvent,
     AfterToolCallEvent,
     BeforeModelCallEvent,
     BeforeToolCallEvent,
+    HookCallback,
     HookOrder,
 )
 from strands.storage import Storage
-from strands.types.agent import Limits
+from strands.types.agent import AgentInput, Limits
+from strands.types.content import ContentBlock, Message, Messages
 from strands.types.exceptions import (
     ContextWindowOverflowException,
     MaxTokensReachedException,
@@ -51,6 +54,8 @@ from strands.types.exceptions import (
     SessionException,
     SnapshotException,
 )
+from strands.types.interrupt import InterruptResponseContent
+from strands.types.tools import AgentTool, ToolResult, ToolUse
 from strands.vended_plugins.goal import GoalLoop
 
 from .alerts import because_task, because_you_asked
@@ -58,6 +63,7 @@ from .approvals import TELNYX_PREFIX, TURN_KEY, RivetApprovals
 from .config import BrainSettings, WatchdogSettings
 from .events import UiSink
 from .factory import Generation, Wiring, apply_system_prompt, build_agent
+from .storage import FenceHolder
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +73,8 @@ GOAL_KEY = "rivet.goal"
 DEFAULT_LANE = "default"
 JOURNAL_LIMIT = 100
 COMPACT_KEEP = 12
-SYNTHETIC_CANCEL = [{"text": "Cancelled by user"}]
-DEACTIVATED_INTERRUPTS: dict[str, Any] = {"interrupts": {}, "context": {}, "activated": False}
+SYNTHETIC_CANCEL: list[ContentBlock] = [{"text": "Cancelled by user"}]
+DEACTIVATED_INTERRUPTS: _InterruptState = {"interrupts": {}, "context": {}, "activated": False}
 CONTINUE_PROMPT = (
     "<system-reminder>Your previous reply hit the output limit. Continue exactly where it stopped.</system-reminder>"
 )
@@ -101,6 +107,51 @@ _MCP_BROKEN = re.compile(
 _FATAL_ERRORS = (openai.AuthenticationError, openai.PermissionDeniedError, openai.BadRequestError, openai.NotFoundError)
 
 TurnStatus = Literal["completed", "awaiting_approval", "failed"]
+_JournalStatus = Literal["started", "completed", "failed"]
+
+
+class _Interrupt(TypedDict):
+    """One interrupt in an agent's ``interrupt_state`` (the SDK's ``Interrupt``, serialized)."""
+
+    id: str
+    name: str
+    reason: object
+    response: object
+
+
+class _InterruptState(TypedDict):
+    """An agent's ``interrupt_state`` snapshot field, as far as recovery reads it."""
+
+    interrupts: dict[str, _Interrupt]
+    context: dict[str, object]
+    activated: bool
+
+
+class _PendingApproval(TypedDict):
+    """An approval waiting for an answer; ``reason`` is the interrupt's prompt."""
+
+    id: str
+    name: str
+    reason: object
+
+
+class _LaneStatus(TypedDict, total=False):
+    """A lane's turn status in ``agent.state`` (``STATUS_KEY``)."""
+
+    turn_id: str
+    status: Literal["running", "awaiting_approval", "done"]
+    because: str
+    pending: list[_PendingApproval]
+    expires_at: float
+    answers: dict[str, object]
+
+
+class _JournalEntry(TypedDict):
+    """One tool call in the write-ahead journal (``ACTIONS_KEY``)."""
+
+    tool: str
+    status: _JournalStatus
+    result: NotRequired[ToolResult]
 
 
 class SessionLockedError(RuntimeError):
@@ -133,16 +184,16 @@ class TurnOutcome:
     status: TurnStatus
     text: str = ""
     stop_reason: str | None = None
-    approvals: list[dict[str, Any]] = field(default_factory=list)
+    approvals: list[dict[str, object]] = field(default_factory=list)
     restarts: int = 0
     error: str | None = None
     lane: str = DEFAULT_LANE
     goal: str | None = None
 
-    def to_event(self) -> dict[str, Any]:
+    def to_event(self) -> dict[str, object]:
         """The ``turn.*`` event for this outcome."""
         kind = {"completed": "turn.completed", "awaiting_approval": "approval.request", "failed": "turn.failed"}
-        event: dict[str, Any] = {
+        event: dict[str, object] = {
             "type": kind[self.status],
             "turn_id": self.turn_id,
             "lane": self.lane,
@@ -178,7 +229,7 @@ class Watchdog:
             self._last = now
             self._model_started = now
             self._backoff_until = now
-            self._tools: dict[str, list[Any]] = {}
+            self._tools: dict[str, tuple[str, float, float, float]] = {}
             self._tripped: str | None = None
 
     def activity(self, label: str = "") -> None:
@@ -209,15 +260,15 @@ class Watchdog:
         """A tool began running."""
         with self._lock:
             now = self._clock()
-            self._tools[tool_id] = [name, now, limit, now]
+            self._tools[tool_id] = (name, now, limit, now)
             self._last = now
 
     def tool_progress(self) -> None:
         """A running tool reported progress (MCP progress notification)."""
         with self._lock:
             now = self._clock()
-            for entry in self._tools.values():
-                entry[3] = now
+            for tool_id, (name, started, limit, _) in self._tools.items():
+                self._tools[tool_id] = (name, started, limit, now)
             self._last = now
 
     def tool_finished(self, tool_id: str) -> None:
@@ -271,12 +322,12 @@ class GoalBudget:
     attempts_used: int = 0
 
     @classmethod
-    def load(cls, state: Any) -> GoalBudget | None:
+    def load(cls, state: AgentState) -> GoalBudget | None:
         """The budget stored in an agent's state, if any."""
         raw = state.get(GOAL_KEY)
         return cls(**raw) if isinstance(raw, dict) else None
 
-    def save(self, state: Any) -> None:
+    def save(self, state: AgentState) -> None:
         """Store the budget in an agent's state."""
         state.set(
             GOAL_KEY,
@@ -292,8 +343,8 @@ class GoalBudget:
 @dataclass
 class _Plan:
     kind: Literal["continue", "awaiting", "done"]
-    input: Any = None
-    pending: list[dict[str, Any]] = field(default_factory=list)
+    input: AgentInput = None
+    pending: list[_PendingApproval] = field(default_factory=list)
     text: str = ""
 
 
@@ -301,10 +352,8 @@ class Lane:
     """One agent id within the session: its fence, current generation, watchdog and restart history."""
 
     def __init__(
-        self, agent_id: str, limits: WatchdogSettings, tools: Sequence[Any], goal: GoalBudget | None = None
+        self, agent_id: str, limits: WatchdogSettings, tools: Sequence[AgentTool], goal: GoalBudget | None = None
     ) -> None:
-        from .storage import FenceHolder
-
         self.agent_id = agent_id
         self.tools = list(tools)
         self.goal = goal
@@ -316,10 +365,24 @@ class Lane:
         self.restarts: deque[float] = deque()
         self.goal_loop: GoalLoop | None = None
         self.expiry: asyncio.TimerHandle | None = None
-        self.zombies: list[Any] = []
+        self.zombies: list[asyncio.Task[AgentResult] | tuple[Generation, asyncio.Future[None]]] = []
 
 
-BuildFn = Callable[..., Generation]
+class BuildFn(Protocol):
+    """Builds a lane's next generation (``factory.build_agent``, or a test's scripted one)."""
+
+    def __call__(
+        self,
+        settings: BrainSettings,
+        *,
+        session_id: str,
+        fence: FenceHolder,
+        backend: Storage,
+        approvals: RivetApprovals,
+        wiring: Wiring | None = None,
+        tools: Sequence[AgentTool] = (),
+        agent_id: str = "default",
+    ) -> Generation: ...
 
 
 class SessionSupervisor:
@@ -343,7 +406,7 @@ class SessionSupervisor:
         *,
         backend: Storage,
         approvals: RivetApprovals | None = None,
-        tools: Sequence[Any] = (),
+        tools: Sequence[AgentTool] = (),
         sink: UiSink | None = None,
         build: BuildFn = build_agent,
         lock_dir: str | None = None,
@@ -360,7 +423,7 @@ class SessionSupervisor:
         self._lock_dir = Path(lock_dir or Path(settings.session_dir) / "locks")
         self._lock_file: IO[str] | None = None
         self._lanes: dict[str, Lane] = {}
-        self._background: set[asyncio.Task[Any]] = set()
+        self._background: set[asyncio.Task[None]] = set()
 
     # -- lifecycle ------------------------------------------------------------------------------------------
 
@@ -398,7 +461,7 @@ class SessionSupervisor:
 
     # -- public turn API ------------------------------------------------------------------------------------
 
-    async def send(self, prompt: Any, *, turn_id: str | None = None, untrusted: bool = False) -> TurnOutcome:
+    async def send(self, prompt: AgentInput, *, turn_id: str | None = None, untrusted: bool = False) -> TurnOutcome:
         """Run one user turn on the conversation lane.
 
         A message that arrives while approvals are pending denies them first (the old turn finishes), then
@@ -430,7 +493,7 @@ class SessionSupervisor:
             self._emit({"type": "turn.started", "turn_id": turn_id, "lane": lane.agent_id})
             return await self._drive(lane, turn_id, prompt)
 
-    async def respond(self, answers: Mapping[str, Any], *, lane_id: str = DEFAULT_LANE) -> TurnOutcome:
+    async def respond(self, answers: Mapping[str, object], *, lane_id: str = DEFAULT_LANE) -> TurnOutcome:
         """Answer pending approvals by interrupt id; unanswered ones are denied. Continues the turn."""
         lane = self._lanes.get(lane_id)
         if lane is None:
@@ -448,7 +511,7 @@ class SessionSupervisor:
         """Agent ids with a lane in this session (``default`` and ``task-<id>``)."""
         return list(self._lanes)
 
-    def pending_approvals(self, lane_id: str = DEFAULT_LANE) -> list[dict[str, Any]]:
+    def pending_approvals(self, lane_id: str = DEFAULT_LANE) -> list[dict[str, object]]:
         """Approval sheets waiting for an answer (re-sent to the phone when it reconnects)."""
         lane = self._lanes.get(lane_id)
         if lane is None or lane.gen is None:
@@ -465,7 +528,7 @@ class SessionSupervisor:
         task_id: str | None = None,
         max_attempts: int = 5,
         timeout: float = 1800.0,
-        tools: Sequence[Any] | None = None,
+        tools: Sequence[AgentTool] | None = None,
         reason: str | None = None,
     ) -> TurnOutcome:
         """Run a goal-driven task on its own lane, judged by GoalLoop on the aux model.
@@ -487,7 +550,7 @@ class SessionSupervisor:
 
     # -- turn driver ----------------------------------------------------------------------------------------
 
-    async def _drive(self, lane: Lane, turn_id: str, prompt: Any) -> TurnOutcome:
+    async def _drive(self, lane: Lane, turn_id: str, prompt: AgentInput) -> TurnOutcome:
         restarts = compactions = continuations = 0
         next_input = prompt
         while True:
@@ -539,7 +602,7 @@ class SessionSupervisor:
                 return await self._await_approval(lane, turn_id, plan.pending, restarts)
             next_input = plan.input
 
-    async def _run_watched(self, lane: Lane, gen: Generation, prompt: Any, turn_id: str) -> AgentResult:
+    async def _run_watched(self, lane: Lane, gen: Generation, prompt: AgentInput, turn_id: str) -> AgentResult:
         lane.watchdog.reset()
         limits = cast(Limits, dict(self.settings.turn_limits))
         task = asyncio.create_task(_consume(gen.agent, prompt, turn_id, limits))
@@ -565,7 +628,9 @@ class SessionSupervisor:
     async def _finish(self, lane: Lane, turn_id: str, result: AgentResult, restarts: int) -> TurnOutcome:
         gen = _current(lane)
         if result.stop_reason == "interrupt":
-            pending = [{"id": i.id, "name": i.name, "reason": i.reason} for i in result.interrupts or []]
+            pending: list[_PendingApproval] = [
+                {"id": i.id, "name": i.name, "reason": i.reason} for i in result.interrupts or []
+            ]
             return await self._await_approval(lane, turn_id, pending, restarts)
         return await self._finish_from_history(
             lane, turn_id, str(result).strip(), restarts, stop_reason=result.stop_reason, gen=gen
@@ -593,12 +658,12 @@ class SessionSupervisor:
         return outcome
 
     async def _await_approval(
-        self, lane: Lane, turn_id: str, pending: list[dict[str, Any]], restarts: int
+        self, lane: Lane, turn_id: str, pending: list[_PendingApproval], restarts: int
     ) -> TurnOutcome:
         gen = _current(lane)
         expires_at = time.time() + self.settings.approval_timeout
         because = self._status(gen.agent).get("because")
-        status: dict[str, Any] = {
+        status: _LaneStatus = {
             "turn_id": turn_id,
             "status": "awaiting_approval",
             "pending": pending,
@@ -620,7 +685,9 @@ class SessionSupervisor:
         self._emit({**outcome.to_event(), "expires_at": expires_at})
         return outcome
 
-    async def _answer(self, lane: Lane, answers: Mapping[str, Any], *, default: Any = None) -> TurnOutcome:
+    async def _answer(
+        self, lane: Lane, answers: Mapping[str, object], *, default: dict[str, object] | None = None
+    ) -> TurnOutcome:
         gen = await self._ensure_built(lane)
         status = self._status(gen.agent)
         if status.get("status") != "awaiting_approval":
@@ -863,8 +930,8 @@ class SessionSupervisor:
         gen = _current(lane)
         agent = gen.agent
         snapshot = agent.take_snapshot(include=["messages", "interrupt_state"])
-        messages: list[dict[str, Any]] = copy.deepcopy(snapshot.data["messages"])
-        interrupts: dict[str, Any] = copy.deepcopy(snapshot.data.get("interrupt_state") or DEACTIVATED_INTERRUPTS)
+        messages: Messages = copy.deepcopy(snapshot.data["messages"])
+        interrupts: _InterruptState = copy.deepcopy(snapshot.data.get("interrupt_state") or DEACTIVATED_INTERRUPTS)
         status = self._status(agent)
         changed = _drop_synthetic_cancel(messages)
         if not messages:
@@ -878,7 +945,7 @@ class SessionSupervisor:
                 await self._load(gen, snapshot, messages, interrupts)
             return _Plan("done", text=_message_text(last))
 
-        journal: dict[str, Any] = agent.state.get(ACTIONS_KEY) or {}
+        journal: dict[str, _JournalEntry] = agent.state.get(ACTIONS_KEY) or {}
         if interrupts.get("activated"):
             answers = status.get("answers")
             if not answers:
@@ -908,9 +975,9 @@ class SessionSupervisor:
         """Close an unfinished turn so the history is valid for the next one."""
         gen = _current(lane)
         snapshot = gen.agent.take_snapshot(include=["messages", "interrupt_state"])
-        messages: list[dict[str, Any]] = copy.deepcopy(snapshot.data["messages"])
+        messages: Messages = copy.deepcopy(snapshot.data["messages"])
         _drop_synthetic_cancel(messages)
-        journal: dict[str, Any] = gen.agent.state.get(ACTIONS_KEY) or {}
+        journal: dict[str, _JournalEntry] = gen.agent.state.get(ACTIONS_KEY) or {}
         if messages and messages[-1]["role"] == "assistant":
             uses = [block["toolUse"] for block in messages[-1]["content"] if "toolUse" in block]
             if uses:
@@ -921,9 +988,7 @@ class SessionSupervisor:
         self._set_status(gen.agent, {**self._status(gen.agent), "status": "done"})
         await self._load(gen, snapshot, messages, copy.deepcopy(DEACTIVATED_INTERRUPTS))
 
-    async def _load(
-        self, gen: Generation, snapshot: Any, messages: list[dict[str, Any]], interrupts: dict[str, Any]
-    ) -> None:
+    async def _load(self, gen: Generation, snapshot: Snapshot, messages: Messages, interrupts: _InterruptState) -> None:
         snapshot.data = {"messages": messages, "interrupt_state": interrupts}
         gen.agent.load_snapshot(snapshot)
         await self._save(gen)
@@ -939,7 +1004,7 @@ class SessionSupervisor:
         """
         gen = _current(lane)
         agent = gen.agent
-        messages: list[dict[str, Any]] = copy.deepcopy(cast(Any, agent.messages))
+        messages = copy.deepcopy(agent.messages)
         before = json.dumps(messages, sort_keys=True, default=str)
         cut = 0
         for keep in (COMPACT_KEEP, 1) if attempt == 1 else (1,):
@@ -960,12 +1025,12 @@ class SessionSupervisor:
                     f"history is kept in a checkpoint):\n{summary}</system-reminder>"
                 },
             )
-        agent.messages = cast(Any, tail)
+        agent.messages = tail
         await self._save(gen)
         self._emit({"type": "notice", "kind": "compacted", "lane": lane.agent_id, "kept": len(tail)})
         return True
 
-    async def _summarize(self, agent: Agent, head: list[dict[str, Any]]) -> str:
+    async def _summarize(self, agent: Agent, head: Messages) -> str:
         summarizer = Agent(
             model=agent.aux_model,
             callback_handler=None,
@@ -1020,8 +1085,10 @@ class SessionSupervisor:
             journal = event.agent.state.get(ACTIONS_KEY) or {}
             if use["toolUseId"] not in journal:
                 return
-            result = event.result if isinstance(event.result, dict) else {}
-            status = "completed" if event.exception is None and result.get("status") == "success" else "failed"
+            result = event.result
+            status: _JournalStatus = (
+                "completed" if event.exception is None and result.get("status") == "success" else "failed"
+            )
             _journal(
                 event.agent,
                 use["toolUseId"],
@@ -1044,7 +1111,7 @@ class SessionSupervisor:
         async def progress(progress: float, total: float | None, message: str | None) -> None:
             watchdog.tool_progress()
 
-        hooks: list[tuple[Callable[..., Any], float]] = [
+        hooks: list[tuple[HookCallback[Never], float]] = [
             (before_model, HookOrder.SDK_FIRST),
             (after_model, HookOrder.SDK_FIRST),
             # After approvals (INTERVENTION_INPUT): only calls that will really run are journalled.
@@ -1063,26 +1130,26 @@ class SessionSupervisor:
 
     # -- helpers --------------------------------------------------------------------------------------------
 
-    def _lane(self, agent_id: str, tools: Sequence[Any], goal: GoalBudget | None = None) -> Lane:
+    def _lane(self, agent_id: str, tools: Sequence[AgentTool], goal: GoalBudget | None = None) -> Lane:
         lane = self._lanes.get(agent_id)
         if lane is None:
             lane = self._lanes[agent_id] = Lane(agent_id, self.settings.watchdog, tools, goal)
         return lane
 
     @staticmethod
-    def _status(agent: Agent) -> dict[str, Any]:
-        status = agent.state.get(STATUS_KEY)
+    def _status(agent: Agent) -> _LaneStatus:
+        status: _LaneStatus | None = agent.state.get(STATUS_KEY)
         return status if isinstance(status, dict) else {}
 
     @staticmethod
-    def _set_status(agent: Agent, status: dict[str, Any]) -> None:
+    def _set_status(agent: Agent, status: _LaneStatus) -> None:
         agent.state.set(STATUS_KEY, status)
 
     @staticmethod
     async def _save(gen: Generation) -> None:
         await gen.session_manager.save_snapshot(gen.agent, is_latest=True)
 
-    def _emit(self, event: dict[str, Any]) -> None:
+    def _emit(self, event: dict[str, object]) -> None:
         if self.sink is None:
             return
         try:
@@ -1090,7 +1157,7 @@ class SessionSupervisor:
         except Exception:
             logger.exception("event_type=<%s> | sink failed", event.get("type"))
 
-    def _spawn(self, coroutine: Coroutine[Any, Any, Any]) -> None:
+    def _spawn(self, coroutine: Coroutine[object, object, None]) -> None:
         task = asyncio.ensure_future(coroutine)
         self._background.add(task)
         task.add_done_callback(self._background.discard)
@@ -1113,7 +1180,7 @@ def latest_snapshot_key(session_id: str, agent_id: str) -> str:
     return f"session/{session_id}/scopes/agent/{agent_id}/snapshots/snapshot_latest.json"
 
 
-async def _consume(agent: Agent, prompt: Any, turn_id: str, limits: Limits) -> AgentResult:
+async def _consume(agent: Agent, prompt: AgentInput, turn_id: str, limits: Limits) -> AgentResult:
     result: AgentResult | None = None
     async for event in agent.stream_async(prompt, limits=limits, idempotency_token=turn_id):
         if isinstance(event, dict) and "result" in event:
@@ -1129,7 +1196,7 @@ def _current(lane: Lane) -> Generation:
     return lane.gen
 
 
-def _finished(zombie: Any) -> bool:
+def _finished(zombie: asyncio.Task[AgentResult] | tuple[Generation, asyncio.Future[None]]) -> bool:
     item = zombie[1] if isinstance(zombie, tuple) else zombie
     return bool(item.done())
 
@@ -1138,33 +1205,33 @@ def _describe(error: BaseException) -> str:
     return f"{type(error).__name__}: {str(error)[:300]}"
 
 
-def _responses(answers: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _responses(answers: Mapping[str, object]) -> list[InterruptResponseContent]:
     return [
         {"interruptResponse": {"interruptId": interrupt_id, "response": response}}
         for interrupt_id, response in answers.items()
     ]
 
 
-def _running(turn_id: str, because: str | None) -> dict[str, Any]:
-    status: dict[str, Any] = {"turn_id": turn_id, "status": "running"}
+def _running(turn_id: str, because: str | None) -> _LaneStatus:
+    status: _LaneStatus = {"turn_id": turn_id, "status": "running"}
     if because:
         status["because"] = because
     return status
 
 
-def _sheet(pending: Mapping[str, Any], because: object = None) -> dict[str, Any]:
+def _sheet(pending: _PendingApproval, because: object = None) -> dict[str, object]:
     reason = pending.get("reason")
     try:
         request = json.loads(reason) if isinstance(reason, str) else reason
     except ValueError:
         request = {"headline": reason}
-    sheet = {"id": pending.get("id"), "name": pending.get("name"), "request": request}
+    sheet: dict[str, object] = {"id": pending.get("id"), "name": pending.get("name"), "request": request}
     if isinstance(because, str) and because:
         sheet["because"] = because
     return sheet
 
 
-def _pending_from(interrupts: Mapping[str, Any]) -> list[dict[str, Any]]:
+def _pending_from(interrupts: _InterruptState) -> list[_PendingApproval]:
     return [
         {"id": interrupt_id, "name": data.get("name"), "reason": data.get("reason")}
         for interrupt_id, data in (interrupts.get("interrupts") or {}).items()
@@ -1172,7 +1239,7 @@ def _pending_from(interrupts: Mapping[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _journal(agent: Agent, tool_use_id: str, entry: dict[str, Any]) -> None:
+def _journal(agent: Agent, tool_use_id: str, entry: _JournalEntry) -> None:
     journal = dict(agent.state.get(ACTIONS_KEY) or {})
     journal.pop(tool_use_id, None)
     journal[tool_use_id] = entry
@@ -1181,12 +1248,12 @@ def _journal(agent: Agent, tool_use_id: str, entry: dict[str, Any]) -> None:
     agent.state.set(ACTIONS_KEY, journal)
 
 
-def _portable_result(tool_use_id: str, result: Mapping[str, Any]) -> dict[str, Any]:
+def _portable_result(tool_use_id: str, result: ToolResult) -> ToolResult:
     content = [block for block in result.get("content") or [] if "text" in block or "json" in block]
     return {"toolUseId": tool_use_id, "status": result.get("status", "error"), "content": content or [{"text": ""}]}
 
 
-def _recovered_result(use: Mapping[str, Any], entry: Mapping[str, Any] | None) -> dict[str, Any]:
+def _recovered_result(use: ToolUse, entry: _JournalEntry | None) -> ToolResult:
     tool_use_id = str(use["toolUseId"])
     if entry is not None and entry.get("status") in ("completed", "failed") and isinstance(entry.get("result"), dict):
         return {**entry["result"], "toolUseId": tool_use_id}
@@ -1194,7 +1261,7 @@ def _recovered_result(use: Mapping[str, Any], entry: Mapping[str, Any] | None) -
     return {"toolUseId": tool_use_id, "status": "error", "content": [{"text": text}]}
 
 
-def _drop_synthetic_cancel(messages: list[dict[str, Any]]) -> bool:
+def _drop_synthetic_cancel(messages: Messages) -> bool:
     dropped = False
     while messages and messages[-1]["role"] == "assistant" and messages[-1]["content"] == SYNTHETIC_CANCEL:
         messages.pop()
@@ -1202,7 +1269,7 @@ def _drop_synthetic_cancel(messages: list[dict[str, Any]]) -> bool:
     return dropped
 
 
-def _message_text(message: Mapping[str, Any]) -> str:
+def _message_text(message: Message) -> str:
     parts: list[str] = []
     for block in message.get("content") or []:
         if "text" in block:
@@ -1215,14 +1282,14 @@ def _message_text(message: Mapping[str, Any]) -> str:
 def _mcp_broken(event: AfterToolCallEvent) -> bool:
     if isinstance(event.exception, MCPClientInitializationError):
         return True
-    result = event.result if isinstance(event.result, dict) else {}
+    result = event.result
     if result.get("status") != "error":
         return False
     text = " ".join(str(block.get("text", "")) for block in result.get("content") or [])
     return bool(_MCP_BROKEN.search(text))
 
 
-def _tail_start(messages: Sequence[Mapping[str, Any]], keep: int) -> int:
+def _tail_start(messages: Messages, keep: int) -> int:
     """Index where the kept tail begins: a user message with no tool results, so tool pairs stay intact."""
     clean = [
         i
@@ -1235,7 +1302,7 @@ def _tail_start(messages: Sequence[Mapping[str, Any]], keep: int) -> int:
     return recent[0] if recent else clean[-1]
 
 
-def _shrink(message: dict[str, Any], limit: int = 8000) -> dict[str, Any]:
+def _shrink(message: Message, limit: int = 8000) -> Message:
     for block in message["content"]:
         if "text" in block and len(block["text"]) > limit * 2:
             block["text"] = block["text"][: limit * 2] + "\n[truncated]"
@@ -1247,7 +1314,7 @@ def _shrink(message: dict[str, Any], limit: int = 8000) -> dict[str, Any]:
     return message
 
 
-def _render(messages: Sequence[Mapping[str, Any]], limit: int = 100_000) -> str:
+def _render(messages: Messages, limit: int = 100_000) -> str:
     lines: list[str] = []
     for message in messages:
         for block in message["content"]:
@@ -1259,5 +1326,5 @@ def _render(messages: Sequence[Mapping[str, Any]], limit: int = 100_000) -> str:
                 text = " ".join(str(p.get("text", "")) for p in block["toolResult"].get("content") or [])
                 lines.append(f"tool result ({block['toolResult'].get('status')}): {text[:500]}")
             elif "citationsContent" in block:
-                lines.append(f"assistant: {_message_text({'content': [block]})[:2000]}")
+                lines.append(f"assistant: {_message_text({'role': message['role'], 'content': [block]})[:2000]}")
     return "\n".join(lines)[-limit:]

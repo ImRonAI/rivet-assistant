@@ -28,14 +28,15 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from email import message_from_bytes
 from email.errors import HeaderParseError
-from email.header import decode_header
+from email.header import Header, decode_header
 from email.message import EmailMessage, Message
 from email.policy import SMTP as SMTP_POLICY
 from email.utils import formataddr, formatdate, getaddresses, make_msgid, parsedate_to_datetime
 from html.parser import HTMLParser
-from typing import Any
+from typing import override
 
 from strands.tools import PythonAgentTool
+from strands.types.tools import ToolResult, ToolSpec, ToolUse
 
 from .alerts import alert_for
 from .approvals import Tier, ToolPolicy
@@ -232,7 +233,9 @@ class Mailbox:
                 smtp.quit()
             smtp.close()
 
-    def search(self, query: str, folder: str, unread_only: bool, since_days: int | None, limit: int) -> dict[str, Any]:
+    def search(
+        self, query: str, folder: str, unread_only: bool, since_days: int | None, limit: int
+    ) -> dict[str, object]:
         """Messages matching ``query`` in ``folder``, newest first, with a snippet each."""
         since = date.today() - timedelta(days=since_days) if since_days else None
         criteria = search_criteria(query, unread_only=unread_only, since=since)
@@ -247,7 +250,7 @@ class Mailbox:
         messages = [_summary(uid, fetched[uid]) for uid in newest if uid in fetched]
         return {"folder": folder, "matched": len(uids), "messages": messages}
 
-    def read(self, uid: int, folder: str) -> dict[str, Any]:
+    def read(self, uid: int, folder: str) -> dict[str, object]:
         """One message's headers, text body and attachment list."""
         with self._imap(utf8=not folder.isascii()) as conn:
             _open(conn, folder, writable=False)
@@ -258,7 +261,7 @@ class Mailbox:
         message = message_from_bytes(raw)
         text, attachments = _content(message)
         body, truncated = _truncate(text, BODY_CHARS)
-        result: dict[str, Any] = {
+        result: dict[str, object] = {
             "uid": uid,
             "folder": folder,
             "from": _decoded(message.get("From")),
@@ -295,7 +298,7 @@ class Mailbox:
         *,
         in_reply_to: str = "",
         references: str = "",
-    ) -> EmailMessage:
+    ) -> EmailMessage[str, str]:
         """A plain-text message from the account's address."""
         message = EmailMessage()
         message["From"] = self.account.address
@@ -312,8 +315,8 @@ class Mailbox:
         return message
 
     def reply_message(
-        self, original: Message, to: Any, body: str, *, reply_all: bool
-    ) -> tuple[EmailMessage, list[str]]:
+        self, original: Message, to: object, body: str, *, reply_all: bool
+    ) -> tuple[EmailMessage[str, str], list[str]]:
         """A reply threaded under ``original``, and its recipients.
 
         ``to`` must name only addresses replies to ``original`` go to (its Reply-To, else its From), so a mixed-up
@@ -343,22 +346,22 @@ class Mailbox:
         message = self.new_message(chosen, cc, subject, body, in_reply_to=parent, references=references)
         return message, [address for _, address in [*chosen, *cc]]
 
-    def deliver(self, message: EmailMessage, to: Sequence[str]) -> list[str]:
+    def deliver(self, message: EmailMessage[str, str], to: Sequence[str]) -> list[str]:
         """Hand ``message`` to the SMTP server; returns any recipients it refused (it raises if it refused all)."""
         with self._smtp() as smtp:
             refused = smtp.send_message(message, from_addr=self.account.address, to_addrs=list(to))
         return sorted(refused)
 
-    def save_sent(self, message: EmailMessage) -> str | None:
+    def save_sent(self, message: EmailMessage[str, str]) -> str | None:
         """File ``message`` in the folder the server marks ``\\Sent``; returns that folder, or None without one."""
         with self._imap() as conn:
             folder = _special_folder(conn, "\\sent")
             if folder is None:
                 return None
-            result: Any = conn.append(_quote(folder), "(\\Seen)", time.time(), message.as_bytes(policy=SMTP_POLICY))
+            result = conn.append(_quote(folder), "(\\Seen)", time.time(), message.as_bytes(policy=SMTP_POLICY))
         return folder if result[0] == "OK" else None
 
-    def mark(self, uid: int, action: str, folder: str) -> dict[str, Any]:
+    def mark(self, uid: int, action: str, folder: str) -> dict[str, object]:
         """Mark ``uid`` read or unread, or move it to the archive folder."""
         with self._imap(utf8=not folder.isascii()) as conn:
             _open(conn, folder, writable=True)
@@ -414,12 +417,12 @@ def _open(conn: imaplib.IMAP4, folder: str, *, writable: bool) -> None:
         raise EmailError(f"There is no folder named {folder!r}.")
 
 
-def _ok(response: tuple[str, Any], what: str) -> None:
+def _ok(response: tuple[str, object], what: str) -> None:
     if response[0] != "OK":
         raise EmailError(f"The mail server would not {what}.")
 
 
-def _fetch(conn: imaplib.IMAP4, uids: str, items: str) -> dict[int, dict[str, Any]]:
+def _fetch(conn: imaplib.IMAP4, uids: str, items: str) -> dict[int, dict[str, object]]:
     typ, data = conn.uid("FETCH", uids, items)
     if typ != "OK":
         raise EmailError("The mail server could not fetch that email.")
@@ -464,11 +467,13 @@ _CLOSE = object()
 _TOKEN = re.compile(rb'(\()|(\))|"((?:[^"\\]|\\.)*)"|((?:[^\s()"\[\]]|\[[^\]]*\])+)')
 _LITERAL_MARK = re.compile(rb"\{\d+\}$")
 _PARTIAL = re.compile(r"<\d+>$")
+_Datum = bytes | tuple[bytes, bytes]
+"""One item of imaplib's untagged data: a line, or a literal with the line that announced it."""
 
 
-def _responses(data: Sequence[Any]) -> Iterator[list[Any]]:
+def _responses(data: Sequence[_Datum | None]) -> Iterator[list[_Datum]]:
     """imaplib's untagged data, one entry per response: a literal and the rest of its line stay together."""
-    response: list[Any] = []
+    response: list[_Datum] = []
     continues = False
     for item in data or ():
         if item is None:
@@ -482,8 +487,8 @@ def _responses(data: Sequence[Any]) -> Iterator[list[Any]]:
         yield response
 
 
-def _tokens(response: Sequence[Any]) -> list[Any]:
-    tokens: list[Any] = []
+def _tokens(response: Sequence[_Datum]) -> list[object]:
+    tokens: list[object] = []
     for item in response:
         text, literal = (item[0], item[1]) if isinstance(item, tuple) else (item, None)
         if literal is not None:
@@ -512,12 +517,12 @@ def _tokens(response: Sequence[Any]) -> list[Any]:
     return tokens
 
 
-def _tree(tokens: Sequence[Any]) -> list[Any]:
-    root: list[Any] = []
+def _tree(tokens: Sequence[object]) -> list[object]:
+    root: list[object] = []
     stack = [root]
     for token in tokens:
         if token is _OPEN:
-            child: list[Any] = []
+            child: list[object] = []
             stack[-1].append(child)
             stack.append(child)
         elif token is _CLOSE:
@@ -528,9 +533,9 @@ def _tree(tokens: Sequence[Any]) -> list[Any]:
     return root
 
 
-def _fetched(data: Sequence[Any]) -> dict[int, dict[str, Any]]:
+def _fetched(data: Sequence[_Datum | None]) -> dict[int, dict[str, object]]:
     """``{uid: {item: value}}`` from imaplib's ``UID FETCH`` data (items named as the server sent them)."""
-    messages: dict[int, dict[str, Any]] = {}
+    messages: dict[int, dict[str, object]] = {}
     for response in _responses(data):
         values = _tree(_tokens(response))
         attributes = values[1] if len(values) >= 2 and isinstance(values[1], list) else []
@@ -545,7 +550,7 @@ def _fetched(data: Sequence[Any]) -> dict[int, dict[str, Any]]:
     return messages
 
 
-def _section(items: Mapping[str, Any], prefix: str) -> bytes:
+def _section(items: Mapping[str, object], prefix: str) -> bytes:
     """A fetched body section (``BODY[]``, ``BODY[TEXT]``, ``BODY[HEADER``...), partial or whole."""
     for key, value in items.items():
         if _PARTIAL.sub("", key).startswith(prefix) and isinstance(value, bytes):
@@ -553,7 +558,7 @@ def _section(items: Mapping[str, Any], prefix: str) -> bytes:
     return b""
 
 
-def _seen(items: Mapping[str, Any]) -> bool:
+def _seen(items: Mapping[str, object]) -> bool:
     flags = items.get("FLAGS")
     return isinstance(flags, list) and any(isinstance(f, bytes) and f.lower() == b"\\seen" for f in flags)
 
@@ -561,7 +566,7 @@ def _seen(items: Mapping[str, Any]) -> bool:
 # -- Message content -----------------------------------------------------------------------------------------
 
 
-def _decoded(value: Any) -> str:
+def _decoded(value: str | Header | None) -> str:
     """A header as readable text: RFC 2047 words decoded, raw 8-bit read as UTF-8, whitespace collapsed."""
     if value is None:
         return ""
@@ -581,13 +586,13 @@ def _decoded(value: Any) -> str:
     return " ".join("".join(parts).split())
 
 
-def _pairs(values: Sequence[Any]) -> list[tuple[str, str]]:
+def _pairs(values: Sequence[str | Header]) -> list[tuple[str, str]]:
     """``(name, address)`` for each address in these header values."""
     texts = [value if isinstance(value, str) else _decoded(value) for value in values]
     return [(_decoded(name), address) for name, address in getaddresses(texts) if _ADDRESS.fullmatch(address)]
 
 
-def _recipients(field_name: str, value: Any, *, required: bool) -> list[tuple[str, str]]:
+def _recipients(field_name: str, value: object, *, required: bool) -> list[tuple[str, str]]:
     """``(name, address)`` pairs from a comma-separated input field; raises EmailError on anything else."""
     text = str(value or "").strip()
     if not text:
@@ -610,7 +615,7 @@ def _date(message: Message) -> str:
         return _decoded(raw)
 
 
-def _summary(uid: int, items: Mapping[str, Any]) -> dict[str, Any]:
+def _summary(uid: int, items: Mapping[str, object]) -> dict[str, object]:
     header = _section(items, "BODY[HEADER").rstrip(b"\r\n")
     message = message_from_bytes(header + b"\r\n\r\n" + _section(items, "BODY[TEXT]"))
     text, _ = _content(message)
@@ -626,7 +631,7 @@ def _summary(uid: int, items: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _content(message: Message) -> tuple[str, list[dict[str, Any]]]:
+def _content(message: Message) -> tuple[str, list[dict[str, object]]]:
     """The message's text (its HTML as text when it has no plain part) and its attachments by name and size."""
     plain: str | None = None
     html: str | None = None
@@ -684,6 +689,7 @@ class _HtmlText(HTMLParser):
         self.hidden = 0
         self.links: list[tuple[str, int]] = []
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in self._HIDDEN:
             self.hidden += 1
@@ -698,6 +704,7 @@ class _HtmlText(HTMLParser):
         elif tag == "img" and not self.hidden:
             self.parts.append(dict(attrs).get("alt") or "")
 
+    @override
     def handle_endtag(self, tag: str) -> None:
         if tag in self._HIDDEN:
             self.hidden = max(0, self.hidden - 1)
@@ -710,6 +717,7 @@ class _HtmlText(HTMLParser):
             if href.startswith(("http://", "https://", "mailto:")) and target not in label:
                 self.parts.append(f" ({target})")
 
+    @override
     def handle_data(self, data: str) -> None:
         if not self.hidden:
             self.parts.append(data)
@@ -726,15 +734,15 @@ def html_to_text(html: str) -> str:
 # -- Tools ---------------------------------------------------------------------------------------------------
 
 
-def _str(description: str) -> dict[str, Any]:
+def _str(description: str) -> dict[str, object]:
     return {"type": "string", "description": description}
 
 
-def _int(description: str) -> dict[str, Any]:
+def _int(description: str) -> dict[str, object]:
     return {"type": "integer", "description": description}
 
 
-def _bool(description: str) -> dict[str, Any]:
+def _bool(description: str) -> dict[str, object]:
     return {"type": "boolean", "description": description}
 
 
@@ -793,12 +801,12 @@ class EmailToolSpec:
 
     name: str
     description: str
-    properties: Mapping[str, Any]
+    properties: Mapping[str, Mapping[str, object]]
     required: tuple[str, ...]
     policy: ToolPolicy
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> dict[str, object]:
         """JSON schema for the tool input."""
         return {"type": "object", "properties": dict(self.properties), "required": list(self.required)}
 
@@ -878,31 +886,31 @@ delete one, offer to archive it.
  - Use `email_draft` instead when the user wants to finish an email on the phone themselves."""
 
 
-def _result(tool_use_id: str, ok: bool, data: Any) -> dict[str, Any]:
+def _result(tool_use_id: str, ok: bool, data: object) -> ToolResult:
     text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
     return {"toolUseId": tool_use_id, "status": "success" if ok else "error", "content": [{"text": text}]}
 
 
-async def _blocking(seconds: float, function: Callable[..., Any], *args: Any) -> Any:
+async def _blocking[*Ts, R](seconds: float, function: Callable[[*Ts], R], *args: *Ts) -> R:
     return await asyncio.wait_for(asyncio.to_thread(function, *args), seconds)
 
 
-def _uid(data: Mapping[str, Any]) -> int:
+def _uid(data: Mapping[str, object]) -> int:
     value = data.get("uid")
     if isinstance(value, bool) or not str(value).isdigit():
         raise EmailError("`uid` must be an email's uid from email_search.")
     return int(str(value))
 
 
-def _folder(data: Mapping[str, Any]) -> str:
+def _folder(data: Mapping[str, object]) -> str:
     folder = str(data.get("folder") or "INBOX").strip()
     if _CONTROL.search(folder):
         raise EmailError("`folder` must be a folder name.")
     return folder
 
 
-def _count(value: Any, default: int | None, ceiling: int) -> int | None:
-    if value is None or isinstance(value, bool):
+def _count(value: object, default: int | None, ceiling: int) -> int | None:
+    if value is None or isinstance(value, bool) or not isinstance(value, int | float | str):
         return default
     try:
         number = int(value)
@@ -911,14 +919,14 @@ def _count(value: Any, default: int | None, ceiling: int) -> int | None:
     return max(1, min(number, ceiling)) if number > 0 else default
 
 
-def _text(data: Mapping[str, Any], name: str) -> str:
+def _text(data: Mapping[str, object], name: str) -> str:
     value = data.get(name)
     if not isinstance(value, str) or not value.strip():
         raise EmailError(f"`{name}` is required.")
     return value
 
 
-async def _send(mailbox: Mailbox, message: EmailMessage, to: Sequence[str]) -> dict[str, Any]:
+async def _send(mailbox: Mailbox, message: EmailMessage[str, str], to: Sequence[str]) -> dict[str, object]:
     """Deliver, then file a copy in Sent; a missing copy never turns a delivered email into a failure."""
     try:
         refused = await _blocking(SEND_TIMEOUT, mailbox.deliver, message, to)
@@ -931,7 +939,7 @@ async def _send(mailbox: Mailbox, message: EmailMessage, to: Sequence[str]) -> d
             "error=<%s> | sent email was not filed in Sent", mailbox.scrub(f"{type(error).__name__}: {error}")
         )
         saved = None
-    outcome: dict[str, Any] = {
+    outcome: dict[str, object] = {
         "sent": True,
         "to": str(message["To"]),
         "cc": str(message["Cc"] or ""),
@@ -948,29 +956,29 @@ def tools_for(mailbox: Mailbox | None) -> list[PythonAgentTool]:
     if mailbox is None:
         return []
 
-    async def search(data: Mapping[str, Any]) -> Any:
+    async def search(data: Mapping[str, object]) -> dict[str, object]:
         query = str(data.get("query") or "")[:500]
         since_days = _count(data.get("since_days"), None, 3650)
         limit = _count(data.get("limit"), 20, SEARCH_LIMIT) or 20
         unread_only = data.get("unread_only") is True
         return await _blocking(READ_TIMEOUT, mailbox.search, query, _folder(data), unread_only, since_days, limit)
 
-    async def read(data: Mapping[str, Any]) -> Any:
+    async def read(data: Mapping[str, object]) -> dict[str, object]:
         return await _blocking(READ_TIMEOUT, mailbox.read, _uid(data), _folder(data))
 
-    async def send(data: Mapping[str, Any]) -> Any:
+    async def send(data: Mapping[str, object]) -> dict[str, object]:
         to = _recipients("to", data.get("to"), required=True)
         cc = _recipients("cc", data.get("cc"), required=False)
         message = mailbox.new_message(to, cc, _text(data, "subject"), _text(data, "body"))
         return await _send(mailbox, message, [address for _, address in [*to, *cc]])
 
-    async def reply(data: Mapping[str, Any]) -> Any:
+    async def reply(data: Mapping[str, object]) -> dict[str, object]:
         body = _text(data, "body")
         original = await _blocking(READ_TIMEOUT, mailbox.original, _uid(data), _folder(data))
         message, to = mailbox.reply_message(original, data.get("to"), body, reply_all=data.get("reply_all") is True)
         return await _send(mailbox, message, to)
 
-    async def mark(data: Mapping[str, Any]) -> Any:
+    async def mark(data: Mapping[str, object]) -> dict[str, object]:
         action = str(data.get("action") or "")
         if action not in MARK_ACTIONS:
             raise EmailError("`action` must be read, unread or archive.")
@@ -987,9 +995,9 @@ def tools_for(mailbox: Mailbox | None) -> list[PythonAgentTool]:
 
 
 def _tool(
-    mailbox: Mailbox, spec: EmailToolSpec, handler: Callable[[Mapping[str, Any]], Awaitable[Any]]
+    mailbox: Mailbox, spec: EmailToolSpec, handler: Callable[[Mapping[str, object]], Awaitable[dict[str, object]]]
 ) -> PythonAgentTool:
-    async def run(tool_use: Any, **_: Any) -> Any:
+    async def run(tool_use: ToolUse, **_: object) -> ToolResult:
         tool_use_id = tool_use["toolUseId"]
         data = tool_use.get("input")
         try:
@@ -1003,5 +1011,9 @@ def _tool(
             logger.warning("tool=<%s>, error=<%s> | email call failed", spec.name, text)
             return _result(tool_use_id, False, f"The mail server call failed: {text}")
 
-    tool_spec = {"name": spec.name, "description": spec.description, "inputSchema": {"json": spec.input_schema}}
-    return PythonAgentTool(spec.name, tool_spec, run)  # type: ignore[arg-type]
+    tool_spec: ToolSpec = {
+        "name": spec.name,
+        "description": spec.description,
+        "inputSchema": {"json": spec.input_schema},
+    }
+    return PythonAgentTool(spec.name, tool_spec, run)

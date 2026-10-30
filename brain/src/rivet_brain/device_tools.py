@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from strands.tools import PythonAgentTool
 
@@ -27,22 +26,22 @@ class DeviceToolSpec:
 
     name: str
     description: str
-    properties: Mapping[str, Any]
+    properties: Mapping[str, Mapping[str, object]]
     required: tuple[str, ...]
     policy: ToolPolicy
     timeout: float = 60.0
 
     @property
-    def input_schema(self) -> dict[str, Any]:
+    def input_schema(self) -> dict[str, object]:
         """JSON schema for the tool input."""
         return {"type": "object", "properties": dict(self.properties), "required": list(self.required)}
 
 
-def _str(description: str) -> dict[str, Any]:
+def _str(description: str) -> dict[str, object]:
     return {"type": "string", "description": description}
 
 
-def _int(description: str) -> dict[str, Any]:
+def _int(description: str) -> dict[str, object]:
     return {"type": "integer", "description": description}
 
 
@@ -115,7 +114,7 @@ def _mentions(label: str, words: Sequence[str]) -> bool:
     return any(re.search(rf"(?<![a-z]){re.escape(word)}(?![a-z])", label) for word in words)
 
 
-def screen_act_tier(tool_input: Any) -> tuple[Tier, str]:
+def screen_act_tier(tool_input: object) -> tuple[Tier, str]:
     """Approval tier for one app-operator action, from its verified label.
 
     Navigation and typing run freely (typing commits nothing by itself); a tap asks when its label reads like a
@@ -333,9 +332,6 @@ def instructions(*, mailbox: bool = False) -> str:
  - Apps: `app_open`, then `screen_read` and `screen_act` one step at a time, reading the screen after each \
 action. Stop and ask the user when you reach a login, a payment, or anything you are unsure of.
  - A tool error saying a permission is missing means the user must grant it in Rivet's Settings; tell them which."""
-
-
-INSTRUCTIONS = instructions()
 
 
 def tools_for(bridge: DeviceBridge) -> list[PythonAgentTool]:

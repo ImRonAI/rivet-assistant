@@ -24,7 +24,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass, field
-from typing import ClassVar, Literal, TypeVar
+from typing import ClassVar, Literal, TypeVar, override
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -118,6 +118,7 @@ class SearchBusy(SearchError):
         super().__init__("Search is busy. Try again in a moment.")
         self.retry_after = retry_after
 
+    @override
     def body(self) -> dict[str, object]:
         return {"error": self.message, "retry_after": self.retry_after}
 
@@ -129,6 +130,7 @@ class SearchRejected(SearchError):
         super().__init__("Brave Search didn't answer properly.")
         self.upstream = upstream
 
+    @override
     def body(self) -> dict[str, object]:
         return {"error": self.message, "upstream": self.upstream}
 

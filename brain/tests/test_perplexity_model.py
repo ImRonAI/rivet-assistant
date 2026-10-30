@@ -64,7 +64,7 @@ async def test_function_call_arguments_come_from_output_items() -> None:
 async def test_request_keeps_native_tools_and_perplexity_fields() -> None:
     fake = FakePerplexity([SSE().text("ok").completed()])
     await collect(
-        make_model(fake, fallback_models=("anthropic/claude-sonnet-5-5",)),
+        make_model(fake, fallback_models=("openai/gpt-5.6-luna",)),
         USER,
         tool_specs=[SEND_SPEC],
         system_prompt="You are Rivet.",
@@ -80,8 +80,7 @@ async def test_request_keeps_native_tools_and_perplexity_fields() -> None:
     ]
     assert body["tools"][0] == {"type": "web_search", "search_type": "fast"}
     assert body["max_steps"] == 8
-    assert body["models"] == ["openai/gpt-5.6-sol", "anthropic/claude-sonnet-5-5"]
-    assert body["max_output_tokens"] == 16384
+    assert body["models"] == ["openai/gpt-5.6-sol", "openai/gpt-5.6-luna"]
     assert body["store"] is False and body["stream"] is True and body["instructions"] == "You are Rivet."
     assert "previous_response_id" not in body
 

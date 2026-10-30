@@ -64,7 +64,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Seque
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal, TypedDict, override
 
 import httpx
 from starlette.applications import Starlette
@@ -73,6 +73,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from strands.storage import LocalFileStorage, Storage
+from strands.types.tools import AgentTool
 
 from . import calls, device_tools, email_tools, search_tools
 from .alerts import task_reason
@@ -90,12 +91,12 @@ from .calls import (
     clean_summary,
 )
 from .config import PROVIDERS, BrainSettings, Provider, available_providers, default_provider
-from .device import DeviceBridge
+from .device import DeviceBridge, DeviceResult
 from .factory import Wiring, build_agent, build_telnyx_client
 from .live_calls import POLL_SECONDS, LiveCalls, TelnyxRunner
 from .rules import RuleRefusedError, StandingRules, admit, apply_answers
 from .search import KINDS, BraveSearch, SearchError, SearchKeys, SearchQuery, query_text, suggest_count
-from .supervisor import BuildFn, NoPendingApprovalError, SessionLockedError, SessionSupervisor
+from .supervisor import BuildFn, NoPendingApprovalError, SessionLockedError, SessionSupervisor, TurnOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,32 @@ MODEL_LABELS: dict[Provider, str] = {"perplexity": "Perplexity", "groq": "Groq"}
 MODEL_BUSY = "Rivet is busy. Change the model when it finishes."
 EMPTY_TURN = "Rivet had nothing to work with. Type a message, or add results with secure (https) links."
 
-ToolsFor = Callable[[DeviceBridge], Sequence[Any]]
+ToolsFor = Callable[[DeviceBridge], Sequence[AgentTool]]
+
+
+class PhoneMessage(TypedDict, total=False):
+    """A message from the phone (see the protocol above), with its fields as the phone sends them."""
+
+    type: object
+    action_id: object
+    result: DeviceResult
+    call_id: object
+    to: object
+    text: object
+    attachments: object
+    turn_id: str
+    answers: dict[str, object]
+    lane: object
+    goal: str
+    task_id: str
+    max_attempts: int
+    timeout: float
+    reason: object
+    decision: object
+    tool: object
+    scope: object
+    key: object
+    model: object
 
 
 class ModelChoice:
@@ -163,7 +189,7 @@ class ModelChoice:
         await self._backend.write(self.key, json.dumps({"model": provider}).encode())
         self.current = provider
 
-    def event(self) -> dict[str, Any]:
+    def event(self) -> dict[str, object]:
         return {"type": "model", "model": self.current, "available": list(self.available)}
 
 
@@ -185,11 +211,11 @@ class _Session:
         self.make_supervisor = supervisor_factory
         self.bridge = DeviceBridge(session_id)
         self.socket: WebSocket | None = None
-        self.buffer: deque[dict[str, Any]] = deque(maxlen=BUFFER_LIMIT)
-        self.queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        self.buffer: deque[dict[str, object]] = deque(maxlen=BUFFER_LIMIT)
+        self.queue: asyncio.Queue[dict[str, object]] = asyncio.Queue()
         self.send_lock = asyncio.Lock()
-        self.tasks: set[asyncio.Task[Any]] = set()
-        self.work: set[asyncio.Task[Any]] = set()
+        self.tasks: set[asyncio.Task[None]] = set()
+        self.work: set[asyncio.Task[None]] = set()
         self.turn_ids: deque[str] = deque(maxlen=TURN_MEMORY)
         self.calls = LiveCalls(self.emit, self.spawn, telnyx=telnyx, poll=call_poll)
         self.supervisor = supervisor_factory(self, models.current)
@@ -200,7 +226,7 @@ class _Session:
         self.started = self.spawn(self._start())
         self.writer = self.spawn(self._write())
 
-    def emit(self, event: dict[str, Any]) -> None:
+    def emit(self, event: dict[str, object]) -> None:
         """Supervisor sink: queue the event for ordered delivery."""
         self.queue.put_nowait(event)
 
@@ -221,7 +247,7 @@ class _Session:
             self.socket = None
             self.bridge.detach(self.send_device)
 
-    async def send_device(self, message: dict[str, Any]) -> None:
+    async def send_device(self, message: dict[str, object]) -> None:
         """Send a device call now (it has a deadline); fails if the phone is gone."""
         socket = self.socket
         if socket is None:
@@ -229,7 +255,7 @@ class _Session:
         async with self.send_lock:
             await socket.send_json(message)
 
-    async def handle(self, message: dict[str, Any]) -> None:
+    async def handle(self, message: PhoneMessage) -> None:
         """Dispatch one phone message."""
         kind = message.get("type")
         if kind == "ping":
@@ -396,19 +422,19 @@ class _Session:
             self.failed = str(error)
             self.emit({"type": "error", "error": self.failed})
 
-    def spawn(self, coroutine: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
+    def spawn(self, coroutine: Coroutine[object, object, None]) -> asyncio.Task[None]:
         task = asyncio.ensure_future(coroutine)
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
         return task
 
-    def _run(self, coroutine: Coroutine[Any, Any, Any]) -> None:
+    def _run(self, coroutine: Coroutine[object, object, None]) -> None:
         """Spawn supervisor work; while any runs, the model can't change."""
         task = self.spawn(coroutine)
         self.work.add(task)
         task.add_done_callback(self.work.discard)
 
-    async def _guard(self, coroutine: Coroutine[Any, Any, Any], turn_id: Any) -> None:
+    async def _guard(self, coroutine: Coroutine[object, object, TurnOutcome], turn_id: object) -> None:
         try:
             await coroutine
         except NoPendingApprovalError as error:
@@ -560,7 +586,7 @@ def create_app(
         await session.attach(socket)
         try:
             while True:
-                message = await socket.receive_json()
+                message: PhoneMessage | list[object] | str | int | float | bool | None = await socket.receive_json()
                 if isinstance(message, dict):
                     await session.handle(message)
         except WebSocketDisconnect:
@@ -696,6 +722,7 @@ def _private(body: dict[str, object], status: int = 200) -> JSONResponse:
 class _NoQueryStrings(logging.Filter):
     """Cuts the query string from uvicorn's access lines (``client, method, path, version, status``)."""
 
+    @override
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple) and len(record.args) == 5:
             client, method, path, version, status = record.args
@@ -739,7 +766,7 @@ def main() -> None:
     telnyx = TelnyxRunner(lambda: build_telnyx_client(settings, Wiring())) if line else None
     search = BraveSearch(SearchKeys.from_env())
 
-    def tools_for(bridge: DeviceBridge) -> list[Any]:
+    def tools_for(bridge: DeviceBridge) -> list[AgentTool]:
         return [
             *device_tools.tools_for(bridge),
             *calls.tools_for(bridge, bridge.session_id, line, inbox),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Generator
+from typing import override
 
 import httpx
 
@@ -25,6 +26,7 @@ class HorizonBearer(httpx.Auth):
     def __init__(self, env_var: str = "HORIZON_API_KEY") -> None:
         self.env_var = env_var
 
+    @override
     def __repr__(self) -> str:
         return f"HorizonBearer(env_var={self.env_var!r})"
 
@@ -35,6 +37,7 @@ class HorizonBearer(httpx.Auth):
             raise MissingCredentialError(f"{self.env_var} is not set; the Telnyx MCP server requires it")
         return value
 
+    @override
     def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
         """Attach the bearer to the request."""
         request.headers["Authorization"] = f"Bearer {self.token()}"

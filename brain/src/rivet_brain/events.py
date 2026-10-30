@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
 
 from .search import KINDS
 
 logger = logging.getLogger(__name__)
 
-UiSink = Callable[[dict[str, Any]], None]
+UiSink = Callable[[dict[str, object]], None]
 
 # Perplexity server-side tool output; its text reaches the model inside Perplexity's own loop.
 _NATIVE_SOURCE_KINDS = frozenset({"search_results", "people_search_results", "fetch_url_results"})
@@ -46,7 +45,7 @@ class RivetEventBridge:
         self.on_untrusted = on_untrusted
         self._announced_tools: dict[str, str] = {}
 
-    def __call__(self, **kwargs: Any) -> None:
+    def __call__(self, **kwargs: object) -> None:
         """Callback-handler entry point."""
         label, event = self._translate(kwargs)
         if self.on_activity is not None:
@@ -58,7 +57,7 @@ class RivetEventBridge:
             for search in self._search_results(kwargs["message"]):
                 self._send(search)
 
-    def _send(self, event: dict[str, Any]) -> None:
+    def _send(self, event: dict[str, object]) -> None:
         if self.sink is None:
             return
         try:
@@ -66,7 +65,7 @@ class RivetEventBridge:
         except Exception:
             logger.exception("event_type=<%s> | ui sink failed", event.get("type"))
 
-    def _translate(self, kwargs: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    def _translate(self, kwargs: dict[str, object]) -> tuple[str, dict[str, object] | None]:
         if "data" in kwargs:
             return "text", {"type": "text", "delta": kwargs["data"]}
         if "reasoningText" in kwargs:
@@ -85,24 +84,27 @@ class RivetEventBridge:
             return next(iter(chunk), "chunk"), None
         return "event", None
 
-    def _tool_started(self, tool_use: Any) -> dict[str, Any] | None:
-        tool_id = tool_use.get("toolUseId") if isinstance(tool_use, dict) else None
+    def _tool_started(self, tool_use: object) -> dict[str, object] | None:
+        if not isinstance(tool_use, dict):
+            return None
+        tool_id = tool_use.get("toolUseId")
         if not tool_id or tool_id in self._announced_tools:
             return None
         self._announced_tools[tool_id] = str(tool_use.get("name") or "")
         return {"type": "tool", "id": tool_id, "name": tool_use.get("name")}
 
     @staticmethod
-    def _tools_finished(message: Any) -> dict[str, Any] | None:
+    def _tools_finished(message: object) -> dict[str, object] | None:
         content = message.get("content") if isinstance(message, dict) else None
         results = [block["toolResult"] for block in content or [] if isinstance(block, dict) and "toolResult" in block]
         if not results:
             return None
         return {"type": "tool_done", "tools": [{"id": r.get("toolUseId"), "status": r.get("status")} for r in results]}
 
-    def _search_results(self, message: dict[str, Any]) -> list[dict[str, Any]]:
-        events = []
-        for block in message.get("content") or []:
+    def _search_results(self, message: object) -> list[dict[str, object]]:
+        events: list[dict[str, object]] = []
+        blocks = message.get("content") if isinstance(message, dict) else None
+        for block in blocks or []:
             result = block.get("toolResult") if isinstance(block, dict) else None
             if not isinstance(result, dict) or result.get("status") != "success":
                 continue
@@ -115,7 +117,7 @@ class RivetEventBridge:
                 events.append({"type": "search.results", "tool_id": tool_id, "results": envelope})
         return events
 
-    def _rivet(self, payload: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
+    def _rivet(self, payload: dict[str, object]) -> tuple[str, dict[str, object] | None]:
         kind = str(payload.get("type", "activity"))
         if kind in _UNTRUSTED_KINDS and self.on_untrusted is not None:
             self.on_untrusted()
