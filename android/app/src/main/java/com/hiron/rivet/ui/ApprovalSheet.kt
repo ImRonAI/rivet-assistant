@@ -145,7 +145,7 @@ fun ApprovalSheet(
             Spacer(Modifier.height(20.dp))
             val single = batch.singleOrNull()
             val ticked = single != null && standing[single.id] == true && single.offer != null
-            val alwaysAllow = ticked && single?.offer?.allow == true
+            val alwaysAllow = ticked && single.offer.allow
             val unlock = single != null && (single.high || alwaysAllow)
             val approveText = when {
                 single == null -> "Send answers"

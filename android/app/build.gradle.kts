@@ -64,6 +64,10 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        allWarningsAsErrors.set(true)
+        extraWarnings.set(true)
+        progressiveMode.set(true)
+        freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
 

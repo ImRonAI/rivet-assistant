@@ -260,7 +260,7 @@ private fun Toggle(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modi
                 if (interactive) {
                     Modifier.minimumInteractiveComponentSize().toggleable(checked, enabled = enabled, role = Role.Switch) {
                         haptics.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
-                        onCheckedChange?.invoke(it)
+                        onCheckedChange(it)
                     }
                 } else {
                     Modifier

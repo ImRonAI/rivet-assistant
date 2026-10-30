@@ -29,7 +29,7 @@ class LiveBrainTest {
         val session = "app-check-" + System.currentTimeMillis()
         client.connect(GatewayConfig(BuildConfig.DEFAULT_BRAIN_URL, BuildConfig.DEFAULT_DEVICE_TOKEN, session))
         try {
-            while (connections.poll(30, TimeUnit.SECONDS) != Connection.Online) Unit
+            while (connections.poll(30, TimeUnit.SECONDS) != Connection.Online) {}
             var state = RivetStore.userSent(RivetState(connection = Connection.Online), "t-check", "ping")
             client.send(Protocol.turn("Reply with exactly these words: Rivet is online.", "t-check"))
             val seen = mutableListOf<String>()

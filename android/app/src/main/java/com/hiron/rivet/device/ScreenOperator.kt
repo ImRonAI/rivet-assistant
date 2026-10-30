@@ -15,6 +15,7 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.TextView
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import com.hiron.rivet.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -213,7 +214,7 @@ class ScreenOperator : AccessibilityService() {
                             if (node.isClickable) put("tap", true)
                             if (node.isEditable) put("edit", true)
                             if (node.isScrollable) put("scroll", true)
-                            if (node.isChecked) put("checked", true)
+                            if (AccessibilityNodeInfoCompat.wrap(node).checked == AccessibilityNodeInfoCompat.CHECKED_STATE_TRUE) put("checked", true)
                             if (node.isPassword) put("password", true)
                         }
                         .put("at", "${r.centerX()},${r.centerY()}"),

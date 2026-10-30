@@ -1869,17 +1869,20 @@ window.rivet = {
    The app drives it with window.rivet.{state,mouth,quiet,viseme,theme,focus}; the page reports back to
    the app through the RivetHost web message listener the app installs. */
 (() => {
+  /** @type {Record<string, string>} */
   const STATE_MOVE = {
     idle: 'idle', listening: 'idle', thinking: 'think', searching: 'think', working: 'desk',
     texting: 'text', emailing: 'email', calling: 'phone', waiting: 'idle', done: 'cheer', failed: 'shrug',
   };
 
+  /** @param {{ type: string }} message */
   function post(message) {
     try { window.RivetHost && window.RivetHost.postMessage(JSON.stringify(message)); } catch (e) { }
   }
 
   /* the stage glows behind Rivet in the colour of what it is doing: cyan working, amber waiting on the user,
      green done, crimson listening (a live sensor) or stuck */
+  /** @type {Record<string, string>} */
   const MOOD = {
     listening: 'rec', thinking: 'cy', searching: 'cy', working: 'cy', texting: 'cy', emailing: 'cy',
     calling: 'cy', waiting: 'amb', done: 'ok', failed: 'rec',
@@ -1897,6 +1900,7 @@ window.rivet = {
     @media (prefers-reduced-motion: reduce){html[data-mood] .stage::before{animation:none}}`;
   document.head.appendChild(glow);
 
+  /** @param {string} name */
   function state(name) {
     const id = STATE_MOVE[name] || 'idle';
     const current = name in STATE_MOVE ? name : 'idle';
@@ -1908,13 +1912,15 @@ window.rivet = {
   }
 
   /* lip sync for one spoken word: the app calls this from TTS word boundaries */
-  let mouthTimer = null;
+  let mouthTimer = 0;
+  /** @type {string | null} */
   let mouthKey = null;
   function quiet() {
     clearInterval(mouthTimer);
     if (mouthKey) window.rivet.viseme(mouthKey, 0);
     mouthKey = null;
   }
+  /** @param {string} word @param {number} seconds */
   function mouth(word, seconds) {
     const letters = String(word || '').toLowerCase().replace(/[^a-z]/g, '');
     quiet();
@@ -1924,12 +1930,13 @@ window.rivet = {
     mouthTimer = setInterval(() => {
       if (mouthKey) window.rivet.viseme(mouthKey, 0);
       if (i >= letters.length) { clearInterval(mouthTimer); mouthKey = null; return; }
-      mouthKey = LETTER_VIS[letters[i++]] || 'nn';
+      mouthKey = LETTER_VIS[letters.charAt(i++)] || 'nn';
       window.rivet.viseme(mouthKey, 0.85);
     }, step);
   }
 
   /* the app's light/dark setting wins over the WebView's media query */
+  /** @param {string} name */
   function theme(name) {
     document.documentElement.setAttribute('data-theme', name === 'dark' ? 'dark' : 'light');
   }
@@ -1941,11 +1948,13 @@ window.rivet = {
   const FOCUS = { stage: { zoom: 1, ty: 1.1 }, card: { zoom: 1.3, ty: .86 }, greet: { zoom: 1.25, ty: .5 } };
   /* a short greeting stage (large text, small phones) stands Rivet further back so its feet stay above the words */
   const GREET_SHORT = { zoom: 1.5, ty: .34 };
+  /** @type {keyof typeof FOCUS} */
   let focusMode = 'stage';
   let focusZoom = 1;
   function framing() {
     return focusMode === 'greet' && stage.clientHeight < 470 ? GREET_SHORT : FOCUS[focusMode];
   }
+  /** @param {keyof typeof FOCUS} mode */
   function focus(mode) {
     if (!Object.prototype.hasOwnProperty.call(FOCUS, mode)) return;
     focusMode = mode;

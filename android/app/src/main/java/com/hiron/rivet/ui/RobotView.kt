@@ -164,7 +164,7 @@ internal class RobotHost(
                 if (request.isForMainFrame) problem = "Rivet's robot didn't load (error ${errorResponse.statusCode})."
             }
 
-            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail?): Boolean {
                 // The renderer died (OOM or crash): this WebView can't be used again, so it goes, and the slot builds a fresh one.
                 destroy()
                 onCrash()

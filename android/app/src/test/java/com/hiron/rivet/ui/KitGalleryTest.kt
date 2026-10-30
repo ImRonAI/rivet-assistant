@@ -21,7 +21,7 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
@@ -56,7 +56,6 @@ class KitGalleryTest {
 
     @Test
     fun cardsKeysAndChips() {
-        var toggled = false
         page {
             Column(Modifier.fillMaxWidth()) {
                 HudHeader(RivetState(connection = Connection.Online, activity = RivetActivity.Waiting, approvals = listOf(approval, approval)), "Assistant")
@@ -68,7 +67,7 @@ class KitGalleryTest {
                     FeatureCard(
                         Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Rivet answers in its own voice, powered by ElevenLabs.",
                         tone = Tone.Accent, tag = "WHEN YOU TALK" to Tone.Accent,
-                        trailing = { RivetToggle(true, { toggled = it }) },
+                        trailing = { RivetToggle(true, {}) },
                     )
                     FeatureCard(
                         Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer, and asks before it acts.",

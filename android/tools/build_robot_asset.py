@@ -2,13 +2,15 @@
 
 Three changes, nothing else: Google Fonts links become local @font-face rules (the app works offline),
 an ``embedded`` class makes the stage fill the WebView, and bridge.js is appended after the page script.
+``--check`` also type-checks bridge.js with TypeScript (robot/tsconfig.json), fetched at its pinned version by npx.
 
-Usage: python3 tools/build_robot_asset.py  (from android/)
+Usage: python3 tools/build_robot_asset.py [--check]  (from android/)
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "robot" / "Rivet_the_Robot.html"
 BRIDGE = ROOT / "robot" / "bridge.js"
 OUT = ROOT / "app" / "src" / "main" / "assets" / "rivet" / "index.html"
+TYPESCRIPT = "7.0.2"
 
 FONTS = [
     ("IBM Plex Mono", 500, "ibm_plex_mono_medium"),
@@ -46,10 +49,17 @@ def build(source: str, bridge: str) -> str:
     return source.replace("</body>", f"<script>\n{bridge}</script>\n</body>", 1)
 
 
+def typecheck() -> None:
+    tsc = ["npx", "--yes", f"--package=typescript@{TYPESCRIPT}", "tsc", "--project", str(ROOT / "robot")]
+    if subprocess.run(tsc).returncode:
+        raise SystemExit("robot/bridge.js has type errors")
+
+
 def main() -> None:
     html = build(SOURCE.read_text(encoding="utf-8"), BRIDGE.read_text(encoding="utf-8"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     if "--check" in sys.argv:
+        typecheck()
         if OUT.read_text(encoding="utf-8") != html:
             raise SystemExit(f"{OUT} is stale; run tools/build_robot_asset.py")
         return

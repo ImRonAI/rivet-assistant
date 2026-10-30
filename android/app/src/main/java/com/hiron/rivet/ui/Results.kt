@@ -290,7 +290,7 @@ fun VideoCard(item: VideoItem, n: Int, key: String, kind: SearchKind, modifier: 
         body = {
             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
                 val id = item.youtubeId
-                if (playing && id != null) {
+                if (playing) {
                     VideoPlayer(key, id, Modifier.fillMaxSize())
                 } else {
                     Thumb(item.thumbnail, by ?: item.title, Modifier.fillMaxSize())

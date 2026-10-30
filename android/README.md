@@ -12,7 +12,8 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ```
 
 `app/src/main/assets/rivet/index.html` is generated from `robot/Rivet_the_Robot.html` and `robot/bridge.js`:
-`python3 tools/build_robot_asset.py` rebuilds it, and `--check` fails if it is stale.
+`python3 tools/build_robot_asset.py` rebuilds it, and `--check` fails if it is stale or if `bridge.js` fails
+TypeScript's strict type check (`robot/tsconfig.json`, TypeScript 7.0.2 through `npx`, so it needs Node).
 
 ## Install (sideload)
 

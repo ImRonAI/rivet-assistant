@@ -3,7 +3,6 @@ package com.hiron.rivet.app
 import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -11,7 +10,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -344,12 +343,7 @@ class AppFlowTest {
     }
 
     private fun crash(page: WebView) {
-        val gone = object : RenderProcessGoneDetail() {
-            override fun didCrash(): Boolean = true
-
-            override fun rendererPriorityAtExit(): Int = 0
-        }
-        compose.runOnUiThread { shadowOf(page).webViewClient.onRenderProcessGone(page, gone) }
+        compose.runOnUiThread { shadowOf(page).webViewClient.onRenderProcessGone(page, null) }
         compose.waitForIdle()
     }
 
