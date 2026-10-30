@@ -8,14 +8,13 @@
 # EMRYS_* settings and Emrys paths, so the brain must not restart on the new image before this has run).
 #
 # Steps, each skipped when already done, so a second run is safe:
-#   1. stop the stack in /opt/rivet (its volumes stay);
-#   2. move /opt/rivet to /opt/emrys;
+#   1. build emrys-brain:<sha> from <git-ref> in src/ while the old stack keeps serving;
+#   2. stop the stack in /opt/rivet (its volumes stay) and move the folder to /opt/emrys;
 #   3. rename RIVET_* keys to EMRYS_* in brain.env and laptop.env;
 #   4. move the brain's files: data/sessions/session/<id>/rivet -> emrys, data/sessions/memory/rivet -> emrys;
 #   5. copy the compose volumes (Caddy's certificates, the laptop's home) from rivet_* to emrys_*, because Compose
 #      names volumes after the folder; the rivet_* volumes are kept until the owner removes them;
-#   6. build emrys-brain:<sha> from <git-ref> in /opt/emrys/src and point compose.yaml at it;
-#   7. start the stack as project "emrys" and wait for https://rivet.ron-ai.dev/healthz.
+#   6. point compose.yaml at the new image, start the stack as project "emrys" and wait for /healthz.
 # Afterwards, call answering setup has to run once from the phone (it creates the Emrys assistant; removing the old
 # Rivet assistant goes through the approval sheet).
 set -euo pipefail
@@ -43,14 +42,10 @@ if [ "$(id -u)" != 0 ]; then
   exit 1
 fi
 
-# 1 and 2: stop the old stack and move its folder.
-if [ -d "$OLD" ]; then
-  if [ -e "$NEW" ]; then
-    echo "both $OLD and $NEW exist; resolve that by hand first" >&2
-    exit 1
-  fi
-  run docker compose --project-directory "$OLD" -p rivet down
-  run mv "$OLD" "$NEW"
+if [ -d "$OLD" ] && [ -e "$NEW" ]; then
+  echo "both $OLD and $NEW exist; resolve that by hand first" >&2
+  exit 1
+elif [ -d "$OLD" ]; then
   root="$OLD"
 elif [ -d "$NEW" ]; then
   echo "$OLD is already moved to $NEW"
@@ -59,8 +54,26 @@ else
   echo "neither $OLD nor $NEW exists" >&2
   exit 1
 fi
-# In a dry run nothing moved, so the remaining checks look at the old folder.
-if [ "$apply" = 1 ]; then root="$NEW"; fi
+
+# 1: build the brain from <git-ref>. Git runs as the checkout's owner, which keeps .git's ownership and is the only
+# user git trusts there.
+owner="$(stat -c %U "$root/src")"
+run sudo -u "$owner" git -C "$root/src" fetch origin "$ref"
+run sudo -u "$owner" git -C "$root/src" checkout --detach FETCH_HEAD
+if [ "$apply" = 1 ]; then
+  sha="$(sudo -u "$owner" git -C "$root/src" rev-parse --short HEAD)"
+else
+  sha="<sha of $ref>"
+fi
+run docker build -t "emrys-brain:$sha" "$root/src/brain"
+
+# 2: stop the old stack and move its folder.
+if [ "$root" = "$OLD" ]; then
+  run docker compose --project-directory "$OLD" -p rivet down
+  run mv "$OLD" "$NEW"
+  # In a dry run nothing moved, so the remaining steps look at the old folder.
+  if [ "$apply" = 1 ]; then root="$NEW"; fi
+fi
 
 # 3: settings names.
 for env in brain.env laptop.env; do
@@ -95,20 +108,8 @@ for name in "${VOLUMES[@]}"; do
   run docker run --rm -v "rivet_$name:/from:ro" -v "emrys_$name:/to" --entrypoint sh caddy:2.11.7 -c 'cp -a /from/. /to/'
 done
 
-# 6: build the brain from <git-ref>. Git runs as the checkout's owner, which keeps .git's ownership and is the only
-# user git trusts there.
-owner="$(stat -c %U "$root/src")"
-run sudo -u "$owner" git -C "$root/src" fetch origin "$ref"
-run sudo -u "$owner" git -C "$root/src" checkout --detach FETCH_HEAD
-if [ "$apply" = 1 ]; then
-  sha="$(sudo -u "$owner" git -C "$root/src" rev-parse --short HEAD)"
-else
-  sha="<sha of $ref>"
-fi
-run docker build -t "emrys-brain:$sha" "$root/src/brain"
+# 6: start on the new image and check.
 run sed -i -E "s#^(    image: )(rivet|emrys)-brain:.*#\\1emrys-brain:$sha#" "$root/compose.yaml"
-
-# 7: start and check.
 run docker compose --project-directory "$root" -p emrys up -d
 if [ "$apply" = 1 ]; then
   for _ in $(seq 1 30); do
