@@ -37,12 +37,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -125,7 +123,7 @@ class RivetAgent(
                 started = withContext(NonCancellable) { connect(config(credential, gen, connected), context) }
                 ensureActive()
                 if (messages.isNotEmpty() || added.isNotEmpty()) {
-                    checkNotNull(withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() }) { "the agent did not connect" }
+                    connected.await()
                     // The conversation so far, then what the user added, so the first message can refer to both.
                     earlier?.let(started::sendContextualUpdate)
                     if (added.isNotEmpty()) taint.mark()
@@ -202,8 +200,8 @@ class RivetAgent(
     /** Sends [earlier] once [live] connects, if it is still the session. The session is in use before that. */
     private fun recap(live: ConversationSession, earlier: String, connected: CompletableDeferred<Unit>) {
         scope.launch(Dispatchers.Main) {
-            val up = runCatching { withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() } }.getOrNull()
-            if (up != null && session === live) runCatching { live.sendContextualUpdate(earlier) }
+            val up = runCatching { connected.await() }.isSuccess
+            if (up && session === live) runCatching { live.sendContextualUpdate(earlier) }
         }
     }
 
@@ -218,7 +216,7 @@ class RivetAgent(
             conversationToken = credential.credential.takeIf { voice },
             signedUrl = credential.credential.takeUnless { voice },
             textOnly = !voice,
-            clientTools = AgentTools.build(::runOnPhone, approve, rules, setRule, taint, scope, noted = { note(it, kind = "approval") }) +
+            clientTools = AgentTools.build(::runOnPhone, approve, rules, setRule, taint, noted = { note(it, kind = "approval") }) +
                 SearchTools.build(search, update, taint),
             onConnect = { connected.complete(Unit) },
             onDisconnect = {
@@ -394,12 +392,6 @@ object AgentTools {
     )
     const val LANE = "agent"
 
-    /** The SDK gives a client tool 30 seconds in all; the action itself needs the rest. */
-    const val APPROVAL_TIMEOUT_MS = 20_000L
-
-    /** How long a tool waits for its action before answering [STILL_RUNNING], inside the SDK's 30 seconds. */
-    const val TOOL_BUDGET_MS = 27_000L
-    const val CONNECT_TIMEOUT_MS = 15_000L
     const val DECLINED = "The user declined, so it was not done."
 
     /** brain/src/rivet_brain/approvals.py `STANDING_DENY`, the same words. */
@@ -409,11 +401,8 @@ object AgentTools {
 
     /** Tools whose results carry third-party text; mirrors `untrusted_output=True` in brain/src/rivet_brain/device_tools.py. */
     val UNTRUSTED = setOf("sms_list", "calendar_list", "notifications_list", "screen_read")
-    const val STILL_RUNNING = "This is still running on the phone and may already have happened. Do not do it again; " +
-        "Rivet shows the outcome in its activity log."
     /**
-     * The action runs in [scope], so it finishes even when the agent has stopped waiting for it. Before it runs, a
-     * standing deny refuses it and a standing allow skips the question (never for a high tier, a deny-only kind of
+     * Before the action runs, a standing deny refuses it and a standing allow skips the question (never for a high tier, a deny-only kind of
      * action, or while [taint] holds); otherwise [approve] asks, and a ticked "don't ask again" goes to [setRule].
      * [noted] gets the activity line when a rule decided.
      */
@@ -423,22 +412,18 @@ object AgentTools {
         rules: () -> RuleSet,
         setRule: (Decision, RuleTarget) -> Unit,
         taint: AgentTaint,
-        scope: CoroutineScope,
-        budgetMs: Long = TOOL_BUDGET_MS,
         noted: (String) -> Unit = {},
     ): Map<String, ClientTool> = NAMES.associateWith { name ->
         object : ClientTool {
             override suspend fun execute(parameters: Map<String, Any>): ClientToolResult = try {
-                val deadline = System.currentTimeMillis() + budgetMs
                 val input = json(parameters)
                 val refusal = gate(name, input, approve, rules, setRule, taint, noted)
                 if (refusal != null) {
                     ClientToolResult.failure(refusal)
                 } else {
-                    val action = scope.async { run(name, input) }
-                    val done = withTimeoutOrNull(deadline - System.currentTimeMillis()) { result(action.await()) }
+                    val done = result(run(name, input))
                     if (name in UNTRUSTED) taint.mark()
-                    done ?: ClientToolResult.success(STILL_RUNNING)
+                    done
                 }
             } catch (e: CancellationException) {
                 throw e

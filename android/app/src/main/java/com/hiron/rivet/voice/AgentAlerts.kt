@@ -46,7 +46,7 @@ object AgentAlerts {
             untrustedTurn = tainted,
             operations = emptyList(),
             offer = offer(name, input, tier, tainted),
-            expiresAt = (System.currentTimeMillis() + AgentTools.APPROVAL_TIMEOUT_MS) / 1000.0,
+            expiresAt = null,
         )
     }
 

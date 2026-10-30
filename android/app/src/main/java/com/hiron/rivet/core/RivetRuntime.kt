@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.UUID
@@ -229,9 +228,9 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
 
     /**
      * Shows [request] on the approval sheet (and as a notification while Rivet is in the background) and waits for
-     * the user. No answer within [timeoutMs] is a no.
+     * the user. When the agent stops waiting first, the request leaves the sheet.
      */
-    suspend fun approveOnPhone(request: ApprovalRequest, timeoutMs: Long = AgentTools.APPROVAL_TIMEOUT_MS): Protocol.Answer {
+    suspend fun approveOnPhone(request: ApprovalRequest): Protocol.Answer {
         val answer = CompletableDeferred<Protocol.Answer>()
         localApprovals[request.id] = answer
         var answered = false
@@ -239,9 +238,7 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
             withContext(Dispatchers.IO) { learnNames(listOf(request)) }
             update { it.copy(approvals = it.approvals + request, activity = Activity.Waiting) }
             if (!visible) Notifications.approval(app, request, names = state.value.names)
-            val given = withTimeoutOrNull(timeoutMs) { answer.await() }
-            answered = given != null
-            given ?: Protocol.Answer(false)
+            answer.await().also { answered = true }
         } finally {
             localApprovals.remove(request.id)
             Notifications.clearApproval(app, request.id)
