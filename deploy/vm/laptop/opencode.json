@@ -1,0 +1,18 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["mistral"],
+  "model": "mistral/zai-glm-5-3-flash",
+  "provider": {
+    "mistral": {
+      "npm": "@ai-sdk/mistral@3.0.78",
+      "whitelist": ["zai-glm-5-3", "zai-glm-5-3-flash", "deepseek-v4-1-flash-1017"],
+      "models": {
+        "zai-glm-5-3": {},
+        "zai-glm-5-3-flash": {},
+        "deepseek-v4-1-flash-1017": {
+          "modalities": { "input": ["text", "image"] }
+        }
+      }
+    }
+  }
+}

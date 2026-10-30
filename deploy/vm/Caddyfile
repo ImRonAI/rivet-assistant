@@ -1,0 +1,11 @@
+rivet.ron-ai.dev {
+	reverse_proxy brain:8080
+}
+
+desktop.rivet.ron-ai.dev {
+	reverse_proxy laptop:3000
+}
+
+code.rivet.ron-ai.dev {
+	reverse_proxy code:3000
+}

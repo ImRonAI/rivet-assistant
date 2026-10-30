@@ -1,0 +1,54 @@
+services:
+  brain:
+    image: rivet-brain:bf9190b
+    restart: unless-stopped
+    env_file: brain.env
+    volumes:
+      - ./data:/data
+
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./conf:/etc/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+
+  laptop:
+    image: lscr.io/linuxserver/webtop:debian-xfce-536c698c-ls219
+    restart: unless-stopped
+    shm_size: "1gb"
+    env_file: laptop.env
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      SELKIES_ALLOWED_ORIGINS: "https://desktop.rivet.ron-ai.dev"
+    volumes:
+      - laptop_home:/config
+
+  code:
+    image: gitpod/openvscode-server:1.105.1
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: none
+    entrypoint:
+      - /home/.openvscode-server/bin/openvscode-server
+      - --host
+      - 0.0.0.0
+      - --connection-token-file
+      - /run/secrets/code-token
+      - --default-folder
+      - /home/workspace/workspace
+    volumes:
+      - laptop_home:/home/workspace
+      - ./code-token:/run/secrets/code-token:ro
+
+volumes:
+  caddy_data:
+  caddy_config:
+  laptop_home:
