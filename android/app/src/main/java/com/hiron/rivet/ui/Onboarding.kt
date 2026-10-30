@@ -111,7 +111,7 @@ val ACCESS_GROUPS = listOf(
         },
     ),
     AccessGroup(
-        "Messages & actions", "Reads and sends texts, finds contacts and calls people back, always asking first.",
+        "Messages & actions", "Reads and sends texts, finds contacts and calls people back, asking before it sends or calls.",
         Icons.Outlined.Forum, Tone.Cyan,
         listOf(
             Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS,
