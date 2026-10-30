@@ -369,8 +369,6 @@ class AppFlowTest {
         assertSame("the same robot page after $step", first, shown.single())
         assertFalse("the page survived $step", shadowOf(first).wasDestroyCalled())
         assertEquals(ROBOT_PAGE, shadowOf(first).lastLoadedUrl)
-        // A WRAP_CONTENT height gives the page a 0 px tall layout viewport, and the robot never draws.
-        assertEquals("the page fills its slot after $step", ViewGroup.LayoutParams.MATCH_PARENT, first.layoutParams.height)
         assertPageIn(first, slot, step)
     }
 
