@@ -1,13 +1,13 @@
 """Have the deployed brain set up call answering on a number, as a given phone session.
 
-Connects to the brain like the phone does and asks Rivet to set up call answering, approving only
+Connects to the brain like the phone does and asks Emrys to set up call answering, approving only
 ``call_answering_setup`` for exactly ``--number`` (with the reassign the owner asked for). Every other
 approval is denied, and device calls are answered as "phone not connected".
 
     uv run python scripts/setup_call_answering.py --url https://rivet-assistant.fly.dev \\
         --session tim --number +17608769757 --owner Tim --reassign
 
-Needs RIVET_DEVICE_TOKEN in the environment.
+Needs EMRYS_DEVICE_TOKEN in the environment.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ import websockets
 
 async def run(url: str, session: str, number: str, owner: str, reassign: bool) -> int:
     socket_url = url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://") + f"/v1/sessions/{session}"
-    headers = {"Authorization": f"Bearer {os.environ['RIVET_DEVICE_TOKEN']}"}
-    move = " It is in use by another Telnyx connection; I agree to moving it to Rivet." if reassign else ""
+    headers = {"Authorization": f"Bearer {os.environ['EMRYS_DEVICE_TOKEN']}"}
+    move = " It is in use by another Telnyx connection; I agree to moving it to Emrys." if reassign else ""
     text = f"Set up call answering on my Telnyx number {number}. My name is {owner}.{move}"
     # SSL_CERT_FILE lets this run behind a TLS-intercepting proxy; otherwise the system store is used.
     tls = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE")) if socket_url.startswith("wss") else None

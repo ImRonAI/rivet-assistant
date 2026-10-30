@@ -7,12 +7,12 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
-from rivet_brain import device_tools
-from rivet_brain.approvals import RivetApprovals
-from rivet_brain.device import DeviceBridge
-from rivet_brain.device_tools import POLICIES, SPECS, screen_act_tier, tools_for
-from rivet_brain.gateway import create_app
-from rivet_brain.rules import Target
+from emrys_brain import device_tools
+from emrys_brain.approvals import EmrysApprovals
+from emrys_brain.device import DeviceBridge
+from emrys_brain.device_tools import POLICIES, SPECS, screen_act_tier, tools_for
+from emrys_brain.gateway import create_app
+from emrys_brain.rules import Target
 from tests.chaos import Aux, fast_settings, make_build, make_supervisor
 from tests.sse import SSE, FakePerplexity
 
@@ -20,7 +20,7 @@ TOKEN = "device-token-0123456789abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 # The phone's tool registry, read from the app's source so both sides cannot drift apart.
-PHONE_REGISTRY = Path(__file__).resolve().parents[2] / "android/app/src/main/java/com/hiron/rivet/device/DeviceTools.kt"
+PHONE_REGISTRY = Path(__file__).resolve().parents[2] / "android/app/src/main/java/com/hiron/emrys/device/DeviceTools.kt"
 PHONE_TOOLS = set(re.findall(r'^\s*"([a-z_]+)" to Tool', PHONE_REGISTRY.read_text(), re.MULTILINE))
 # Run on the phone only by the brain's own code (calls.py saves the answering number), never by the model.
 INTERNAL_PHONE_TOOLS = {"call_answering_number"}
@@ -55,12 +55,12 @@ def test_every_phone_tool_is_declared_with_a_policy_and_a_valid_schema() -> None
     ],
 )
 def test_policy_tiers(tool: str, tool_input: dict[str, Any], tier: str, untrusted: bool) -> None:
-    assessment = RivetApprovals(POLICIES).assess(tool, tool_input)
+    assessment = EmrysApprovals(POLICIES).assess(tool, tool_input)
     assert assessment.tier == tier and assessment.untrusted_output is untrusted
 
 
 def test_send_headlines_name_the_recipient_and_rules_are_per_recipient() -> None:
-    approvals = RivetApprovals(POLICIES)
+    approvals = EmrysApprovals(POLICIES)
     sms = approvals.assess("sms_send", {"to": "+1 (801) 555-0100", "body": "hi"})
     assert sms.summary == "Text +1 (801) 555-0100: “hi”"
     assert sms.target == Target("sms_send", (("to", "+18015550100"),))
@@ -90,13 +90,13 @@ def test_send_headlines_name_the_recipient_and_rules_are_per_recipient() -> None
 )
 def test_the_app_operator_asks_at_commit_points(tool_input: dict[str, Any], tier: str) -> None:
     assert screen_act_tier(tool_input)[0] == tier
-    assert RivetApprovals(POLICIES).assess("screen_act", tool_input).tier == tier
+    assert EmrysApprovals(POLICIES).assess("screen_act", tool_input).tier == tier
 
 
 def test_phone_instructions_reach_the_system_prompt() -> None:
-    from rivet_brain.factory import RIVET_INSTRUCTIONS
+    from emrys_brain.factory import EMRYS_INSTRUCTIONS
 
-    assert device_tools.INSTRUCTIONS in RIVET_INSTRUCTIONS
+    assert device_tools.INSTRUCTIONS in EMRYS_INSTRUCTIONS
 
 
 def _until(socket: Any, kind: str, limit: int = 300) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -121,7 +121,7 @@ def test_an_approved_text_runs_on_the_phone_exactly_once(tmp_path: Path) -> None
         build=make_build(main, Aux()),
         device_token=TOKEN,
         tools_for=tools_for,
-        approvals=RivetApprovals(POLICIES),
+        approvals=EmrysApprovals(POLICIES),
     )
     with TestClient(app) as client, client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:
         socket.send_json({"type": "turn", "turn_id": "t1", "text": "tell Ada I'm late"})

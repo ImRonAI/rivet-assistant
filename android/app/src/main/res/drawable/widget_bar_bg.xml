@@ -4,17 +4,17 @@
     <item android:top="2dp">
         <shape android:shape="rectangle">
             <corners android:radius="28dp" />
-            <solid android:color="@color/rivet_shadow" />
+            <solid android:color="@color/emrys_shadow" />
         </shape>
     </item>
     <item android:bottom="2dp">
         <shape android:shape="rectangle">
             <corners android:radius="28dp" />
-            <solid android:color="@color/rivet_glass" />
-            <stroke android:width="1dp" android:color="@color/rivet_edge" />
+            <solid android:color="@color/emrys_glass" />
+            <stroke android:width="1dp" android:color="@color/emrys_edge" />
         </shape>
     </item>
     <item android:left="28dp" android:right="28dp" android:top="1dp" android:height="1dp" android:gravity="top">
-        <shape android:shape="rectangle"><solid android:color="@color/rivet_highlight" /></shape>
+        <shape android:shape="rectangle"><solid android:color="@color/emrys_highlight" /></shape>
     </item>
 </layer-list>

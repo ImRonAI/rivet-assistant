@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from rivet_brain.config import WatchdogSettings
-from rivet_brain.supervisor import Watchdog
+from emrys_brain.config import WatchdogSettings
+from emrys_brain.supervisor import Watchdog
 
 LIMITS = WatchdogSettings(first_chunk=10, idle=20, model_total=100, tool_default=30, soft_grace=1)
 

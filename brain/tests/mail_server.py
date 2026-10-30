@@ -22,7 +22,7 @@ from email import message_from_bytes, policy
 from pathlib import Path
 from typing import Any
 
-ADDRESS = "rivet.user@example.com"
+ADDRESS = "emrys.user@example.com"
 PASSWORD = "app-password-4f9c2e7a1b"
 CAPABILITIES = "IMAP4rev1 SPECIAL-USE MOVE UIDPLUS ENABLE UTF8=ACCEPT"
 FOLDERS: dict[str, tuple[str, ...]] = {"INBOX": (), "Sent": ("\\Sent",), "Archive": ("\\Archive",)}

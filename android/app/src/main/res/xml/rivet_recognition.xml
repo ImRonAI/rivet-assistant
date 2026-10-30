@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Rivet's recognizer only relays to another one on the phone, so Android 12+ never picks it as the default. -->
-<recognition-service xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:settingsActivity="com.hiron.rivet.MainActivity"
-    android:selectableAsDefault="false"
-    tools:targetApi="31" />

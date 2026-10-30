@@ -22,10 +22,10 @@ import pytest
 from starlette.testclient import TestClient
 from strands.tools import PythonAgentTool
 
-from rivet_brain import email_tools
-from rivet_brain.approvals import RivetApprovals
-from rivet_brain.device import DeviceBridge
-from rivet_brain.email_tools import (
+from emrys_brain import email_tools
+from emrys_brain.approvals import EmrysApprovals
+from emrys_brain.device import DeviceBridge
+from emrys_brain.email_tools import (
     BODY_CHARS,
     POLICIES,
     SNIPPET_CHARS,
@@ -36,22 +36,22 @@ from rivet_brain.email_tools import (
     search_criteria,
     tools_for,
 )
-from rivet_brain.factory import RIVET_INSTRUCTIONS, instructions_for, rivet_instructions
-from rivet_brain.gateway import create_app
+from emrys_brain.factory import EMRYS_INSTRUCTIONS, emrys_instructions, instructions_for
+from emrys_brain.gateway import create_app
 from tests.chaos import FAST, Aux, fast_settings, make_build
 from tests.mail_server import ADDRESS, PASSWORD, FakeImap, FakeSmtp, SilentServer, throwaway_tls
 from tests.sse import SSE, FakePerplexity
 
 TOKEN = "device-token-0123456789abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
-GMAIL = {"RIVET_EMAIL_ADDRESS": "rivet.user@gmail.com", "RIVET_EMAIL_PASSWORD": PASSWORD}
+GMAIL = {"EMRYS_EMAIL_ADDRESS": "emrys.user@gmail.com", "EMRYS_EMAIL_PASSWORD": PASSWORD}
 EMAIL_ENV = (
-    "RIVET_EMAIL_ADDRESS",
-    "RIVET_EMAIL_PASSWORD",
-    "RIVET_EMAIL_IMAP_HOST",
-    "RIVET_EMAIL_IMAP_PORT",
-    "RIVET_EMAIL_SMTP_HOST",
-    "RIVET_EMAIL_SMTP_PORT",
+    "EMRYS_EMAIL_ADDRESS",
+    "EMRYS_EMAIL_PASSWORD",
+    "EMRYS_EMAIL_IMAP_HOST",
+    "EMRYS_EMAIL_IMAP_PORT",
+    "EMRYS_EMAIL_SMTP_HOST",
+    "EMRYS_EMAIL_SMTP_PORT",
 )
 
 
@@ -140,7 +140,7 @@ def _commands(rig: Rig, verb: str) -> list[str]:
 
 def test_settings_come_from_the_environment_with_a_small_table_of_defaults() -> None:
     assert EmailAccount.from_env({}) is None
-    assert EmailAccount.from_env({"RIVET_EMAIL_ADDRESS": "rivet.user@gmail.com"}) is None
+    assert EmailAccount.from_env({"EMRYS_EMAIL_ADDRESS": "emrys.user@gmail.com"}) is None
     gmail = EmailAccount.from_env(GMAIL)
     assert gmail is not None
     assert (gmail.imap_host, gmail.imap_port, gmail.smtp_host, gmail.smtp_port, gmail.smtp_starttls) == (
@@ -150,7 +150,7 @@ def test_settings_come_from_the_environment_with_a_small_table_of_defaults() -> 
         465,
         False,
     )
-    icloud = EmailAccount.from_env({**GMAIL, "RIVET_EMAIL_ADDRESS": "rivet@icloud.com"})
+    icloud = EmailAccount.from_env({**GMAIL, "EMRYS_EMAIL_ADDRESS": "emrys@icloud.com"})
     assert icloud is not None and (icloud.imap_host, icloud.smtp_host, icloud.smtp_starttls) == (
         "imap.mail.me.com",
         "smtp.mail.me.com",
@@ -159,10 +159,10 @@ def test_settings_come_from_the_environment_with_a_small_table_of_defaults() -> 
     custom = EmailAccount.from_env(
         {
             **GMAIL,
-            "RIVET_EMAIL_ADDRESS": "tim@example.com",
-            "RIVET_EMAIL_IMAP_HOST": "mail.example.com",
-            "RIVET_EMAIL_SMTP_HOST": "smtp.example.com",
-            "RIVET_EMAIL_SMTP_PORT": "587",
+            "EMRYS_EMAIL_ADDRESS": "tim@example.com",
+            "EMRYS_EMAIL_IMAP_HOST": "mail.example.com",
+            "EMRYS_EMAIL_SMTP_HOST": "smtp.example.com",
+            "EMRYS_EMAIL_SMTP_PORT": "587",
         }
     )
     assert custom is not None and (custom.imap_host, custom.smtp_port, custom.smtp_starttls) == (
@@ -171,18 +171,18 @@ def test_settings_come_from_the_environment_with_a_small_table_of_defaults() -> 
         True,
     )
     assert PASSWORD not in repr(gmail)
-    with pytest.raises(ValueError, match="RIVET_EMAIL_IMAP_HOST"):
-        EmailAccount.from_env({**GMAIL, "RIVET_EMAIL_ADDRESS": "tim@example.com"})
+    with pytest.raises(ValueError, match="EMRYS_EMAIL_IMAP_HOST"):
+        EmailAccount.from_env({**GMAIL, "EMRYS_EMAIL_ADDRESS": "tim@example.com"})
 
 
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"RIVET_EMAIL_IMAP_PORT": "143"},
-        {"RIVET_EMAIL_SMTP_PORT": "25"},
-        {"RIVET_EMAIL_SMTP_PORT": "2525"},
-        {"RIVET_EMAIL_SMTP_PORT": "smtps"},
-        {"RIVET_EMAIL_ADDRESS": "not-an-address"},
+        {"EMRYS_EMAIL_IMAP_PORT": "143"},
+        {"EMRYS_EMAIL_SMTP_PORT": "25"},
+        {"EMRYS_EMAIL_SMTP_PORT": "2525"},
+        {"EMRYS_EMAIL_SMTP_PORT": "smtps"},
+        {"EMRYS_EMAIL_ADDRESS": "not-an-address"},
     ],
 )
 def test_ports_that_would_not_use_tls_are_refused(overrides: dict[str, str]) -> None:
@@ -192,10 +192,10 @@ def test_ports_that_would_not_use_tls_are_refused(overrides: dict[str, str]) -> 
 
 def test_without_a_mailbox_there_are_no_email_tools_and_email_goes_through_the_phone() -> None:
     assert tools_for(None) == []
-    assert RIVET_INSTRUCTIONS == rivet_instructions() == instructions_for({"sms_send", "email_draft"})
-    assert "`email_draft` (the user sends it)" in RIVET_INSTRUCTIONS and "email_send" not in RIVET_INSTRUCTIONS
+    assert EMRYS_INSTRUCTIONS == emrys_instructions() == instructions_for({"sms_send", "email_draft"})
+    assert "`email_draft` (the user sends it)" in EMRYS_INSTRUCTIONS and "email_send" not in EMRYS_INSTRUCTIONS
     with_mailbox = instructions_for({"sms_send", "email_draft", *TOOL_NAMES})
-    assert with_mailbox == rivet_instructions(mailbox=True) and email_tools.INSTRUCTIONS in with_mailbox
+    assert with_mailbox == emrys_instructions(mailbox=True) and email_tools.INSTRUCTIONS in with_mailbox
     assert "rather than notification previews" in with_mailbox and "(the user sends it)" not in with_mailbox
 
 
@@ -204,12 +204,12 @@ def test_the_gateway_registers_email_tools_only_when_a_mailbox_is_configured(
 ) -> None:
     import uvicorn
 
-    from rivet_brain import gateway
+    from emrys_brain import gateway
 
     served: list[Any] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **_: served.append(app))
-    monkeypatch.setenv("RIVET_DEVICE_TOKEN", TOKEN)
-    monkeypatch.setenv("RIVET_SESSION_DIR", str(tmp_path / "sessions"))
+    monkeypatch.setenv("EMRYS_DEVICE_TOKEN", TOKEN)
+    monkeypatch.setenv("EMRYS_SESSION_DIR", str(tmp_path / "sessions"))
     for name in EMAIL_ENV:
         monkeypatch.delenv(name, raising=False)
     gateway.main()
@@ -527,23 +527,23 @@ async def test_without_move_or_uidplus_nothing_is_moved(tls: tuple[ssl.SSLContex
             {"uid": 7, "action": "delete"},
             "unknown",
             False,
-            "Do something Rivet doesn't recognise with an email",
+            "Do something Emrys doesn't recognise with an email",
         ),
     ],
 )
 def test_policy_tiers_taint_and_summaries(
     tool: str, tool_input: dict[str, Any], tier: str, untrusted: bool, summary: str
 ) -> None:
-    assessment = RivetApprovals(POLICIES).assess(tool, tool_input)
+    assessment = EmrysApprovals(POLICIES).assess(tool, tool_input)
     assert (assessment.tier, assessment.untrusted_output, assessment.summary) == (tier, untrusted, summary)
-    offer = RivetApprovals(POLICIES).offer(assessment, tainted=False)
+    offer = EmrysApprovals(POLICIES).offer(assessment, tainted=False)
     sheet = json.loads(assessment.prompt(tainted=False, offer=offer))
     assert json.loads(sheet["preview"]) == tool_input and sheet["headline"] == summary
     assert ("offer" in sheet) is (tier in ("send", "write"))
 
 
 def test_email_rules_cover_the_same_recipients_and_replies_the_same_sender() -> None:
-    approvals = RivetApprovals(POLICIES)
+    approvals = EmrysApprovals(POLICIES)
 
     def scope(tool: str, **tool_input: Any) -> str:
         target = approvals.assess(tool, tool_input).target
@@ -581,7 +581,7 @@ def test_email_rules_cover_the_same_recipients_and_replies_the_same_sender() -> 
 
 
 def test_reply_all_can_only_be_standing_denied() -> None:
-    approvals = RivetApprovals(POLICIES)
+    approvals = EmrysApprovals(POLICIES)
     reply = {"uid": 7, "to": "ada@example.com", "body": "Yes"}
     one = approvals.offer(approvals.assess("email_reply", reply), tainted=False)
     everyone = approvals.offer(approvals.assess("email_reply", {**reply, "reply_all": True}), tainted=False)
@@ -620,7 +620,7 @@ def test_reading_mail_taints_the_turn_so_the_reply_asks_and_cannot_be_always_all
             build=make_build(main, Aux()),
             device_token=TOKEN,
             tools_for=lambda bridge: rig.tools,
-            approvals=RivetApprovals(POLICIES),
+            approvals=EmrysApprovals(POLICIES),
         )
         with TestClient(app) as client, client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:
             socket.send_json({"type": "turn", "turn_id": "t1", "text": "answer Ada's lunch email"})

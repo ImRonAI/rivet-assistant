@@ -3,9 +3,9 @@ name: android
 on:
   push:
     branches: [main]
-    paths: ["android/**", "brain/src/rivet_brain/device_tools.py", ".github/workflows/android.yml"]
+    paths: ["android/**", "brain/src/emrys_brain/device_tools.py", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", "brain/src/rivet_brain/device_tools.py", ".github/workflows/android.yml"]
+    paths: ["android/**", "brain/src/emrys_brain/device_tools.py", ".github/workflows/android.yml"]
 
 permissions:
   contents: read
@@ -25,11 +25,34 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: android/stage-ui/package-lock.json
+      # The stage layer is checked in built; rebuilding it from the lockfile must reproduce it exactly, with the
+      # ElevenLabs UI components byte-identical to upstream.
+      - name: Stage layer reproduces from its sources
+        working-directory: android/stage-ui
+        run: |
+          npm ci
+          npm run verify:components
+          npm run build
+          test -z "$(git status --porcelain -- ../app/src/main/assets/emrys/vendor)" || {
+            git status --short -- ../app/src/main/assets/emrys/vendor
+            echo "assets/emrys/vendor is stale; run npm ci && npm run build in android/stage-ui"
+            exit 1
+          }
       - name: Robot asset is up to date
         run: python3 tools/build_robot_asset.py --check
+      - name: Stage layer on the real robot page
+        working-directory: android/stage-ui
+        run: |
+          npx playwright install --with-deps chromium
+          npm test
       - name: Unit tests, lint, release build
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: rivet-apk
+          name: emrys-apk
           path: android/app/build/outputs/apk/release/app-release.apk

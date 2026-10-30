@@ -1,5 +1,5 @@
 .venv/
-.rivet/
+.emrys/
 .agent/
 .strands/
 **/__pycache__/

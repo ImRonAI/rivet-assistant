@@ -1,4 +1,4 @@
-"""Rivet's own search tools, the ``search.results`` event, and the search instructions."""
+"""Emrys's own search tools, the ``search.results`` event, and the search instructions."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from typing import Any
 import httpx
 from starlette.testclient import TestClient
 
-from rivet_brain import search_tools
-from rivet_brain.approvals import RivetApprovals
-from rivet_brain.events import RivetEventBridge
-from rivet_brain.factory import instructions_for
-from rivet_brain.gateway import create_app
-from rivet_brain.search import BraveSearch, SearchKeys
+from emrys_brain import search_tools
+from emrys_brain.approvals import EmrysApprovals
+from emrys_brain.events import EmrysEventBridge
+from emrys_brain.factory import instructions_for
+from emrys_brain.gateway import create_app
+from emrys_brain.search import BraveSearch, SearchKeys
 from tests.chaos import Aux, fast_settings, make_build
 from tests.sse import SSE, FakePerplexity
 from tests.test_search import KEYS, FakeBrave
@@ -61,7 +61,7 @@ def test_tools_register_only_with_their_plan_key() -> None:
 def test_every_search_is_a_read_that_taints_the_turn() -> None:
     for name, policy in search_tools.POLICIES.items():
         assert policy.tier == "read" and policy.untrusted_output and policy.summary, name
-    approvals = RivetApprovals(search_tools.POLICIES)
+    approvals = EmrysApprovals(search_tools.POLICIES)
     assessment = approvals.assess("search_web", {"q": "x"})
     assert assessment.tier == "read"
 
@@ -94,7 +94,7 @@ def _tool_result(tool_id: str, status: str, content: list[dict[str, Any]]) -> di
 
 def test_the_bridge_sends_search_results_after_tool_done() -> None:
     events: list[dict[str, Any]] = []
-    bridge = RivetEventBridge(events.append)
+    bridge = EmrysEventBridge(events.append)
     envelope = {"kind": "web", "query": "q", "altered": None, "items": [], "answer": None, "center": None}
     bridge(current_tool_use={"toolUseId": "s1", "name": "search_web"})
     bridge(current_tool_use={"toolUseId": "s2", "name": "search_news"})
@@ -134,7 +134,7 @@ def test_a_brain_search_reaches_the_phone_as_cards(tmp_path: Path) -> None:
         build=make_build(main, Aux()),
         device_token=TOKEN,
         tools_for=lambda bridge: search_tools.tools_for(search),
-        approvals=RivetApprovals(search_tools.POLICIES),
+        approvals=EmrysApprovals(search_tools.POLICIES),
         search=search,
     )
     with TestClient(app) as client, client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:

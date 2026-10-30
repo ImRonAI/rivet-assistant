@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rivet's search bar for the home screen: search or ask, or tap the orange key to talk. -->
+<!-- Emrys's search bar for the home screen: search or ask, or tap the orange key to talk. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -24,7 +24,7 @@
             android:background="@drawable/widget_head_bg"
             android:contentDescription="@string/app_name"
             android:padding="5dp"
-            android:src="@drawable/rivet_head" />
+            android:src="@drawable/emrys_head" />
 
         <TextView
             android:id="@+id/ask"
@@ -38,7 +38,7 @@
             android:paddingStart="12dp"
             android:paddingEnd="8dp"
             android:text="@string/widget_ask"
-            android:textColor="@color/rivet_ink2"
+            android:textColor="@color/emrys_ink2"
             android:textSize="15sp" />
 
         <ImageView

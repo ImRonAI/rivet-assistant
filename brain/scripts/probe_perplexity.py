@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 
 OUT = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "perplexity"
-MODEL = os.environ.get("RIVET_MODEL", "openai/gpt-5.6-sol")
+MODEL = os.environ.get("EMRYS_MODEL", "openai/gpt-5.6-sol")
 LOOKUP = {
     "type": "function",
     "name": "lookup_contact",

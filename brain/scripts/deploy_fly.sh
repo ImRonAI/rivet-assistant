@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Deploys the Rivet brain to Fly.io as one always-on machine with a volume.
+# Deploys the Emrys brain to Fly.io as one always-on machine with a volume.
 #
 # Needs in the environment: FLY_API_TOKEN, PERPLEXITY_API_KEY, HORIZON_API_KEY.
-# Optional: RIVET_EMAIL_ADDRESS and RIVET_EMAIL_PASSWORD (an app password) give Rivet the user's mailbox, with
-# RIVET_EMAIL_IMAP_HOST/_PORT and RIVET_EMAIL_SMTP_HOST/_PORT for providers without defaults; those set are staged too.
+# Optional: EMRYS_EMAIL_ADDRESS and EMRYS_EMAIL_PASSWORD (an app password) give Emrys the user's mailbox, with
+# EMRYS_EMAIL_IMAP_HOST/_PORT and EMRYS_EMAIL_SMTP_HOST/_PORT for providers without defaults; those set are staged too.
 # FLY_LOCAL_BUILD=1 builds with local Docker and pushes instead of using Fly's remote builder.
 # Creates the app, volume and device token on the first run; later runs only redeploy.
-# The device token (what the phone enters in Settings) is written to $RIVET_TOKEN_FILE, never printed.
+# The device token (what the phone enters in Settings) is written to $EMRYS_TOKEN_FILE, never printed.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 FLY="${FLY:-$(command -v flyctl || command -v fly || echo "$HOME/.fly/bin/flyctl")}"
 APP="$(sed -n 's/^app = "\(.*\)"/\1/p' fly.toml)"
 REGION="$(sed -n 's/^primary_region = "\(.*\)"/\1/p' fly.toml)"
-TOKEN_FILE="${RIVET_TOKEN_FILE:-$HOME/.rivet-device-token}"
+TOKEN_FILE="${EMRYS_TOKEN_FILE:-$HOME/.emrys-device-token}"
 
 if ! "$FLY" status -a "$APP" >/dev/null 2>&1; then
   "$FLY" apps create "$APP"
@@ -27,13 +27,15 @@ secrets="$(mktemp)"
 trap 'rm -f "$secrets"' EXIT
 chmod 600 "$secrets"
 printf 'PERPLEXITY_API_KEY=%s\nHORIZON_API_KEY=%s\n' "$PERPLEXITY_API_KEY" "$HORIZON_API_KEY" >"$secrets"
-for name in RIVET_EMAIL_ADDRESS RIVET_EMAIL_PASSWORD RIVET_EMAIL_IMAP_HOST RIVET_EMAIL_IMAP_PORT \
-  RIVET_EMAIL_SMTP_HOST RIVET_EMAIL_SMTP_PORT; do
+for name in EMRYS_EMAIL_ADDRESS EMRYS_EMAIL_PASSWORD EMRYS_EMAIL_IMAP_HOST EMRYS_EMAIL_IMAP_PORT \
+  EMRYS_EMAIL_SMTP_HOST EMRYS_EMAIL_SMTP_PORT; do
   if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}" >>"$secrets"; fi
 done
-if ! "$FLY" secrets list -a "$APP" --json | grep -q RIVET_DEVICE_TOKEN; then
+# An app deployed before the rename keeps its RIVET_DEVICE_TOKEN (the brain reads it as EMRYS_DEVICE_TOKEN), so the
+# phone stays paired; a new token is made only when neither is set.
+if ! "$FLY" secrets list -a "$APP" --json | grep -qE 'EMRYS_DEVICE_TOKEN|RIVET_DEVICE_TOKEN'; then
   (umask 077 && python3 -c 'import secrets; print(secrets.token_urlsafe(32))' >"$TOKEN_FILE")
-  printf 'RIVET_DEVICE_TOKEN=%s\n' "$(cat "$TOKEN_FILE")" >>"$secrets"
+  printf 'EMRYS_DEVICE_TOKEN=%s\n' "$(cat "$TOKEN_FILE")" >>"$secrets"
   echo "device token written to $TOKEN_FILE"
 fi
 "$FLY" secrets import -a "$APP" --stage <"$secrets"

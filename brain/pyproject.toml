@@ -3,9 +3,9 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rivet-brain"
+name = "emrys-brain"
 version = "0.1.0"
-description = "Rivet's brain: a Strands harness agent on Perplexity's Agent API with Telnyx MCP, approvals, and a session-preserving supervisor."
+description = "Emrys's brain: a Strands harness agent on Perplexity's Agent API with Telnyx MCP, approvals, and a session-preserving supervisor."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -32,10 +32,10 @@ dev = [
 ]
 
 [project.scripts]
-rivet-brain = "rivet_brain.gateway:main"
+emrys-brain = "emrys_brain.gateway:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/rivet_brain"]
+packages = ["src/emrys_brain"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -61,4 +61,4 @@ python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 ignore_missing_imports = true
-files = ["src/rivet_brain"]
+files = ["src/emrys_brain"]

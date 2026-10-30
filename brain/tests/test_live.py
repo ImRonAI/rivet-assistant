@@ -15,10 +15,10 @@ import pytest
 from strands import Agent, tool
 from strands.storage import LocalFileStorage
 
-from rivet_brain.approvals import TURN_KEY, RivetApprovals
-from rivet_brain.config import BrainSettings
-from rivet_brain.factory import build_agent, build_models
-from rivet_brain.storage import FenceHolder
+from emrys_brain.approvals import TURN_KEY, EmrysApprovals
+from emrys_brain.config import BrainSettings
+from emrys_brain.factory import build_agent, build_models
+from emrys_brain.storage import FenceHolder
 
 pytestmark = pytest.mark.live
 
@@ -70,7 +70,7 @@ def test_live_read_only_telnyx_turn(tmp_path: Path) -> None:
         session_id="live-check",
         fence=FenceHolder(),
         backend=LocalFileStorage(settings.session_dir),
-        approvals=RivetApprovals(),
+        approvals=EmrysApprovals(),
     )
     agent = generation.agent
     agent.state.set(TURN_KEY, "live-1")

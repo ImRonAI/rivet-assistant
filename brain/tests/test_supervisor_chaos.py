@@ -9,9 +9,9 @@ from typing import Any
 import pytest
 from strands import tool
 
-from rivet_brain.approvals import ToolPolicy
-from rivet_brain.device_tools import SMS_STANDING
-from rivet_brain.supervisor import ACTIONS_KEY, MAY_HAVE_RUN
+from emrys_brain.approvals import ToolPolicy
+from emrys_brain.device_tools import SMS_STANDING
+from emrys_brain.supervisor import ACTIONS_KEY, MAY_HAVE_RUN
 from tests.chaos import make_supervisor, roles, silent_stream, user_texts
 from tests.sse import SSE, FakePerplexity, error_response
 
@@ -31,7 +31,7 @@ async def test_silent_model_stream_is_replaced_and_the_turn_continues_without_re
         assert agent.agent_id == "default" and lane.fence.generation >= 1
         assert roles(agent.messages) == ["user", "assistant"]
         assert user_texts(agent.messages)[0] == "what's my balance?"
-        assert any("Rivet restarted after: no response from the model" in t for t in user_texts(agent.messages))
+        assert any("Emrys restarted after: no response from the model" in t for t in user_texts(agent.messages))
         prompts = [i for i in main.requests[1]["input"] if i.get("role") == "user"]
         assert len(prompts) == 1  # the prompt was not sent twice
         assert [e["type"] for e in events if e["type"] in ("restart", "turn.completed")] == [

@@ -2,7 +2,7 @@
 
 @AGENTS.md
 
-`AGENTS.md` is the source of truth for Rivet's status, what it can do, the rules, and the remaining work. Read it before changing
+`AGENTS.md` is the source of truth for Emrys's status, what it can do, the rules, and the remaining work. Read it before changing
 anything. In short:
 
 - **Version:** app 0.2.0 is on `main`, and the Fly brain runs the matching 0.2.0 code (deployed 2026-10-28).
@@ -18,6 +18,16 @@ anything. In short:
 - **Before launch:** see the checklist in `AGENTS.md`.
 - **Never:**
   - use Claude or Anthropic models in the product;
-  - commit secrets (`android/rivet.local.properties` stays gitignored);
+  - commit secrets (`android/emrys.local.properties` stays gitignored);
   - send, call, buy, write to Telnyx, deploy, or touch real email without the owner's explicit approval.
 - **Before handing over an APK:** run the tests, lint and release build, review `android/build/screens/`, verify the APK, and run the live test.
+
+## Addendum, 2026-10-29: Emrys and the Noir facelift
+Branch `design/facelift` renames Rivet to **Emrys** everywhere in code (app ID `com.hiron.emrys`, packages, the bridge,
+the brain package `emrys_brain`, `EMRYS_*` settings) and redesigns the whole app: the Noir design system
+(`docs/design/EMRYS_DESIGN.md`), a new robot, and ElevenLabs UI's Matrix, Orb and ShimmeringText on the stage
+(`docs/design/EMRYS_MATRIX.md`). The brain still reads pre-rename secrets, files and the live call assistant
+(`brain/src/emrys_brain/legacy.py`). The robot also draws on real devices now (the WebView's `MATCH_PARENT` fix). What
+was done, how it was verified, and what's left (merging upstream, the launcher art, device checks, the owner's live
+renames) is in the addendum at the end of `AGENTS.md`.
+

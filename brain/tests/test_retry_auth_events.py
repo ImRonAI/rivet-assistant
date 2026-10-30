@@ -7,10 +7,10 @@ import openai
 import pytest
 from strands import Agent, tool
 
-from rivet_brain.auth import HorizonBearer, MissingCredentialError
-from rivet_brain.events import RivetEventBridge
-from rivet_brain.models.perplexity import PerplexityTransientError, build_perplexity_model
-from rivet_brain.retry import TransientRetry
+from emrys_brain.auth import HorizonBearer, MissingCredentialError
+from emrys_brain.events import EmrysEventBridge
+from emrys_brain.models.perplexity import PerplexityTransientError, build_perplexity_model
+from emrys_brain.retry import TransientRetry
 from tests.sse import SSE, FakePerplexity, error_response
 
 
@@ -90,7 +90,7 @@ def test_bridge_emits_ui_events_heartbeats_and_taints_on_web_content() -> None:
     events: list[dict[str, Any]] = []
     labels: list[str] = []
     untrusted: list[bool] = []
-    bridge = RivetEventBridge(events.append, on_activity=labels.append, on_untrusted=lambda: untrusted.append(True))
+    bridge = EmrysEventBridge(events.append, on_activity=labels.append, on_untrusted=lambda: untrusted.append(True))
     fake = FakePerplexity(
         [
             SSE().search(["ada lovelace"], RESULTS).function_call("lookup_contact", {"name": "Ada"}).completed(),
@@ -115,4 +115,4 @@ def test_a_failing_sink_never_breaks_the_turn() -> None:
         raise RuntimeError("socket closed")
 
     fake = FakePerplexity([SSE().text("still fine").completed()])
-    assert str(_agent(fake, callback_handler=RivetEventBridge(broken))("hi")).strip() == "still fine"
+    assert str(_agent(fake, callback_handler=EmrysEventBridge(broken))("hi")).strip() == "still fine"

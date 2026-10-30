@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rivet's panel for the home screen: status, Rivet's latest reply, the search bar and quick keys. -->
+<!-- Emrys's panel for the home screen: status, Emrys's latest reply, the search bar and quick keys. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -28,7 +28,7 @@
             android:includeFontPadding="false"
             android:letterSpacing="0.06"
             android:text="@string/widget_mark"
-            android:textColor="@color/rivet_ink"
+            android:textColor="@color/emrys_ink"
             android:textSize="20sp" />
 
         <!-- The status capsule: an LED and the status in plain words. -->
@@ -59,7 +59,7 @@
                 android:fontFamily="@font/ibm_plex_mono_medium"
                 android:letterSpacing="0.1"
                 android:maxLines="1"
-                android:textColor="@color/rivet_ink2"
+                android:textColor="@color/emrys_ink2"
                 android:textSize="11sp" />
         </LinearLayout>
 
@@ -76,7 +76,7 @@
             android:maxLines="1"
             android:text="@string/widget_unit"
             android:textAllCaps="true"
-            android:textColor="@color/rivet_ink2"
+            android:textColor="@color/emrys_ink2"
             android:textSize="10sp" />
     </RelativeLayout>
 
@@ -92,7 +92,7 @@
         android:maxLines="2"
         android:paddingStart="2dp"
         android:paddingEnd="2dp"
-        android:textColor="@color/rivet_ink"
+        android:textColor="@color/emrys_ink"
         android:textSize="14sp" />
 
     <!-- Widgets may only use RemoteViews-safe classes, so an empty FrameLayout takes the slack. -->
@@ -120,7 +120,7 @@
             android:background="@drawable/widget_head_bg"
             android:importantForAccessibility="no"
             android:padding="5dp"
-            android:src="@drawable/rivet_head" />
+            android:src="@drawable/emrys_head" />
 
         <TextView
             android:id="@+id/ask"
@@ -134,7 +134,7 @@
             android:paddingStart="10dp"
             android:paddingEnd="6dp"
             android:text="@string/widget_ask"
-            android:textColor="@color/rivet_ink2"
+            android:textColor="@color/emrys_ink2"
             android:textSize="14sp" />
 
         <FrameLayout

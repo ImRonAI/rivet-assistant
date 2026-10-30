@@ -10,12 +10,12 @@ from strands import tool
 from strands.storage import LocalFileStorage
 from strands_harness import HARNESS_CONTRACT
 
-from rivet_brain.approvals import TURN_KEY, RivetApprovals, ToolPolicy
-from rivet_brain.config import BrainSettings, available_providers, default_provider
-from rivet_brain.factory import RIVET_INSTRUCTIONS, Generation, build_agent, build_models
-from rivet_brain.models.groq import GroqModel
-from rivet_brain.models.perplexity import PerplexityAgentModel, build_perplexity_model
-from rivet_brain.storage import FenceHolder
+from emrys_brain.approvals import TURN_KEY, EmrysApprovals, ToolPolicy
+from emrys_brain.config import BrainSettings, available_providers, default_provider
+from emrys_brain.factory import EMRYS_INSTRUCTIONS, Generation, build_agent, build_models
+from emrys_brain.models.groq import GroqModel
+from emrys_brain.models.perplexity import PerplexityAgentModel, build_perplexity_model
+from emrys_brain.storage import FenceHolder
 from tests.sse import SSE, FakeGroq, FakePerplexity
 from tests.telnyx_server import INSTRUCTIONS, FakeTelnyx, serve_fake_telnyx
 
@@ -54,7 +54,7 @@ def _build(tmp_path: Path, url: str, fake: FakePerplexity, fence: FenceHolder, *
         session_id="phone-1",
         fence=fence,
         backend=LocalFileStorage(settings.session_dir),
-        approvals=RivetApprovals(),
+        approvals=EmrysApprovals(),
         models=(main, aux),
         **kwargs,
     )
@@ -90,7 +90,7 @@ def test_build_connects_telnyx_and_configures_the_harness(tmp_path: Path, telnyx
         }
         assert generation.tool_timeouts["telnyx_execute"] == 150 and generation.tool_timeouts["telnyx_search"] == 120
         prompt = agent.system_prompt or ""
-        assert prompt.startswith(HARNESS_CONTRACT[:40]) and RIVET_INSTRUCTIONS in prompt and INSTRUCTIONS in prompt
+        assert prompt.startswith(HARNESS_CONTRACT[:40]) and EMRYS_INSTRUCTIONS in prompt and INSTRUCTIONS in prompt
         assert agent.agent_id == "default" and generation.number == 0
     finally:
         agent.cleanup()
@@ -107,7 +107,7 @@ def test_read_only_telnyx_code_runs_over_mcp_and_writes_wait_for_approval(tmp_pa
     try:
         result = agent("list my numbers, then text +15551234 hi")
         assert telnyx.executed == [LIST]
-        assert result.stop_reason == "interrupt" and result.interrupts[0].name == "rivet-approval"
+        assert result.stop_reason == "interrupt" and result.interrupts[0].name == "emrys-approval"
         output = next(c["toolResult"] for m in agent.messages for c in m["content"] if "toolResult" in c)
         assert "+18015550100" in str(output["content"])
     finally:
@@ -134,7 +134,7 @@ def test_a_missing_horizon_key_fails_the_build(
 
 def test_next_generation_restores_the_session_with_a_fresh_prompt(tmp_path: Path, telnyx: FakeTelnyx) -> None:
     fence = FenceHolder()
-    fake = FakePerplexity([SSE().text("Hi, I'm Rivet.").completed(), SSE("r2").text("Still me.").completed()])
+    fake = FakePerplexity([SSE().text("Hi, I'm Emrys.").completed(), SSE("r2").text("Still me.").completed()])
     first = _build(tmp_path, telnyx.url, fake, fence)
     first.agent.system_prompt = "stale"
     first.agent("hello")  # saved on every message, stale prompt included
@@ -144,7 +144,7 @@ def test_next_generation_restores_the_session_with_a_fresh_prompt(tmp_path: Path
     second = _build(tmp_path, telnyx.url, fake, fence)
     try:
         assert second.number == 1 and [m["role"] for m in second.agent.messages] == ["user", "assistant"]
-        assert second.agent.system_prompt != "stale" and RIVET_INSTRUCTIONS in (second.agent.system_prompt or "")
+        assert second.agent.system_prompt != "stale" and EMRYS_INSTRUCTIONS in (second.agent.system_prompt or "")
         second.agent("still there?")
         assert len(second.agent.messages) == 4
     finally:
@@ -189,7 +189,7 @@ def test_a_scripted_groq_turn_calls_a_tool_and_answers(tmp_path: Path) -> None:
         session_id="s1",
         fence=FenceHolder(),
         backend=LocalFileStorage(str(tmp_path / "sessions")),
-        approvals=RivetApprovals({"device_status": ToolPolicy("read", "Read the phone's status")}),
+        approvals=EmrysApprovals({"device_status": ToolPolicy("read", "Read the phone's status")}),
         tools=[device_status],
         models=models,
         require_telnyx=False,
@@ -207,12 +207,12 @@ def test_a_scripted_groq_turn_calls_a_tool_and_answers(tmp_path: Path) -> None:
 
 
 def test_provider_settings_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("RIVET_MODEL_PROVIDER", "GROQ_API_KEY", "GROQ_MODEL", "GROQ_CONTEXT_WINDOW", "PERPLEXITY_API_KEY"):
+    for name in ("EMRYS_MODEL_PROVIDER", "GROQ_API_KEY", "GROQ_MODEL", "GROQ_CONTEXT_WINDOW", "PERPLEXITY_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     settings = BrainSettings.from_env()
     assert settings.model_provider == "perplexity" and settings.groq_model_id == "qwen/qwen3.8-27b"
     assert available_providers(settings) == () and default_provider(settings) == "perplexity"
-    monkeypatch.setenv("RIVET_MODEL_PROVIDER", "groq")
+    monkeypatch.setenv("EMRYS_MODEL_PROVIDER", "groq")
     monkeypatch.setenv("PERPLEXITY_API_KEY", "p")
     settings = BrainSettings.from_env()
     # Groq was asked for but has no key, so the effective default is the provider that has one.
@@ -221,6 +221,6 @@ def test_provider_settings_come_from_the_environment(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("GROQ_CONTEXT_WINDOW", "65536")
     settings = BrainSettings.from_env()
     assert default_provider(settings) == "groq" and settings.groq_context_window == 65536
-    monkeypatch.setenv("RIVET_MODEL_PROVIDER", "llama")
+    monkeypatch.setenv("EMRYS_MODEL_PROVIDER", "llama")
     with pytest.raises(ValueError, match="perplexity or groq"):
         BrainSettings.from_env()

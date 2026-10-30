@@ -3,7 +3,7 @@
 set -e
 if [ "$(id -u)" = "0" ]; then
   mkdir -p /data
-  chown -R rivet:rivet /data
-  exec setpriv --reuid=rivet --regid=rivet --init-groups "$@"
+  chown -R emrys:emrys /data
+  exec setpriv --reuid=emrys --regid=emrys --init-groups "$@"
 fi
 exec "$@"

@@ -12,11 +12,11 @@ from typing import Any
 import httpx
 from strands.storage import LocalFileStorage
 
-from rivet_brain.approvals import RivetApprovals, ToolPolicy
-from rivet_brain.config import BrainSettings, WatchdogSettings
-from rivet_brain.factory import Generation, build_agent
-from rivet_brain.models.perplexity import build_perplexity_model
-from rivet_brain.supervisor import SessionSupervisor
+from emrys_brain.approvals import EmrysApprovals, ToolPolicy
+from emrys_brain.config import BrainSettings, WatchdogSettings
+from emrys_brain.factory import Generation, build_agent
+from emrys_brain.models.perplexity import build_perplexity_model
+from emrys_brain.supervisor import SessionSupervisor
 from tests.sse import SSE, FakePerplexity
 
 FAST = WatchdogSettings(
@@ -62,7 +62,7 @@ def silent_stream(request: httpx.Request) -> httpx.Response:
 class Aux:
     """The aux model's endpoint: memory extraction, summaries, and GoalLoop verdicts in order."""
 
-    def __init__(self, verdicts: Sequence[bool] = (), summary: str = "Earlier: the user greeted Rivet.") -> None:
+    def __init__(self, verdicts: Sequence[bool] = (), summary: str = "Earlier: the user greeted Emrys.") -> None:
         self.verdicts = list(verdicts)
         self.summary = summary
         self.judged = 0
@@ -150,7 +150,7 @@ def make_supervisor(
         settings,
         "phone-1",
         backend=LocalFileStorage(settings.session_dir),
-        approvals=RivetApprovals(policies),
+        approvals=EmrysApprovals(policies),
         tools=tools,
         sink=events.append if events is not None else None,
         build=make_build(main, aux or Aux(), **build_extra),

@@ -7,10 +7,10 @@ from typing import Any
 import pytest
 from strands.storage import InMemoryStorage, LocalFileStorage
 
-from rivet_brain.approvals import RivetApprovals
-from rivet_brain.device_tools import POLICIES as PHONE_POLICIES
-from rivet_brain.email_tools import POLICIES as EMAIL_POLICIES
-from rivet_brain.rules import (
+from emrys_brain.approvals import EmrysApprovals
+from emrys_brain.device_tools import POLICIES as PHONE_POLICIES
+from emrys_brain.email_tools import POLICIES as EMAIL_POLICIES
+from emrys_brain.rules import (
     LIMIT_REACHED,
     NOT_ALLOWABLE,
     RULES_LIMIT,
@@ -24,7 +24,7 @@ from rivet_brain.rules import (
     normalize,
 )
 
-APPROVALS = RivetApprovals({**PHONE_POLICIES, **EMAIL_POLICIES})
+APPROVALS = EmrysApprovals({**PHONE_POLICIES, **EMAIL_POLICIES})
 
 
 def test_shared_normalizer_vectors() -> None:
@@ -181,7 +181,7 @@ async def test_a_corrupt_document_is_set_aside_and_bad_entries_dropped() -> None
     await backend.write(rules.key, b"{not json")
     await rules.load()
     assert rules.rules() == () and rules.revision == 0
-    copies = [key for key in await backend.list("session/phone-1/rivet/") if ".corrupt-" in key]
+    copies = [key for key in await backend.list("session/phone-1/emrys/") if ".corrupt-" in key]
     assert len(copies) == 1 and await backend.read(copies[0]) == b"{not json"
 
     good = admit(_offer(), "allow", now=1.0).to_wire()
@@ -200,7 +200,7 @@ async def test_at_most_200_rules() -> None:
         await rules.put(StandingRule(Target.of("sms_send", {"to": f"+1{i:010d}"}), "deny", "x", 0.0))
     with pytest.raises(RuleRefusedError, match="at most 200"):
         await rules.put(StandingRule(Target.of("sms_send", {"to": "+19999999999"}), "deny", "x", 0.0))
-    assert LIMIT_REACHED.startswith("Rivet keeps at most 200 rules.")
+    assert LIMIT_REACHED.startswith("Emrys keeps at most 200 rules.")
     # Replacing an existing rule is still allowed.
     await rules.put(StandingRule(Target.of("sms_send", {"to": f"+1{0:010d}"}), "allow", "x", 0.0))
 

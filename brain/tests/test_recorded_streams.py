@@ -16,8 +16,8 @@ import pytest
 from strands import Agent, tool
 from strands.types.exceptions import MaxTokensReachedException
 
-from rivet_brain.events import RivetEventBridge
-from rivet_brain.models.perplexity import PerplexityAgentModel, build_perplexity_model
+from emrys_brain.events import EmrysEventBridge
+from emrys_brain.models.perplexity import PerplexityAgentModel, build_perplexity_model
 from tests.sse import FakePerplexity
 
 RECORDED = Path(__file__).parent / "fixtures" / "perplexity"
@@ -59,7 +59,7 @@ def _text(agent: Agent) -> str:
 
 def test_plain_text_and_usage_cost() -> None:
     usage: list[dict[str, Any]] = []
-    bridge = RivetEventBridge(lambda e: usage.append(e) if e["type"] == "usage" else None)
+    bridge = EmrysEventBridge(lambda e: usage.append(e) if e["type"] == "usage" else None)
     agent = Agent(model=model(FakePerplexity([recorded("plain_text")])), callback_handler=bridge)
     result = agent("Say hello in five words.")
     assert result.stop_reason == "end_turn" and _text(agent) == recorded_text("plain_text")
@@ -92,7 +92,7 @@ def test_function_call_arrives_once_with_real_arguments() -> None:
 @pytest.mark.parametrize("name", ["web_search", "people_search", "fetch_url"])
 def test_web_sources_become_citations_and_taint_the_turn(name: str) -> None:
     untrusted: list[bool] = []
-    bridge = RivetEventBridge(None, on_untrusted=lambda: untrusted.append(True))
+    bridge = EmrysEventBridge(None, on_untrusted=lambda: untrusted.append(True))
     agent = Agent(model=model(FakePerplexity([recorded(name)])), callback_handler=bridge)
     agent("question")
     assert _text(agent) == recorded_text(name) and untrusted
@@ -104,7 +104,7 @@ def test_web_sources_become_citations_and_taint_the_turn(name: str) -> None:
 @pytest.mark.parametrize("name", ["image_search", "finance_search", "consecutive_user_items"])
 def test_other_native_tools_and_unknown_items_pass_through(name: str) -> None:
     events: list[dict[str, Any]] = []
-    agent = Agent(model=model(FakePerplexity([recorded(name)])), callback_handler=RivetEventBridge(events.append))
+    agent = Agent(model=model(FakePerplexity([recorded(name)])), callback_handler=EmrysEventBridge(events.append))
     result = agent("question")
     assert result.stop_reason == "end_turn" and _text(agent) == recorded_text(name)
     if name != "consecutive_user_items":

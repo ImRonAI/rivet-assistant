@@ -9,8 +9,8 @@ from strands.session import SnapshotSessionManager
 from strands.storage import InMemoryStorage, LocalFileStorage
 from strands.types.exceptions import StorageError
 
-from rivet_brain.models.perplexity import build_perplexity_model
-from rivet_brain.storage import FencedStorage, FencedWriteError, FenceHolder
+from emrys_brain.models.perplexity import build_perplexity_model
+from emrys_brain.storage import FencedStorage, FencedWriteError, FenceHolder
 from tests.sse import SSE, FakePerplexity
 
 
@@ -89,7 +89,7 @@ def test_replaced_generation_cannot_overwrite_the_session_and_the_new_one_restor
     fence = FenceHolder()
     fake = FakePerplexity(
         [
-            SSE().text("Hi, I'm Rivet.").completed(),
+            SSE().text("Hi, I'm Emrys.").completed(),
             SSE("r2").text("zombie").completed(),
             SSE("r3").text("Still here.").completed(),
         ]

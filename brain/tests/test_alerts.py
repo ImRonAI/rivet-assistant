@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from rivet_brain.alerts import (
+from emrys_brain.alerts import (
     Alert,
     alert_for,
     because_task,
@@ -16,9 +16,9 @@ from rivet_brain.alerts import (
     task_reason,
     when,
 )
-from rivet_brain.approvals import RivetApprovals
+from emrys_brain.approvals import EmrysApprovals
 
-NOTE_CHECK = "Rivet can't tell what this does, so it asks first."
+NOTE_CHECK = "Emrys can't tell what this does, so it asks first."
 
 
 def test_clip() -> None:
@@ -57,7 +57,7 @@ def test_operation_summary_fallback() -> None:
 def test_because() -> None:
     assert because_you_asked("text Dana") == "You asked: “text Dana”"
     assert because_you_asked([{"text": "x"}]) is None
-    assert because_task("Reply to Ada") == "For a task you gave Rivet: “Reply to Ada”"
+    assert because_task("Reply to Ada") == "For a task you gave Emrys: “Reply to Ada”"
     assert task_reason("  A new\nWhatsApp message arrived.  ") == "A new WhatsApp message arrived."
     assert task_reason("x" * 500) == "x" * 140
     assert task_reason(3) is None and task_reason("  ") is None
@@ -117,7 +117,7 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
             "screen_act",
             {"action": "tap", "label": "Send"},
             "Tap “Send” in the app on screen",
-            [{"kind": "note", "markdown": "Rivet checks the button still says this before it taps."}],
+            [{"kind": "note", "markdown": "Emrys checks the button still says this before it taps."}],
         ),
         (
             "screen_act",
@@ -128,7 +128,7 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
         (
             "screen_act",
             {"action": "explode"},
-            "Do something Rivet doesn't recognise in the app on screen",
+            "Do something Emrys doesn't recognise in the app on screen",
             [{"kind": "note", "markdown": NOTE_CHECK}],
         ),
         (
@@ -175,7 +175,7 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
                 {"kind": "note", "markdown": "Nothing is deleted."},
             ],
         ),
-        ("email_mark", {"uid": 1, "action": "delete"}, "Do something Rivet doesn't recognise with an email", []),
+        ("email_mark", {"uid": 1, "action": "delete"}, "Do something Emrys doesn't recognise with an email", []),
         (
             "call_answering_setup",
             {"number": "+18015550100"},
@@ -184,7 +184,7 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
                 {"kind": "field", "label": "Number", "value": "+18015550100"},
                 {
                     "kind": "note",
-                    "markdown": "Creates Rivet's answering assistant on your Telnyx account and sends calls to "
+                    "markdown": "Creates Emrys's answering assistant on your Telnyx account and sends calls to "
                     "this number to it.",
                 },
             ],
@@ -192,20 +192,20 @@ def _alert(tool: str, tool_input: Any, tier: Any = "send", operations: Any = ())
         (
             "call_answering_setup",
             {"number": "+18015550100", "reassign": True},
-            "Move +18015550100 to Rivet's call answering",
+            "Move +18015550100 to Emrys's call answering",
             [
                 {"kind": "field", "label": "Number", "value": "+18015550100"},
                 {
                     "kind": "note",
-                    "markdown": "Calls to this number stop going where they go now, and Rivet answers them instead.",
+                    "markdown": "Calls to this number stop going where they go now, and Emrys answers them instead.",
                 },
             ],
         ),
         (
             "mystery",
             {},
-            "Use a tool Rivet doesn't know: mystery",
-            [{"kind": "note", "markdown": "Rivet has no rule for this tool, so it asks first."}],
+            "Use a tool Emrys doesn't know: mystery",
+            [{"kind": "note", "markdown": "Emrys has no rule for this tool, so it asks first."}],
         ),
     ],
 )
@@ -227,7 +227,7 @@ def test_non_string_inputs_are_shown_as_text() -> None:
 
 
 def _telnyx(code: str) -> Alert:
-    return RivetApprovals().assess("telnyx_execute", {"code": code}).alert
+    return EmrysApprovals().assess("telnyx_execute", {"code": code}).alert
 
 
 def test_telnyx_alerts() -> None:
@@ -239,16 +239,16 @@ def test_telnyx_alerts() -> None:
     assert two.blocks[0]["kind"] == "note"
     assert two.blocks[0]["markdown"] == ("- Send a message\n- Delete a messaging profile\nRuns on your Telnyx account.")
     odd = _telnyx("await call_tool('SendMessage', {})\nawait call_tool('NoSuchTool', {})")
-    assert odd.headline == "Run code on your Telnyx account that Rivet can't check"
+    assert odd.headline == "Run code on your Telnyx account that Emrys can't check"
     assert odd.blocks == (
         {"kind": "field", "label": "Not recognised", "value": "NoSuchTool"},
         {
             "kind": "note",
-            "markdown": "- Send a message\n- Something Rivet doesn't recognise\nRuns on your Telnyx account.",
+            "markdown": "- Send a message\n- Something Emrys doesn't recognise\nRuns on your Telnyx account.",
         },
     )
     computed = _telnyx("n = 'SendMessage'\nawait call_tool(n, {})")
-    assert computed.headline == "Run code on your Telnyx account that Rivet can't check"
+    assert computed.headline == "Run code on your Telnyx account that Emrys can't check"
     assert computed.blocks[0] == {"kind": "field", "label": "Not recognised", "value": "<computed>"}
 
 
@@ -261,8 +261,8 @@ def test_telnyx_alerts() -> None:
     ],
 )
 def test_a_note_never_holds_tool_input(tool: str, tool_input: dict[str, Any]) -> None:
-    alert = RivetApprovals().assess(tool, tool_input).alert if tool == "telnyx_execute" else _alert(tool, tool_input)
+    alert = EmrysApprovals().assess(tool, tool_input).alert if tool == "telnyx_execute" else _alert(tool, tool_input)
     notes = [block["markdown"] for block in alert.blocks if block["kind"] == "note"]
     assert notes and not any("evil.example" in note or "Safe" in note for note in notes)
-    missing = RivetApprovals().assess("telnyx_execute", {}).alert
-    assert missing.headline == "Run code on your Telnyx account that Rivet can't check"
+    missing = EmrysApprovals().assess("telnyx_execute", {}).alert
+    assert missing.headline == "Run code on your Telnyx account that Emrys can't check"

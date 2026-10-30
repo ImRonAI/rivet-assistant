@@ -7,23 +7,23 @@ from typing import Any
 import pytest
 from strands import Agent, tool
 
-from rivet_brain.approvals import (
+from emrys_brain.approvals import (
     DECLINED,
     STANDING_DENY,
     SUPERSEDED,
     TIMED_OUT,
     TURN_KEY,
     Answer,
-    RivetApprovals,
+    EmrysApprovals,
     RuleApplied,
     TelnyxCatalog,
     ToolPolicy,
     call_tool_targets,
     parse_approval,
 )
-from rivet_brain.device_tools import POLICIES as PHONE_POLICIES
-from rivet_brain.models.perplexity import build_perplexity_model
-from rivet_brain.rules import Decision, StandingRule, StandingRules, Target
+from emrys_brain.device_tools import POLICIES as PHONE_POLICIES
+from emrys_brain.models.perplexity import build_perplexity_model
+from emrys_brain.rules import Decision, StandingRule, StandingRules, Target
 from tests.sse import SSE, FakePerplexity
 
 CATALOG = TelnyxCatalog.bundled()
@@ -114,7 +114,7 @@ def test_parse_approval(response: Any, expected: Answer) -> None:
 
 
 def test_execute_assessment_takes_the_riskiest_call() -> None:
-    approvals = RivetApprovals()
+    approvals = EmrysApprovals()
     reads = approvals.assess("telnyx_execute", {"code": "await call_tool('ListPhoneNumbers', {})"})
     assert reads.tier == "read"
     mixed = approvals.assess(
@@ -147,7 +147,7 @@ def test_execute_assessment_takes_the_riskiest_call() -> None:
     ],
 )
 def test_telnyx_rules_need_one_known_change(code: str, eligible: bool) -> None:
-    approvals = RivetApprovals()
+    approvals = EmrysApprovals()
     assessment = approvals.assess("telnyx_execute", {"code": code})
     offer = approvals.offer(assessment, tainted=False)
     assert (offer is not None) is eligible
@@ -234,11 +234,11 @@ def policies() -> dict[str, ToolPolicy]:
     }
 
 
-def make_agent(fake: FakePerplexity, approvals: RivetApprovals | None = None) -> Agent:
+def make_agent(fake: FakePerplexity, approvals: EmrysApprovals | None = None) -> Agent:
     model = build_perplexity_model(
         api_key="k", model_id="m", native_tools=(), transport_factory=fake.transport_factory()
     )
-    approvals = approvals or RivetApprovals(policies())
+    approvals = approvals or EmrysApprovals(policies())
     agent = Agent(
         model=model,
         tools=[fake_execute, read_sms, sms_send, calendar_create, screen_act],
@@ -249,13 +249,13 @@ def make_agent(fake: FakePerplexity, approvals: RivetApprovals | None = None) ->
     return agent
 
 
-def with_rules(*rules: tuple[Target, Decision]) -> tuple[RivetApprovals, list[RuleApplied]]:
+def with_rules(*rules: tuple[Target, Decision]) -> tuple[EmrysApprovals, list[RuleApplied]]:
     """Approvals over rules written straight into the store (bypassing ``admit``)."""
     store = StandingRules.in_memory()
     for target, decision in rules:
         asyncio.run(store.put(StandingRule(target, decision, f"label {target.tool}", 0.0)))
     applied: list[RuleApplied] = []
-    return RivetApprovals(policies(), rules=store, on_rule=applied.append), applied
+    return EmrysApprovals(policies(), rules=store, on_rule=applied.append), applied
 
 
 def telnyx(operation: str) -> Target:
@@ -282,7 +282,7 @@ def test_send_pauses_for_approval_then_runs_once_approved() -> None:
     result = agent("text Ada I'm late")
     assert result.stop_reason == "interrupt" and executed == []
     (interrupt,) = result.interrupts
-    assert interrupt.id.startswith("v1:before_tool_call:call_1:") and interrupt.name == "rivet-approval"
+    assert interrupt.id.startswith("v1:before_tool_call:call_1:") and interrupt.name == "emrys-approval"
     sheet = json.loads(interrupt.reason)
     assert sheet["v"] == 2 and sheet["tier"] == "send" and sheet["preview"] == SEND and "remember" not in sheet
     assert sheet["headline"] == "Send a message on your Telnyx account"
@@ -352,8 +352,8 @@ def test_a_declined_call_tells_the_model_plainly(response: dict[str, Any], text:
 
 def test_standing_text_matches_the_spec() -> None:
     assert STANDING_DENY.format(label="Texts to Dana") == (
-        "The user set Rivet to always decline this (Texts to Dana), so it was not done. Don't try it again or "
-        "offer it. If the user asks for it, tell them it's blocked by a rule they can remove in Rivet › Settings "
+        "The user set Emrys to always decline this (Texts to Dana), so it was not done. Don't try it again or "
+        "offer it. If the user asks for it, tell them it's blocked by a rule they can remove in Emrys › Settings "
         "› Approval rules."
     )
 
@@ -497,7 +497,7 @@ def test_a_tainted_turn_clears_on_the_next_turn() -> None:
 
 
 def test_a_broken_policy_denies() -> None:
-    class Broken(RivetApprovals):
+    class Broken(EmrysApprovals):
         def assess(self, tool: str, tool_input: object) -> Any:
             raise RuntimeError("policy store unavailable")
 
@@ -528,7 +528,7 @@ def test_pending_approval_survives_a_restore_into_a_new_agent() -> None:
 
 
 def test_offer_for_recomputes_what_the_phone_asks_for() -> None:
-    approvals = RivetApprovals(PHONE_POLICIES)
+    approvals = EmrysApprovals(PHONE_POLICIES)
     sms = approvals.offer_for("sms_send", {"to": "+1 801 555 0100"})
     assert sms is not None and sms.allow and sms.target == Target.of("sms_send", {"to": "+18015550100"})
     tap = approvals.offer_for("screen_act", {"label": "Pay now"})

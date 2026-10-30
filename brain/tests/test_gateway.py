@@ -12,15 +12,15 @@ from starlette.websockets import WebSocketDisconnect
 from strands import tool
 from strands.storage import LocalFileStorage
 
-from rivet_brain.approvals import RivetApprovals, ToolPolicy
-from rivet_brain.config import BrainSettings
-from rivet_brain.device import DeviceBridge, device_tool
-from rivet_brain.device_tools import POLICIES as PHONE_POLICIES
-from rivet_brain.device_tools import SMS_STANDING
-from rivet_brain.factory import Generation, build_agent
-from rivet_brain.gateway import ModelChoice, _Session, create_app
-from rivet_brain.models.groq import GroqModel
-from rivet_brain.rules import StandingRules
+from emrys_brain.approvals import EmrysApprovals, ToolPolicy
+from emrys_brain.config import BrainSettings
+from emrys_brain.device import DeviceBridge, device_tool
+from emrys_brain.device_tools import POLICIES as PHONE_POLICIES
+from emrys_brain.device_tools import SMS_STANDING
+from emrys_brain.factory import Generation, build_agent
+from emrys_brain.gateway import ModelChoice, _Session, create_app
+from emrys_brain.models.groq import GroqModel
+from emrys_brain.rules import StandingRules
 from tests.chaos import Aux, fast_settings, make_build
 from tests.sse import SSE, FakeGroq, FakePerplexity
 
@@ -49,7 +49,7 @@ def _reset() -> Iterator[None]:
 
 def _client(tmp_path: Path, main: FakePerplexity, **kwargs: Any) -> TestClient:
     kwargs.setdefault(
-        "approvals", RivetApprovals({"send_sms": ToolPolicy("send", "Send an SMS", standing=SMS_STANDING)})
+        "approvals", EmrysApprovals({"send_sms": ToolPolicy("send", "Send an SMS", standing=SMS_STANDING)})
     )
     kwargs.setdefault("tools_for", lambda bridge: [send_sms])
     app = create_app(fast_settings(tmp_path), build=make_build(main, Aux()), device_token=TOKEN, **kwargs)
@@ -74,19 +74,19 @@ def test_health_and_a_mandatory_device_token(tmp_path: Path) -> None:
             client.websocket_connect("/v1/sessions/phone-1", headers={"Authorization": "Bearer wrong"}) as socket,
         ):
             socket.receive_json()
-    with pytest.raises(RuntimeError, match="RIVET_DEVICE_TOKEN"):
+    with pytest.raises(RuntimeError, match="EMRYS_DEVICE_TOKEN"):
         create_app(fast_settings(tmp_path), device_token="short")
 
 
 def test_a_turn_streams_ui_events_and_completes(tmp_path: Path) -> None:
-    main = FakePerplexity([SSE().text("Hi, ", "I'm Rivet.").completed()])
+    main = FakePerplexity([SSE().text("Hi, ", "I'm Emrys.").completed()])
     with _client(tmp_path, main) as client, client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:
         socket.send_json({"type": "turn", "turn_id": "t1", "text": "hello"})
         done, seen = _until(socket, "turn.completed")
         kinds = [e["type"] for e in seen]
         assert kinds[:2] == ["turn.accepted", "turn.started"] and "text" in kinds
-        assert done["text"] == "Hi, I'm Rivet." and done["turn_id"] == "t1" and done["session_id"] == "phone-1"
-        assert "".join(e["delta"] for e in seen if e["type"] == "text") == "Hi, I'm Rivet."
+        assert done["text"] == "Hi, I'm Emrys." and done["turn_id"] == "t1" and done["session_id"] == "phone-1"
+        assert "".join(e["delta"] for e in seen if e["type"] == "text") == "Hi, I'm Emrys."
 
 
 def test_approval_round_trip_over_the_socket(tmp_path: Path) -> None:
@@ -133,7 +133,7 @@ def test_device_tools_round_trip_through_the_phone(tmp_path: Path) -> None:
             SSE("r2").text("Ada is +15551234.").completed(),
         ]
     )
-    approvals = RivetApprovals({"read_contact": ToolPolicy("read", "Read a contact", untrusted_output=True)})
+    approvals = EmrysApprovals({"read_contact": ToolPolicy("read", "Read a contact", untrusted_output=True)})
     with (
         _client(tmp_path, main, tools_for=tools_for, approvals=approvals) as client,
         client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket,
@@ -156,8 +156,8 @@ def test_device_tools_round_trip_through_the_phone(tmp_path: Path) -> None:
         )  # the phone's answer reached the model
 
 
-def _policies() -> RivetApprovals:
-    return RivetApprovals({**PHONE_POLICIES, "send_sms": ToolPolicy("send", "Send an SMS", standing=SMS_STANDING)})
+def _policies() -> EmrysApprovals:
+    return EmrysApprovals({**PHONE_POLICIES, "send_sms": ToolPolicy("send", "Send an SMS", standing=SMS_STANDING)})
 
 
 def test_resume_sends_the_rules_before_session_ready(tmp_path: Path) -> None:
@@ -235,7 +235,7 @@ def test_always_deny_declines_and_the_model_is_told_why(tmp_path: Path) -> None:
         assert rules["rules"][0]["decision"] == "deny"
         _until(socket, "turn.completed")
     output = next(i for i in main.requests[1]["input"] if i.get("type") == "function_call_output")
-    assert "The user set Rivet to always decline this (Texts to +15550000000)" in json.dumps(output, ensure_ascii=False)
+    assert "The user set Emrys to always decline this (Texts to +15550000000)" in json.dumps(output, ensure_ascii=False)
     assert sent == []
 
 
@@ -253,7 +253,7 @@ def test_rules_set_and_revoke_from_the_phone(tmp_path: Path) -> None:
         }
         socket.send_json({"type": "rules.set", "decision": "deny", "tool": "mystery", "scope": {}})
         refused, _ = _until(socket, "rules.refused")
-        assert refused["error"] == "Rivet can't make a rule for this."
+        assert refused["error"] == "Emrys can't make a rule for this."
         socket.send_json({"type": "rules.set", "decision": "deny", "tool": "sms_send", "scope": {"to": 5}})
         _until(socket, "rules.refused")
         socket.send_json({"type": "rules.set", "decision": "never", "tool": "sms_send", "scope": {"to": "+1"}})
@@ -326,7 +326,7 @@ def _model_client(tmp_path: Path, perplexity: FakePerplexity, groq: FakeGroq, **
 
 
 def _stored_model(tmp_path: Path) -> Any:
-    raw = asyncio.run(LocalFileStorage(str(tmp_path / "sessions")).read("session/phone-1/rivet/model.json"))
+    raw = asyncio.run(LocalFileStorage(str(tmp_path / "sessions")).read("session/phone-1/emrys/model.json"))
     return json.loads(raw) if raw else None
 
 
@@ -384,12 +384,12 @@ def test_model_set_is_refused_when_not_set_up_or_busy(tmp_path: Path) -> None:
     ):
         socket.send_json({"type": "model.set", "model": "llama"})
         refused, _ = _until(socket, "model.refused")
-        assert refused == {"type": "model.refused", "error": "That model isn't set up on Rivet's brain."}
+        assert refused == {"type": "model.refused", "error": "That model isn't set up on Emrys's brain."}
         socket.send_json({"type": "turn", "turn_id": "t1", "text": "text Ada"})
         _until(socket, "approval.request")
         socket.send_json({"type": "model.set", "model": "groq"})
         refused, _ = _until(socket, "model.refused")
-        assert refused["error"] == "Rivet is busy. Change the model when it finishes."
+        assert refused["error"] == "Emrys is busy. Change the model when it finishes."
         socket.send_json({"type": "model.set", "model": "perplexity"})
         model, _ = _until(socket, "model")
         assert model["model"] == "perplexity"
@@ -401,7 +401,7 @@ def test_model_set_is_refused_when_not_set_up_or_busy(tmp_path: Path) -> None:
     ):
         socket.send_json({"type": "model.set", "model": "groq"})
         refused, _ = _until(socket, "model.refused")
-        assert refused["error"] == "Groq isn't set up on Rivet's brain."
+        assert refused["error"] == "Groq isn't set up on Emrys's brain."
         socket.send_json({"type": "resume"})
         model, _ = _until(socket, "model")
         assert model == {"type": "model", "model": "perplexity", "available": ["perplexity"]}
@@ -485,7 +485,7 @@ def test_a_turn_with_text_and_attachments_keeps_the_text_first(tmp_path: Path) -
         assert seen[0]["turn_id"] == failed["turn_id"] == "t2" and failed["lane"] == "default"
         assert (
             failed["error"]
-            == "Rivet had nothing to work with. Type a message, or add results with secure (https) links."
+            == "Emrys had nothing to work with. Type a message, or add results with secure (https) links."
         )
     prompt = json.dumps(next(i for i in main.requests[0]["input"] if i.get("role") == "user"))
     assert "what about this?\\n\\nThe user added these search results" in prompt

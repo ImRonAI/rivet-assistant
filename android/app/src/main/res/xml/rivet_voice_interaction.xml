@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Makes Rivet a full digital assistant. The role and the system parse this with raw attribute reads, so
-     the services are fully qualified class names and supportsAssist is a literal. -->
-<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:sessionService="com.hiron.rivet.voice.RivetSessionService"
-    android:recognitionService="com.hiron.rivet.voice.RivetRecognitionService"
-    android:settingsActivity="com.hiron.rivet.MainActivity"
-    android:supportsAssist="true" />

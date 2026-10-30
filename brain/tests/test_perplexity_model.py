@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from strands import Agent, tool
 from strands.types.exceptions import ContextWindowOverflowException, MaxTokensReachedException, ModelThrottledException
 
-from rivet_brain.models.perplexity import (
+from emrys_brain.models.perplexity import (
     PerplexityAgentModel,
     PerplexityTransientError,
     build_perplexity_model,
@@ -67,7 +67,7 @@ async def test_request_keeps_native_tools_and_perplexity_fields() -> None:
         make_model(fake, fallback_models=("anthropic/claude-sonnet-5-5",)),
         USER,
         tool_specs=[SEND_SPEC],
-        system_prompt="You are Rivet.",
+        system_prompt="You are Emrys.",
     )
     body = fake.requests[0]
     assert [t["type"] for t in body["tools"]] == [
@@ -82,7 +82,7 @@ async def test_request_keeps_native_tools_and_perplexity_fields() -> None:
     assert body["max_steps"] == 8
     assert body["models"] == ["openai/gpt-5.6-sol", "anthropic/claude-sonnet-5-5"]
     assert body["max_output_tokens"] == 16384
-    assert body["store"] is False and body["stream"] is True and body["instructions"] == "You are Rivet."
+    assert body["store"] is False and body["stream"] is True and body["instructions"] == "You are Emrys."
     assert "previous_response_id" not in body
 
 
@@ -110,8 +110,8 @@ async def test_reasoning_progress_reaches_the_callback_handler() -> None:
 
     def handler(**kwargs: Any) -> None:
         event = kwargs.get("event")
-        if isinstance(event, dict) and "rivet" in event:
-            seen.append(event["rivet"])
+        if isinstance(event, dict) and "emrys" in event:
+            seen.append(event["emrys"])
 
     fake = FakePerplexity([SSE().search(["slc weather"], RESULTS).text("Sunny.").completed(cost=0.02)])
     Agent(model=make_model(fake), callback_handler=handler)("weather?")
@@ -184,7 +184,7 @@ async def test_incomplete_for_other_reasons_ends_the_turn_with_a_notice() -> Non
     fake = FakePerplexity([SSE().text("partial").incomplete("max_steps")])
     chunks = await collect(make_model(fake), USER)
     assert {"messageStop": {"stopReason": "end_turn"}} in chunks
-    assert {"rivet": {"type": "incomplete", "reason": "max_steps"}} in chunks
+    assert {"emrys": {"type": "incomplete", "reason": "max_steps"}} in chunks
 
 
 async def test_message_item_without_text_deltas_still_yields_text() -> None:

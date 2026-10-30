@@ -13,11 +13,12 @@ from typing import Any
 import pytest
 from starlette.testclient import TestClient
 
-from rivet_brain import device_tools
-from rivet_brain.approvals import RivetApprovals
-from rivet_brain.calls import (
+from emrys_brain import device_tools
+from emrys_brain.approvals import EmrysApprovals
+from emrys_brain.calls import (
     ASSISTANT_NAME,
     CALL_ID,
+    LEGACY_ASSISTANT_NAME,
     POLICIES,
     CallInbox,
     CallLine,
@@ -28,10 +29,10 @@ from rivet_brain.calls import (
     setup_code,
     tools_for,
 )
-from rivet_brain.device import DeviceBridge
-from rivet_brain.factory import Wiring, build_telnyx_client
-from rivet_brain.gateway import create_app
-from rivet_brain.live_calls import (
+from emrys_brain.device import DeviceBridge
+from emrys_brain.factory import Wiring, build_telnyx_client
+from emrys_brain.gateway import create_app
+from emrys_brain.live_calls import (
     LiveCalls,
     TelnyxRunError,
     TelnyxRunner,
@@ -123,7 +124,7 @@ def test_the_answering_assistant_never_runs_on_anthropic() -> None:
     config = LINE.assistant_config("phone-1", "Tim")
     assert not config["model"].startswith("anthropic/")
     assert config["enabled_features"] == ["telephony"]
-    assert config["dynamic_variables"] == {"owner_name": "Tim", "rivet_call_id": ""}
+    assert config["dynamic_variables"] == {"owner_name": "Tim", "emrys_call_id": ""}
     webhook = config["tools"][0]["webhook"]
     assert webhook["name"] == "take_message" and webhook["url"] == LINE.webhook("phone-1", "message")
 
@@ -147,15 +148,31 @@ def test_a_number_in_use_is_never_moved_without_the_users_ok() -> None:
 
 def test_running_setup_again_updates_the_same_assistant_and_leaves_the_number() -> None:
     mine = {
-        "id": "assistant-rivet",
+        "id": "assistant-emrys",
         "name": ASSISTANT_NAME,
-        "tags": ["rivet"],
-        "telephony_settings": {"default_texml_app_id": "texml-rivet"},
+        "tags": ["emrys"],
+        "telephony_settings": {"default_texml_app_id": "texml-emrys"},
     }
-    telnyx = FakeTelnyx(connection_id="texml-rivet", assistants=[mine])
+    telnyx = FakeTelnyx(connection_id="texml-emrys", assistants=[mine])
     outcome = _run(telnyx)
     assert outcome["ok"] is True and outcome["moved_from"] is None
     assert [name for name, _ in telnyx.writes] == ["update_assistant_public_assistants"]
+
+
+def test_an_assistant_set_up_before_the_rename_is_updated_and_renamed_not_duplicated() -> None:
+    before = {
+        "id": "assistant-rivet",
+        "name": LEGACY_ASSISTANT_NAME,
+        "tags": ["rivet"],
+        "telephony_settings": {"default_texml_app_id": "texml-rivet"},
+    }
+    telnyx = FakeTelnyx(connection_id="texml-rivet", assistants=[before])
+    outcome = _run(telnyx)
+    assert outcome["ok"] is True and outcome["moved_from"] is None
+    assert [name for name, _ in telnyx.writes] == ["update_assistant_public_assistants"]
+    update = telnyx.writes[0][1]
+    assert update["assistant_id"] == "assistant-rivet"
+    assert update["name"] == ASSISTANT_NAME and "emrys" in update["tags"]
 
 
 def test_an_unknown_number_writes_nothing() -> None:
@@ -166,11 +183,11 @@ def test_an_unknown_number_writes_nothing() -> None:
 
 
 def test_setup_asks_and_moving_a_number_needs_the_strongest_approval() -> None:
-    approvals = RivetApprovals(POLICIES)
+    approvals = EmrysApprovals(POLICIES)
     plain = approvals.assess("call_answering_setup", {"number": NUMBER, "owner_name": "Tim"})
     moved = approvals.assess("call_answering_setup", {"number": NUMBER, "owner_name": "Tim", "reassign": True})
     assert plain.tier == "write" and plain.summary == f"Set up call answering on {NUMBER}"
-    assert moved.summary == f"Move {NUMBER} to Rivet's call answering"
+    assert moved.summary == f"Move {NUMBER} to Emrys's call answering"
     assert plain.target is None
     assert moved.tier == "destructive" and moved.high
     messages = approvals.assess("call_messages", {})
@@ -252,7 +269,7 @@ async def test_setup_reports_a_number_in_use_without_touching_the_phone(tmp_path
 async def test_setup_needs_a_public_url(tmp_path: Path) -> None:
     setup = tools_for(DeviceBridge("phone-1"), "phone-1", None, CallInbox(tmp_path))[0]
     result = await setup._tool_func({"toolUseId": "tu", "input": {"number": NUMBER, "owner_name": "Tim"}})
-    assert result["status"] == "error" and "RIVET_PUBLIC_URL" in result["content"][0]["text"]
+    assert result["status"] == "error" and "EMRYS_PUBLIC_URL" in result["content"][0]["text"]
 
 
 def test_webhook_bodies_are_reduced_to_known_bounded_fields() -> None:
@@ -288,8 +305,11 @@ def test_telnyx_webhooks_reach_the_phone_and_the_inbox(tmp_path: Path) -> None:
         with client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:
             start = {"data": {"payload": CALLER}}
             response = client.post(f"/v1/calls/phone-1/{secret}/start", json=start)
-            call_id = response.json()["dynamic_variables"]["rivet_call_id"]
+            variables = response.json()["dynamic_variables"]
+            call_id = variables["emrys_call_id"]
             assert CALL_ID.match(call_id)
+            # An assistant set up before the rename still reads the id under its old name.
+            assert variables["rivet_call_id"] == call_id
             answering = _until(socket, "call.answering")
             assert answering == {"type": "call.answering", "call_id": call_id, "from": "+18015550100", "verified": True}
             body = {
@@ -336,7 +356,7 @@ def test_a_call_message_starts_a_follow_up_that_asks_before_texting_back(tmp_pat
         build=make_build(main, Aux()),
         device_token=TOKEN,
         tools_for=tools,
-        approvals=RivetApprovals({**device_tools.POLICIES, **POLICIES}),
+        approvals=EmrysApprovals({**device_tools.POLICIES, **POLICIES}),
         call_inbox=inbox,
     )
     secret = call_token(TOKEN, "phone-1")
@@ -385,7 +405,7 @@ def _conversation(conversation_id: str = "conv-1") -> dict[str, Any]:
         "telnyx_conversation_channel": "phone_call",
         "telnyx_agent_target": NUMBER,
         "telnyx_end_user_target": CALLER_NUMBER,
-        "assistant_id": "assistant-rivet",
+        "assistant_id": "assistant-emrys",
         "call_control_id": "v3:call-1",
     }
     return {"id": conversation_id, "created_at": "2026-10-27T11:00:00Z", "metadata": metadata}
@@ -399,17 +419,17 @@ def test_the_assistant_hands_back_its_call_id_and_has_no_transfer_tool() -> None
     config = LINE.assistant_config("phone-1", "Tim")
     tools = {t.get("webhook", {}).get("name") or t["type"]: t for t in config["tools"]}
     assert set(tools) == {"take_message", "call_summary", "hangup"}
-    assert tools["take_message"]["webhook"]["preset_body_fields"] == {"call_id": "{{rivet_call_id}}"}
+    assert tools["take_message"]["webhook"]["preset_body_fields"] == {"call_id": "{{emrys_call_id}}"}
     summary = tools["call_summary"]["webhook"]
     assert summary["url"] == LINE.webhook("phone-1", "summary")
-    assert summary["preset_body_fields"] == {"call_id": "{{rivet_call_id}}", "caller": "{{telnyx_end_user_target}}"}
+    assert summary["preset_body_fields"] == {"call_id": "{{emrys_call_id}}", "caller": "{{telnyx_end_user_target}}"}
     assert "call_id" not in summary["body_parameters"]["properties"]
     assert config["post_conversation_settings"] == {"enabled": True}
     assert "call_summary" in config["instructions"]
 
 
 def test_live_call_code_reads_only_and_take_over_writes_only_the_transfer() -> None:
-    approvals = RivetApprovals()
+    approvals = EmrysApprovals()
     for code in (watch_code(CALLER_NUMBER, 1.0e9, None), watch_code("", 1.0e9, "conv-1")):
         compile("async def _main(call_tool):\n" + textwrap.indent(code, "    "), "watch", "exec")
         assert approvals.assess("telnyx_execute", {"code": code}).tier == "read"
@@ -427,7 +447,7 @@ def test_transcript_keeps_what_was_said_in_order() -> None:
         "garbage",
     ]
     assert transcript(messages) == [
-        {"speaker": "rivet", "text": "Hi, you've reached Tim."},
+        {"speaker": "emrys", "text": "Hi, you've reached Tim."},
         {"speaker": "caller", "text": "Is Tim there?"},
     ]
     assert transcript(None) == []
@@ -484,14 +504,14 @@ def test_a_live_call_streams_its_transcript_and_the_user_takes_it_over(tmp_path:
         assert client.post(f"/v1/calls/phone-2/{secret}/summary", json={}).status_code == 404
         with client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:
             started = client.post(f"/v1/calls/phone-1/{secret}/start", json={"data": {"payload": CALLER}}).json()
-            call_id = started["dynamic_variables"]["rivet_call_id"]
+            call_id = started["dynamic_variables"]["emrys_call_id"]
             live = _until(socket, "call.live")
             assert live["call_id"] == call_id and live["from"] == CALLER_NUMBER and live["status"] == "answering"
             assert live["lines"] == [] and live["snapshot"] is True
 
             telnyx.conversations.append(_conversation())
             telnyx.messages["conv-1"] = [_said("assistant", "Hi, you've reached Tim.", 1), _said("tool", None, 2)]
-            assert _lines(socket) == [{"speaker": "rivet", "text": "Hi, you've reached Tim."}]
+            assert _lines(socket) == [{"speaker": "emrys", "text": "Hi, you've reached Tim."}]
             telnyx.messages["conv-1"].append(_said("user", "It's Ada, about lunch.", 3))
             assert _lines(socket) == [{"speaker": "caller", "text": "It's Ada, about lunch."}]
             assert telnyx.queries[0]["metadata->telnyx_end_user_target"] == f"eq.{CALLER_NUMBER}"
@@ -499,7 +519,7 @@ def test_a_live_call_streams_its_transcript_and_the_user_takes_it_over(tmp_path:
             socket.send_json({"type": "resume"})
             snapshot = _next(socket, lambda e: e["type"] == "call.live")
             assert snapshot["snapshot"] is True
-            assert [line["speaker"] for line in snapshot["lines"]] == ["rivet", "caller"]
+            assert [line["speaker"] for line in snapshot["lines"]] == ["emrys", "caller"]
             _until(socket, "session.ready")
 
             socket.send_json({"type": "call.take_over", "call_id": "c-000000000000", "to": OWNER})
@@ -517,7 +537,7 @@ def test_a_live_call_streams_its_transcript_and_the_user_takes_it_over(tmp_path:
                     {
                         "call_control_id": "v3:call-1",
                         "to": OWNER,
-                        "command_id": f"rivet-take-over-{call_id}-1",
+                        "command_id": f"emrys-take-over-{call_id}-1",
                         "timeout_secs": 25,
                         "from": NUMBER,
                     },
@@ -546,7 +566,7 @@ def test_a_live_call_streams_its_transcript_and_the_user_takes_it_over(tmp_path:
     assert len(telnyx.writes) == 1
 
 
-def test_a_take_over_telnyx_cannot_do_leaves_rivet_answering(tmp_path: Path) -> None:
+def test_a_take_over_telnyx_cannot_do_leaves_emrys_answering(tmp_path: Path) -> None:
     telnyx = FakeTelnyx()
     secret = call_token(TOKEN, "phone-1")
     with (
@@ -554,7 +574,7 @@ def test_a_take_over_telnyx_cannot_do_leaves_rivet_answering(tmp_path: Path) -> 
         client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket,
     ):
         started = client.post(f"/v1/calls/phone-1/{secret}/start", json={"data": {"payload": CALLER}}).json()
-        call_id = started["dynamic_variables"]["rivet_call_id"]
+        call_id = started["dynamic_variables"]["emrys_call_id"]
         _until(socket, "call.live")
 
         socket.send_json({"type": "call.take_over", "call_id": call_id, "to": OWNER})
@@ -567,14 +587,14 @@ def test_a_take_over_telnyx_cannot_do_leaves_rivet_answering(tmp_path: Path) -> 
         conversation["metadata"]["telnyx_agent_target"] = OWNER
         telnyx.conversations.append(conversation)
         socket.send_json({"type": "call.take_over", "call_id": call_id, "to": OWNER})
-        assert "Rivet's answering line" in _until(socket, "call.take_over.failed")["error"]
+        assert "Emrys's answering line" in _until(socket, "call.take_over.failed")["error"]
 
         conversation["metadata"]["telnyx_agent_target"] = NUMBER
         telnyx.transfer_error = "422 Call has already ended"
         socket.send_json({"type": "call.take_over", "call_id": call_id, "to": OWNER})
         failed = _until(socket, "call.take_over.failed")
         assert failed["call_id"] == call_id and "422 Call has already ended" in failed["error"]
-        assert [params["command_id"] for _, params in telnyx.writes] == [f"rivet-take-over-{call_id}-3"]
+        assert [params["command_id"] for _, params in telnyx.writes] == [f"emrys-take-over-{call_id}-3"]
 
 
 async def test_a_call_with_no_summary_ends_on_its_own() -> None:
@@ -634,7 +654,7 @@ async def test_the_runner_sends_its_code_over_the_telnyx_mcp_connection(
         monkeypatch.setenv("HORIZON_API_KEY", server.token)
         settings = fast_settings(tmp_path, telnyx_mcp_url=server.url)
         runner = TelnyxRunner(lambda: build_telnyx_client(settings, Wiring()))
-        code = take_over_code(CALLER_NUMBER, 1.0e9, "conv-1", OWNER, "rivet-take-over-c-0123456789ab-1")
+        code = take_over_code(CALLER_NUMBER, 1.0e9, "conv-1", OWNER, "emrys-take-over-c-0123456789ab-1")
         try:
             outcome = await runner.execute(code, label="c-0123456789ab:take-over", timeout=timedelta(seconds=10))
         finally:

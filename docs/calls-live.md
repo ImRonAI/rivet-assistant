@@ -1,13 +1,13 @@
 # Live calls: transcript, take-over and summary
 
-What the phone gets while Rivet's Telnyx assistant is on a call, and the schema evidence for each choice.
+What the phone gets while Emrys's Telnyx assistant is on a call, and the schema evidence for each choice.
 
 - Schema: OubliTelnyxMCP `docs/reference/telnyx/openapi.json`, SHA-256 `34a17d54…7fdf8`. That is the same file
-  `brain/src/rivet_brain/data/telnyx_operations.json` was generated from, so the tool names below are the MCP names
+  `brain/src/emrys_brain/data/telnyx_operations.json` was generated from, so the tool names below are the MCP names
   `call_tool` takes.
 - Argument names come from FastMCP 4.1.0's OpenAPI parser (`_combine_schemas_and_map_params`) run over that schema.
   4.1.0 is the version OubliTelnyxMCP pins.
-- Code: `brain/src/rivet_brain/live_calls.py` (watcher, take-over, `TelnyxRunner`) and `calls.py` (assistant config
+- Code: `brain/src/emrys_brain/live_calls.py` (watcher, take-over, `TelnyxRunner`) and `calls.py` (assistant config
   and webhook bodies).
 
 ## How the assistant is wired, and why that decides everything
@@ -23,13 +23,13 @@ brain.
 
 - `dynamic_variables_webhook_url`: "Telnyx sends a POST request to this URL at the start of the conversation to
   resolve dynamic variables. **Gotcha:** the webhook response must wrap variables under a top-level
-  `dynamic_variables` object". The brain answers `{"dynamic_variables": {"rivet_call_id": "c-…"}}`.
+  `dynamic_variables` object". The brain answers `{"dynamic_variables": {"emrys_call_id": "c-…"}}`.
 - `WebhookToolParams.preset_body_fields`: "Body fields supplied by the assistant configuration rather than by the
   model. They are never advertised in the tool definition, so the LLM can neither see nor set them … Values support
   mustache templating, so they can hold dynamic variables (`{{customer_id}}`)".
   `SendMessageTool.message_template` confirms that "custom webhook-provided variables will be resolved at runtime".
-  `take_message` and `call_summary` therefore carry `{"call_id": "{{rivet_call_id}}"}`.
-- `dynamic_variables` gives `rivet_call_id` the default `""`. `dynamic_variables_webhook_timeout_ms`: "If the webhook
+  `take_message` and `call_summary` therefore carry `{"call_id": "{{emrys_call_id}}"}`.
+- `dynamic_variables` gives `emrys_call_id` the default `""`. `dynamic_variables_webhook_timeout_ms`: "If the webhook
   does not respond within this timeout, the call proceeds with default values."
 - **Blocker (unknown, not guessed):** the schema does not describe the *request* body of the dynamic-variables
   webhook; it links to an external guide. The gateway reads only `telnyx_end_user_target` and
@@ -46,7 +46,7 @@ brain.
 
 How the watcher works:
 
-- Every `RIVET_CALL_POLL` seconds (default 2), it runs one `execute` with fixed code.
+- Every `EMRYS_CALL_POLL` seconds (default 2), it runs one `execute` with fixed code.
 - The code holds only GETs. The brain's own approval catalog classifies it as `read`, and a test checks this.
 - The first ticks find the conversation: this caller, a phone call, created after the call started (minus 60 s), newest
   first.
@@ -109,9 +109,9 @@ The brain ends a call that has had no summary for 30 minutes, with outcome `unkn
   live.
 - Also unverified: whether the assistant stops talking while the transfer rings, and whether the post-conversation turn
   runs after a transfer. If it does not, the call ends after 30 minutes with outcome `unknown`.
-- Carrier forwarding can send the transfer back to Rivet. The transfer rings the user's own number through their
+- Carrier forwarding can send the transfer back to Emrys. The transfer rings the user's own number through their
   carrier:
-  - With "all calls" forwarding, it would come straight back to Rivet. The phone refuses a take-over when it last
+  - With "all calls" forwarding, it would come straight back to Emrys. The phone refuses a take-over when it last
     turned that mode on.
   - With "unanswered calls" forwarding, a transfer the user does not pick up can return after the carrier's no-answer
     timer.

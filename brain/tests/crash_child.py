@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 from strands import tool
 
-from rivet_brain.approvals import ToolPolicy
+from emrys_brain.approvals import ToolPolicy
 from tests.chaos import FAST, fast_settings, make_supervisor, silent_stream
 from tests.sse import SSE, FakePerplexity
 

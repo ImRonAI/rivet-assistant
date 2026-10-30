@@ -17,9 +17,9 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
-from rivet_brain import search
-from rivet_brain.gateway import configure_logging, create_app
-from rivet_brain.search import BraveSearch, SearchKeys
+from emrys_brain import search
+from emrys_brain.gateway import configure_logging, create_app
+from emrys_brain.search import BraveSearch, SearchKeys
 from tests.chaos import Aux, fast_settings, make_build
 from tests.sse import FakePerplexity
 
@@ -550,7 +550,7 @@ def test_a_missing_plan_key_is_503(tmp_path: Path, keys: SearchKeys, path: str) 
     fake = FakeBrave()
     with _client(tmp_path, BraveSearch(keys, transport=httpx.MockTransport(fake))) as client:
         response = _get(client, path, q="x")
-        assert response.status_code == 503 and response.json() == {"error": "Search isn't set up on Rivet's brain yet."}
+        assert response.status_code == 503 and response.json() == {"error": "Search isn't set up on Emrys's brain yet."}
     assert fake.requests == []
 
 
@@ -612,7 +612,7 @@ def test_a_timeout_is_504(tmp_path: Path) -> None:
 def test_logs_never_hold_a_query_or_a_key(
     client: TestClient, brave: FakeBrave, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("RIVET_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("EMRYS_LOG_LEVEL", "DEBUG")
     caplog.set_level(logging.DEBUG)
     configure_logging()
     try:

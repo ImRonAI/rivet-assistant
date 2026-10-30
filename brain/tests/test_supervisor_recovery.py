@@ -19,10 +19,10 @@ import pytest
 from strands import tool
 from strands.storage import LocalFileStorage
 
-from rivet_brain.approvals import ToolPolicy
-from rivet_brain.device_tools import SMS_STANDING
-from rivet_brain.factory import Generation
-from rivet_brain.supervisor import BuildTimeoutError, SessionLockedError, latest_snapshot_key
+from emrys_brain.approvals import ToolPolicy
+from emrys_brain.device_tools import SMS_STANDING
+from emrys_brain.factory import Generation
+from emrys_brain.supervisor import BuildTimeoutError, SessionLockedError, latest_snapshot_key
 from tests.chaos import FAST, Aux, fast_settings, make_build, make_supervisor, roles, user_texts
 from tests.sse import SSE, FakePerplexity, error_response
 from tests.telnyx_server import FakeTelnyxServer
@@ -95,7 +95,7 @@ async def test_kill_9_mid_turn_then_a_new_process_finishes_the_turn(tmp_path: Pa
         agent = supervisor._lanes["default"].gen.agent  # type: ignore[union-attr]
         assert roles(agent.messages) == ["user", "assistant", "user", "assistant"]
         assert lookups == []  # the child's completed lookup was not repeated
-        assert any("Rivet restarted while working on this" in t for t in user_texts(agent.messages))
+        assert any("Emrys restarted while working on this" in t for t in user_texts(agent.messages))
     finally:
         await supervisor.close()
 
@@ -179,7 +179,7 @@ async def test_a_new_message_denies_pending_approvals_then_runs(tmp_path: Path) 
 
 
 async def test_corrupt_latest_snapshot_falls_back_to_the_newest_checkpoint(tmp_path: Path) -> None:
-    first = make_supervisor(tmp_path, FakePerplexity([SSE().text("Hi, I'm Rivet.").completed()]))
+    first = make_supervisor(tmp_path, FakePerplexity([SSE().text("Hi, I'm Emrys.").completed()]))
     await first.start()
     await first.send("hello")
     await first.close()

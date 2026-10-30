@@ -7,7 +7,7 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
-from rivet_brain.gateway import create_app
+from emrys_brain.gateway import create_app
 from tests.chaos import Aux, fast_settings, make_build
 from tests.sse import FakePerplexity
 
@@ -58,8 +58,8 @@ def _client(tmp_path: Path, upstream: FakeElevenLabs) -> TestClient:
 @pytest.fixture(autouse=True)
 def _env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ELEVENLABS_API_KEY", KEY)
-    monkeypatch.delenv("RIVET_ELEVENLABS_VOICE_AGENT_ID", raising=False)
-    monkeypatch.delenv("RIVET_ELEVENLABS_TEXT_AGENT_ID", raising=False)
+    monkeypatch.delenv("EMRYS_ELEVENLABS_VOICE_AGENT_ID", raising=False)
+    monkeypatch.delenv("EMRYS_ELEVENLABS_TEXT_AGENT_ID", raising=False)
 
 
 def test_voice_gets_a_conversation_token_for_the_voice_agent(tmp_path: Path) -> None:
@@ -86,7 +86,7 @@ def test_text_gets_a_signed_url_for_the_text_agent(tmp_path: Path) -> None:
 
 
 def test_agent_ids_can_be_overridden(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("RIVET_ELEVENLABS_VOICE_AGENT_ID", "agent_other")
+    monkeypatch.setenv("EMRYS_ELEVENLABS_VOICE_AGENT_ID", "agent_other")
     with _client(tmp_path, FakeElevenLabs()) as client:
         body = client.get("/v1/agent/session", params={"mode": "voice"}, headers=AUTH).json()
     assert body["agent_id"] == "agent_other" and body["conversation_token"] == "lk-agent_other"
