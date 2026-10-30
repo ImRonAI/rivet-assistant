@@ -25,8 +25,8 @@ class SearchToolsTest {
     private var state = RivetState()
     private val asked = mutableListOf<SearchQuery>()
 
-    private fun tools(answer: suspend (SearchQuery) -> Result<SearchResults>, budgetMs: Long = 2_000) =
-        SearchTools.build({ asked += it; answer(it) }, { change -> state = change(state) }, budgetMs)
+    private fun tools(answer: suspend (SearchQuery) -> Result<SearchResults>, taint: AgentTaint = AgentTaint(), budgetMs: Long = 2_000) =
+        SearchTools.build({ asked += it; answer(it) }, { change -> state = change(state) }, taint, budgetMs)
 
     @Test
     fun theSevenNamesSitNextToThePhoneToolsWithoutClashing() {
@@ -77,9 +77,11 @@ class SearchToolsTest {
     }
 
     @Test
-    fun aResultIsShownAndTellsTheAgentWhatIsOnScreen() = runBlocking {
-        val result = tools({ Result.success(SearchFixtures.webResults) }).getValue("web_search").run(mapOf("q" to "trail running shoes"))
+    fun aResultIsShownMarksTheTurnAndTellsTheAgentWhatIsOnScreen() = runBlocking {
+        val taint = AgentTaint()
+        val result = tools({ Result.success(SearchFixtures.webResults) }, taint).getValue("web_search").run(mapOf("q" to "trail running shoes"))
         assertTrue(result.success)
+        assertTrue(taint.tainted)
         val shown = state.messages.single()
         assertEquals(SearchFixtures.webResults, shown.search)
         assertNull(shown.searching)
@@ -100,9 +102,11 @@ class SearchToolsTest {
 
     @Test
     fun failuresArePlainAndNeverAsk() = runBlocking {
-        val busy = tools({ Result.failure(SearchError.Busy(3)) }).getValue("news_search").run(mapOf("q" to "x"))
+        val taint = AgentTaint()
+        val busy = tools({ Result.failure(SearchError.Busy(3)) }, taint).getValue("news_search").run(mapOf("q" to "x"))
         assertFalse(busy.success)
         assertEquals("Search is busy. Try again in a moment.", busy.error)
+        assertFalse(taint.tainted)
         assertEquals("Search didn't work: Search is busy. Try again in a moment.", state.messages.single().text)
         assertTrue(state.approvals.isEmpty())
 
