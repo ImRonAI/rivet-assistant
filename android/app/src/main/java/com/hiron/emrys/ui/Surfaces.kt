@@ -90,7 +90,7 @@ fun Tone.color(): Color {
     }
 }
 
-data class GlowSpec(val color: Color, val radius: Dp, val offsetY: Dp)
+data class GlowSpec(val color: Color, val radius: Dp)
 
 /**
  * The glow presets: soft halo light, never a flood. Noir keeps cards and keys flat, so a glow marks only a pressed
@@ -99,28 +99,26 @@ data class GlowSpec(val color: Color, val radius: Dp, val offsetY: Dp)
 object Glows {
     private val accent = DarkPalette.accent
     private val hi = DarkPalette.accentHi
-    val cta = GlowSpec(hi.copy(alpha = 0.22f), 16.dp, 0.dp)
-    val talk = GlowSpec(accent.copy(alpha = 0.10f), 20.dp, 0.dp)
-    val live = GlowSpec(accent.copy(alpha = 0.40f), 32.dp, 0.dp)
-    val peak = GlowSpec(accent.copy(alpha = 0.40f), 8.dp, 0.dp)
-    val selected = GlowSpec(accent.copy(alpha = 0.06f), 20.dp, 0.dp)
-    val disc = GlowSpec(accent.copy(alpha = 0.06f), 12.dp, 6.dp)
+    val cta = GlowSpec(hi.copy(alpha = 0.22f), 16.dp)
+    val talk = GlowSpec(accent.copy(alpha = 0.10f), 20.dp)
+    val live = GlowSpec(accent.copy(alpha = 0.40f), 32.dp)
+    val peak = GlowSpec(accent.copy(alpha = 0.40f), 8.dp)
+    val selected = GlowSpec(accent.copy(alpha = 0.06f), 20.dp)
 }
 
 /** A soft light around [shape] drawn behind the content: ten stacked, fading outlines (works everywhere, Robolectric included). */
-fun Modifier.glow(color: Color, radius: Dp, shape: Shape = CircleShape, offsetY: Dp = 0.dp): Modifier = drawBehind {
+fun Modifier.glow(color: Color, radius: Dp, shape: Shape = CircleShape): Modifier = drawBehind {
     val r = radius.toPx()
-    val dy = offsetY.toPx()
     for (i in 1..10) {
         val grow = r * i / 10f
         val a = color.alpha * 0.22f * (1 - i / 10f).pow(1.6f)
         if (a <= 0f) continue
         val outline = shape.createOutline(Size(size.width + grow * 2, size.height + grow * 2), layoutDirection, this)
-        translate(-grow, -grow + dy) { drawOutline(outline, color.copy(alpha = a)) }
+        translate(-grow, -grow) { drawOutline(outline, color.copy(alpha = a)) }
     }
 }
 
-fun Modifier.glow(spec: GlowSpec, shape: Shape): Modifier = glow(spec.color, spec.radius, shape, spec.offsetY)
+fun Modifier.glow(spec: GlowSpec, shape: Shape): Modifier = glow(spec.color, spec.radius, shape)
 
 /** A 1dp ring [gap] outside [shape], flush against its border by default: the focus halo of fields and the composer card. */
 internal fun Modifier.ring(color: Color, shape: Shape, show: Boolean, gap: Dp = 0.dp): Modifier = drawBehind {
@@ -225,38 +223,6 @@ fun Eyebrow(text: String, modifier: Modifier = Modifier, tone: Tone = Tone.Accen
     }
 }
 
-/** The large serif title of a screen, ended by a quiet halo dot (added here; do not put punctuation at the end of [text]). */
-@Composable
-fun HeroTitle(text: String, modifier: Modifier = Modifier, style: TextStyle = Type.hero) {
-    val p = LocalPalette.current
-    Text(
-        buildAnnotatedString {
-            append(text)
-            appendHaloStop()
-        },
-        style = style, color = p.ink, modifier = modifier, inlineContent = haloStopContent(),
-    )
-}
-
-/** The onboarding headline: one serif line, centred. */
-@Composable
-fun StepHeadline(text: String, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        Text(text, style = Type.step, color = p.ink, textAlign = TextAlign.Center)
-    }
-}
-
-/** A section's eyebrow, with an optional quiet note on the right ("4 ways", "Optional"). */
-@Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier, trailing: String? = null) {
-    val p = LocalPalette.current
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, style = Type.labelMd, color = p.ink2.copy(alpha = 0.8f), maxLines = 1)
-    }
-}
-
 /**
  * The card every surface is built from: a soft card fill and a 1dp hairline at a 20dp radius. [selected] draws a halo
  * hairline and a faint halo light; [onClick] makes it pressable (it brightens while pressed).
@@ -318,66 +284,6 @@ fun IconWell(
     }
 }
 
-/**
- * Icon well, title (with an optional status tag beside it) and a line of body, with [trailing] on the right
- * (toggle, radio, arrow, play). [nested] renders under a hairline. Used by every onboarding and voice card.
- */
-@Composable
-fun FeatureCard(
-    icon: ImageVector,
-    title: String,
-    body: String,
-    modifier: Modifier = Modifier,
-    tone: Tone = Tone.Cyan,
-    tag: Pair<String, Tone>? = null,
-    selected: Boolean = false,
-    onClick: (() -> Unit)? = null,
-    role: Role? = null,
-    trailing: (@Composable () -> Unit)? = null,
-    nested: (@Composable () -> Unit)? = null,
-) {
-    val p = LocalPalette.current
-    EmrysCard(modifier, selected = selected, onClick = onClick, role = role) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(icon, tone = tone, selected = selected)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, style = Type.cardTitle, color = p.ink, modifier = Modifier.weight(1f, fill = false))
-                    if (tag != null) {
-                        Spacer(Modifier.width(10.dp))
-                        StatusTag(tag.first, tag.second, outline = true)
-                    }
-                }
-                Text(body, style = Type.cardBody, color = p.ink2)
-            }
-            if (trailing != null) {
-                Spacer(Modifier.width(12.dp))
-                trailing()
-            }
-        }
-        if (nested != null) {
-            Spacer(Modifier.height(14.dp))
-            Rule(color = p.line)
-            Box(Modifier.padding(top = 6.dp)) { nested() }
-        }
-    }
-}
-
-/** A sub-option row inside a card: a quiet label and a compact toggle; the whole row toggles. */
-@Composable
-fun NestedRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    Row(
-        modifier.fillMaxWidth().heightIn(min = 44.dp).toggleable(checked, role = Role.Switch, onValueChange = onCheckedChange),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = Type.cardBody, color = p.ink2, modifier = Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        CompactToggle(checked, null)
-    }
-}
-
 /** A quiet note on a faint wash, led by a small icon in its tone. */
 @Composable
 fun InfoStrip(text: String, modifier: Modifier = Modifier, icon: ImageVector = Icons.Outlined.Info, tone: Tone = Tone.Neutral) {
@@ -405,45 +311,6 @@ fun TrustFooter(lines: String, modifier: Modifier = Modifier, icon: ImageVector 
         Icon(icon, contentDescription = null, tint = tone.color().copy(alpha = 0.85f), modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(10.dp))
         Text(lines, style = Type.cardBody, color = p.ink2, modifier = Modifier.widthIn(max = 290.dp))
-    }
-}
-
-/** A requirement that is met: a sage check, title and body, and a quiet status tag on the right. */
-@Composable
-fun CheckCard(title: String, body: String, tag: String, tagTone: Tone, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    EmrysCard(modifier, padding = PaddingValues(horizontal = 18.dp, vertical = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(p.ok.copy(alpha = 0.10f)).border(1.dp, p.ok.copy(alpha = 0.22f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.Check, contentDescription = null, tint = p.ok, modifier = Modifier.size(15.dp))
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = Type.cardTitle, color = p.ink)
-                Text(body, style = Type.cardBody, color = p.ink2)
-            }
-            Spacer(Modifier.width(8.dp))
-            StatusTag(tag, tagTone, outline = true)
-        }
-    }
-}
-
-/** A one-line status: a tone dot and a plain sentence, with an optional four-bar level glyph in the tone on the right. */
-@Composable
-fun StatusLine(text: String, tone: Tone, modifier: Modifier = Modifier, bars: Boolean = false) {
-    val p = LocalPalette.current
-    val c = tone.color()
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        SignalDot(c)
-        Spacer(Modifier.width(10.dp))
-        Text(text, style = Type.labelLg, color = p.ink, maxLines = 1, modifier = Modifier.weight(1f))
-        if (bars) {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.Bottom) {
-                listOf(0.45f to 6.dp, 0.7f to 10.dp, 0.85f to 14.dp, 1f to 18.dp).forEach { (a, h) ->
-                    Box(Modifier.width(3.dp).height(h).clip(RoundedCornerShape(1.5.dp)).background(c.copy(alpha = a)))
-                }
-            }
-        }
     }
 }
 

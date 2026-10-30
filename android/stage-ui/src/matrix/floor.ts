@@ -1,21 +1,23 @@
 import type { Frame } from "@/components/ui/matrix"
 
-import { anim, memo, once, still, type Program } from "./program"
-import { band, dist, edge, hash, inCircle, loop, paint, turn } from "./raster"
+import { anim, cache, once, type Program } from "./program"
+import { band, dist, edge, hash, inCircle, loop, nth, paint, turn } from "./raster"
 
 /**
- * The light floor under Emrys's feet (17×17, circular): ripples, radar, celebrations and a dance floor
- * (docs/design/EMRYS_MATRIX.md §4–5). It stays at or under 0.5, so its dots never take the glow filter. The design
- * names 25×25 (625 dots, about 900 on the page with the armor); every animated dot repaints through its 300 ms fade, and
- * with 4× CPU throttling the floor was the largest single cost, so it is 17×17 (289 dots, about 570 on the page).
+ * The light floor under Emrys's feet (17×17, circular): ripples, radar and celebrations (docs/design/EMRYS_MATRIX.md
+ * §4–5). Patterns stay at or under 0.5; the slot's brightness lifts them (slots.tsx). The design names 25×25 (625
+ * dots, about 900 on the page with the armor); every animated dot repaints through its 300 ms fade, and with 4× CPU
+ * throttling the floor was the largest single cost, so it is 17×17 (289 dots, about 570 on the page).
  */
 export const FLOOR = 17
 const R = (FLOOR - 1) / 2
 const CAP = 0.5
+const programs = cache<Program>()
+const levelSets = cache<Frame[]>()
 
 /** At rest: one faint ring leaves the feet every 8 s. */
 function rest(dim = 1): Program {
-  return memo(`floor-rest${dim}`, () =>
+  return programs(`floor-rest${dim}`, () =>
     anim(
       `floor-rest${dim}`,
       loop(FLOOR, FLOOR, 8, 4, (t) => (x, y, c) => {
@@ -28,7 +30,7 @@ function rest(dim = 1): Program {
   )
 }
 
-/** One ring outward (a state change, greeting, the boot show) or inward (failed), then `then`. */
+/** One ring outward (a state change, the boot show) or inward (failed), then `then`. */
 function ring(key: string, inward: boolean, seconds: number, then: Program, delay = 0): Program {
   const fps = 10
   const frames = loop(FLOOR, FLOOR, seconds + delay, fps, (t) => {
@@ -44,7 +46,7 @@ function ring(key: string, inward: boolean, seconds: number, then: Program, dela
 
 /** searching: a radar beam sweeping the floor, with faint range rings. */
 const radar = () =>
-  memo("floor-radar", () =>
+  programs("floor-radar", () =>
     anim(
       "floor-radar",
       loop(FLOOR, FLOOR, 2.4, 10, (t) => (x, y, c) => {
@@ -60,7 +62,7 @@ const radar = () =>
 
 /** listening: slow sonar rings. */
 const sonar = () =>
-  memo("floor-sonar", () =>
+  programs("floor-sonar", () =>
     anim(
       "floor-sonar",
       loop(FLOOR, FLOOR, 2.4, 8, (t) => (x, y, c) => {
@@ -79,7 +81,7 @@ const sonar = () =>
 
 /** waiting: one slow honey ring held under Emrys. */
 const held = () =>
-  memo("floor-held", () =>
+  programs("floor-held", () =>
     anim(
       "floor-held",
       loop(FLOOR, FLOOR, 3, 6, (t) => (x, y, c) => {
@@ -112,8 +114,7 @@ function burst(then: Program): Program {
 
 /** What the floor plays for a state; each state change sends one ring first. */
 export function floorFor(state: string): Program {
-  return memo(`floor:${state}`, () => {
-    if (state === "sleeping") return still("floor:sleeping", paint(FLOOR, FLOOR, () => 0))
+  return programs(`floor:${state}`, () => {
     if (state === "done") return ring("floor:done", false, 0.9, burst(rest()))
     if (state === "failed") return ring("floor:failed", true, 1.2, rest(0.6))
     const next =
@@ -127,7 +128,7 @@ export const bootFloor = (then: Program) => ring("floor:boot", false, 1.0, then)
 
 /** While Emrys speaks the floor breathes with the speech envelope, low. */
 export function floorBreath(env: number): Frame {
-  const levels = memo("floor-breath", () =>
+  const levels = levelSets("floor-breath", () =>
     Array.from({ length: 9 }, (_, l) =>
       paint(FLOOR, FLOOR, (x, y, c) => {
         if (!inCircle(x, y, c)) return 0
@@ -135,59 +136,5 @@ export function floorBreath(env: number): Frame {
       })
     )
   )
-  return levels[Math.max(0, Math.min(8, Math.round(env * 8)))]
-}
-
-const MUSIC: Record<string, "checker" | "waves" | "eq" | "fire"> = {
-  pop: "checker",
-  dance: "checker",
-  reggae: "waves",
-  dj: "eq",
-  rock: "eq",
-  robot: "eq",
-  folk: "fire",
-  country: "fire",
-}
-
-/** The music moves that turn the floor into a dance floor. */
-export const isMusic = (move: string | null | undefined) => !!move && move in MUSIC
-
-const STEPS = 2 // frames per beat; the cells' own 300 ms fades fill in between
-
-/** The dance floor for a music move at `beats` (beats since it started): locked to the beat. */
-export function danceFloor(move: string, beats: number): Frame {
-  const style = MUSIC[move] ?? "checker"
-  const cycle = memo(`dance:${style}`, () => {
-    const frames: Frame[] = []
-    for (let beat = 0; beat < 8; beat++)
-      for (let s = 0; s < STEPS; s++) {
-        const frac = s / STEPS
-        const hit = (1 - frac) ** 1.6
-        frames.push(
-          paint(FLOOR, FLOOR, (x, y, c) => {
-            if (!inCircle(x, y, c)) return 0
-            if (style === "checker") {
-              const on = (Math.floor(x / 2) + Math.floor(y / 2) + beat) % 2 === 0
-              return on ? 0.12 + 0.38 * hit : 0.06
-            }
-            if (style === "waves") {
-              const w = 0.5 + 0.5 * Math.sin(2 * Math.PI * (x / 6 - (beat + frac) / 2) + y / 4)
-              return 0.08 + 0.38 * w * w * (0.7 + 0.3 * hit)
-            }
-            if (style === "eq") {
-              const column = Math.floor(x / 2)
-              const height = (0.25 + 0.75 * hash(column, beat, 17)) * hit * FLOOR
-              const fromBottom = FLOOR - 1 - y
-              return fromBottom < height ? (fromBottom > height - 2 ? CAP : 0.32) : 0.04
-            }
-            const d = dist(x, y, c.x, c.y)
-            const flicker = 0.55 + 0.45 * hash(x, y, beat * STEPS + s)
-            return d < 5 ? CAP * (1 - d / 5.5) * flicker : 0
-          })
-        )
-      }
-    return frames
-  })
-  const i = Math.floor(beats * STEPS)
-  return cycle[((i % cycle.length) + cycle.length) % cycle.length]
+  return nth(levels, Math.round(env * 8))
 }

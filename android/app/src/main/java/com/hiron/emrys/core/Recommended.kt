@@ -2,7 +2,6 @@ package com.hiron.emrys.core
 
 import android.Manifest
 import android.os.Build
-import com.hiron.emrys.device.ForwardMode
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -23,24 +22,13 @@ object PermissionGroups {
     }
 }
 
-enum class RecId { AutoConnect, QuietOverlay, OfferReplies, UnansweredCalls, Permissions, Assistant, StopAsking }
-
 /** The settings a [Recommendation.Setting] changes. */
-enum class SettingId(val rec: RecId) {
-    AutoConnect(RecId.AutoConnect),
-    QuietOverlay(RecId.QuietOverlay),
-    OfferReplies(RecId.OfferReplies),
-    UnansweredCalls(RecId.UnansweredCalls),
-}
+enum class SettingId { AutoConnect, QuietOverlay }
 
 /** What the recommendations are compared against. */
 data class Current(
     val autoConnect: Boolean,
     val speakInOverlay: Boolean,
-    val offerReplies: Boolean,
-    val answeringMode: ForwardMode,
-    /** The carrier was last told to forward every call to Emrys. */
-    val forwardingAllCalls: Boolean,
     val missingPermissions: List<PermissionGroup>,
     val assistantHeld: Boolean,
     val denyCandidates: List<DenyCandidate>,
@@ -48,7 +36,6 @@ data class Current(
 
 /** One change Emrys suggests: what it is, what it changes, and how it is undone. */
 sealed interface Recommendation {
-    val id: RecId
     val title: String
     val change: String
     val undo: String
@@ -61,13 +48,10 @@ sealed interface Recommendation {
         override val undo: String,
         val now: String,
         val after: String,
-    ) : Recommendation {
-        override val id = setting.rec
-    }
+    ) : Recommendation
 
     /** One Android permission request for every missing group. */
     data class AskPermissions(val groups: List<PermissionGroup>) : Recommendation {
-        override val id = RecId.Permissions
         override val title = "Allow what Emrys uses"
         override val change = "Android asks you once for: ${groups.joinToString(", ") { it.name }}"
         override val undo = "Turn them off in Android Settings › Apps › Emrys › Permissions."
@@ -75,7 +59,6 @@ sealed interface Recommendation {
 
     /** Android doesn't let an app make itself the assistant; this opens the screen where the user picks Emrys. */
     data object OpenAssistantSettings : Recommendation {
-        override val id = RecId.Assistant
         override val title = "Make Emrys your assistant"
         override val change = "Opens Android's default apps screen so you can pick Emrys. Android doesn't let apps set this themselves."
         override val undo = "Pick another assistant in the same screen."
@@ -83,7 +66,6 @@ sealed interface Recommendation {
 
     /** A standing deny for something the user keeps declining. */
     data class StopAsking(val candidate: DenyCandidate) : Recommendation {
-        override val id = RecId.StopAsking
         override val title = "Stop asking about ${candidate.label}"
         override val change = "You said no ${candidate.denials} times in the last 30 days. Emrys will always decline it."
         override val undo = "Removes the rule."
@@ -94,8 +76,6 @@ sealed interface Recommendation {
 interface RecommendedPrefs {
     var autoConnect: Boolean
     var speakInOverlay: Boolean
-    var offerReplies: Boolean
-    var answeringMode: ForwardMode
     var recommendedUndo: RecommendedUndo?
 }
 
@@ -103,17 +83,12 @@ interface RecommendedPrefs {
 data class RecommendedUndo(
     val autoConnect: Boolean? = null,
     val speakInOverlay: Boolean? = null,
-    val offerReplies: Boolean? = null,
-    val answeringMode: ForwardMode? = null,
     val ruleTargets: Set<RuleTarget> = emptySet(),
-    val at: Long = 0,
 ) {
     /** The titles of what undo puts back. */
     fun titles(): List<String> = listOfNotNull(
         autoConnect?.let { "Connect automatically" },
         speakInOverlay?.let { "Quiet assistant overlay" },
-        offerReplies?.let { "Offer replies to new messages" },
-        answeringMode?.let { "Answer only calls you miss" },
         if (ruleTargets.isEmpty()) null else if (ruleTargets.size == 1) "1 rule" else "${ruleTargets.size} rules",
     )
 }
@@ -141,28 +116,6 @@ object Recommended {
                 ),
             )
         }
-        if (!current.offerReplies) {
-            add(
-                Recommendation.Setting(
-                    SettingId.OfferReplies, "Offer replies to new messages",
-                    "When a message arrives, Emrys drafts a reply and asks you before it sends anything.", "Stops offering replies.", OFF, ON,
-                ),
-            )
-        }
-        if (current.answeringMode != ForwardMode.Unanswered) {
-            val carrier = if (current.forwardingAllCalls) {
-                " Your carrier keeps forwarding every call until you turn call answering on again in Settings › Call answering."
-            } else {
-                ""
-            }
-            add(
-                Recommendation.Setting(
-                    SettingId.UnansweredCalls, "Answer only calls you miss",
-                    "Emrys's line takes the calls you don't pick up, which is what lets you take a call over.$carrier",
-                    "Goes back to answering every call (your carrier settings don't change).", "Every call", "Missed calls",
-                ),
-            )
-        }
         if (current.missingPermissions.isNotEmpty()) add(Recommendation.AskPermissions(current.missingPermissions))
         if (!current.assistantHeld) add(Recommendation.OpenAssistantSettings)
         current.denyCandidates.forEach { add(Recommendation.StopAsking(it)) }
@@ -173,8 +126,8 @@ object Recommended {
      * the [Recommendation.StopAsking] items, as the undo snapshot. Permissions, the assistant and the rules themselves
      * are the caller's (they need Android screens and the brain).
      */
-    fun apply(chosen: List<Recommendation>, prefs: RecommendedPrefs, now: Long): RecommendedUndo {
-        var undo = RecommendedUndo(at = now)
+    fun apply(chosen: List<Recommendation>, prefs: RecommendedPrefs) {
+        var undo = RecommendedUndo()
         for (item in chosen) {
             when (item) {
                 is Recommendation.Setting -> undo = applySetting(item.setting, prefs, undo)
@@ -184,14 +137,11 @@ object Recommended {
         }
         val changed = undo.titles().isNotEmpty()
         if (changed) prefs.recommendedUndo = undo
-        return undo
     }
 
     private fun applySetting(setting: SettingId, prefs: RecommendedPrefs, undo: RecommendedUndo): RecommendedUndo = when (setting) {
         SettingId.AutoConnect -> undo.copy(autoConnect = prefs.autoConnect).also { prefs.autoConnect = true }
         SettingId.QuietOverlay -> undo.copy(speakInOverlay = prefs.speakInOverlay).also { prefs.speakInOverlay = false }
-        SettingId.OfferReplies -> undo.copy(offerReplies = prefs.offerReplies).also { prefs.offerReplies = true }
-        SettingId.UnansweredCalls -> undo.copy(answeringMode = prefs.answeringMode).also { prefs.answeringMode = ForwardMode.Unanswered }
     }
 
     /** Puts back what [RecommendedPrefs.recommendedUndo] recorded and clears it; returns it (the caller revokes its rules). */
@@ -199,8 +149,6 @@ object Recommended {
         val undo = prefs.recommendedUndo ?: return null
         undo.autoConnect?.let { prefs.autoConnect = it }
         undo.speakInOverlay?.let { prefs.speakInOverlay = it }
-        undo.offerReplies?.let { prefs.offerReplies = it }
-        undo.answeringMode?.let { prefs.answeringMode = it }
         prefs.recommendedUndo = null
         return undo
     }

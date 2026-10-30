@@ -30,7 +30,6 @@ import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -54,9 +53,7 @@ import com.hiron.emrys.ui.ApprovalSheet
 import com.hiron.emrys.ui.HomeScreen
 import com.hiron.emrys.ui.HudHeader
 import com.hiron.emrys.ui.LocalImages
-import com.hiron.emrys.ui.LocalOpenVoiceSetup
 import com.hiron.emrys.ui.LocalPalette
-import com.hiron.emrys.ui.LocalRobotStage
 import com.hiron.emrys.ui.MiniStage
 import com.hiron.emrys.ui.Onboarding
 import com.hiron.emrys.ui.PendantTab
@@ -66,12 +63,7 @@ import com.hiron.emrys.ui.Quick
 import com.hiron.emrys.ui.ResultsRequest
 import com.hiron.emrys.ui.ResultsScreen
 import com.hiron.emrys.ui.SettingsScreen
-import com.hiron.emrys.ui.StageLayer
-import com.hiron.emrys.ui.rememberRobotStage
-import com.hiron.emrys.ui.VoiceSetup
 import com.hiron.emrys.voice.AgentMode
-import com.hiron.emrys.voice.LocalVoiceStudio
-import com.hiron.emrys.voice.PhoneVoiceStudio
 import com.hiron.emrys.voice.EmrysVoiceService
 import com.hiron.emrys.widget.EmrysWidgets
 
@@ -216,23 +208,13 @@ private fun EmrysAppUi(runtime: EmrysRuntime, listenRequests: Int, focusRequests
         runtime.settings.onboarded = true
         onboarded = true
     }
-    val studio = remember { PhoneVoiceStudio(context, runtime.settings) }
-    DisposableEffect(studio) { onDispose { studio.stopPreview() } }
-    var voiceSetup by rememberSaveable { mutableStateOf(false) }
     // The results page; its results are in memory only, so it isn't saved across a recreate.
     var results by remember { mutableStateOf<ResultsRequest?>(null) }
     LaunchedEffect(searchRequests) {
         if (searchRequests > 0) results = ResultsRequest.Sheet
     }
-    // One robot page for the whole activity, lent to whichever screen is in front.
-    val stage = rememberRobotStage(runtime)
 
-    CompositionLocalProvider(
-        LocalOpenVoiceSetup provides { voiceSetup = true },
-        LocalVoiceStudio provides studio,
-        LocalRobotStage provides stage,
-        LocalImages provides runtime.images,
-    ) {
+    CompositionLocalProvider(LocalImages provides runtime.images) {
         Box(Modifier.fillMaxSize()) {
             if (onboarded) {
                 MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests) { results = it }
@@ -246,7 +228,6 @@ private fun EmrysAppUi(runtime: EmrysRuntime, listenRequests: Int, focusRequests
                     onAsk = runtime::ask, onAdd = runtime::addContext, onClose = { results = null },
                 )
             }
-            if (voiceSetup) VoiceSetup(studio, onClose = { voiceSetup = false }, stage = { MiniStage(runtime, state, layer = StageLayer.Overlay) })
         }
     }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {

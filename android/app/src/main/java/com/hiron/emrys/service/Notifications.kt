@@ -89,6 +89,7 @@ object Notifications {
     fun service(context: Context, status: String) =
         NotificationCompat.Builder(context, SERVICE)
             .setSmallIcon(R.drawable.ic_emrys)
+            .setColor(context.getColor(R.color.emrys_accent))
             .setContentTitle("Emrys")
             .setContentText(status)
             .setOngoing(true)
@@ -105,6 +106,7 @@ object Notifications {
         val text = (if (request.high) "High risk · " else "") + (request.because ?: Plain.risk(request.tier, request.tool))
         val builder = NotificationCompat.Builder(context, APPROVALS)
             .setSmallIcon(R.drawable.ic_emrys)
+            .setColor(context.getColor(R.color.emrys_accent))
             .setContentTitle(Plain.people(request.headline, names))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(approvalBody(request, names)))
@@ -149,6 +151,7 @@ object Notifications {
         context, slot(REMINDER_IDS, id),
         NotificationCompat.Builder(context, REMINDERS)
             .setSmallIcon(R.drawable.ic_emrys)
+            .setColor(context.getColor(R.color.emrys_accent))
             .setContentTitle("Reminder")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -169,6 +172,7 @@ object Notifications {
             context, callId(callId),
             NotificationCompat.Builder(context, CALLS)
                 .setSmallIcon(R.drawable.ic_emrys)
+                .setColor(context.getColor(R.color.emrys_accent))
                 .setContentTitle("Emrys is answering a call")
                 .setContentText(from)
                 .setStyle(NotificationCompat.BigTextStyle().bigText((listOf(from) + messageLines(note.message, note.urgent)).joinToString("\n")))
@@ -186,6 +190,7 @@ object Notifications {
         context, slot(CALL_MESSAGE_IDS, event.callbackNumber + event.message),
         NotificationCompat.Builder(context, CALLS)
             .setSmallIcon(R.drawable.ic_emrys)
+            .setColor(context.getColor(R.color.emrys_accent))
             .setContentTitle((if (event.urgent) "Urgent message from " else "Message from ") + CallText.caller(event))
             .setContentText(event.message.ifBlank { "(no message)" })
             .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.describe(event)))
@@ -209,6 +214,7 @@ object Notifications {
         val body = (recent + listOfNotNull(status) + messageLines(call.message, call.urgent)).joinToString("\n").ifBlank { "Listening…" }
         val builder = NotificationCompat.Builder(context, CALLS)
             .setSmallIcon(R.drawable.ic_emrys)
+            .setColor(context.getColor(R.color.emrys_accent))
             .setContentTitle("Emrys is answering ${call.caller}")
             .setContentText(status ?: recent.lastOrNull() ?: "Listening…")
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -234,6 +240,7 @@ object Notifications {
             context, callId(call.callId),
             NotificationCompat.Builder(context, CALLS)
                 .setSmallIcon(R.drawable.ic_emrys)
+                .setColor(context.getColor(R.color.emrys_accent))
                 .setContentTitle((if (call.takenOver) "You took over the call from " else "Call from ") + call.caller)
                 .setContentText(call.summary.ifBlank { "Emrys has no summary of this call." })
                 .setStyle(NotificationCompat.BigTextStyle().bigText((listOf(CallText.summary(call)) + message).joinToString("\n")))
@@ -251,6 +258,7 @@ object Notifications {
             context, id,
             NotificationCompat.Builder(context, ACTIONS)
                 .setSmallIcon(R.drawable.ic_emrys)
+                .setColor(context.getColor(R.color.emrys_accent))
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(PendingIntent.getActivity(context, id, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
@@ -272,6 +280,7 @@ object Notifications {
         children.mapNotNull { it.notification.extras.getCharSequence(Notification.EXTRA_TITLE) }.forEach { inbox.addLine(it) }
         val builder = NotificationCompat.Builder(context, group.channel)
             .setSmallIcon(R.drawable.ic_emrys)
+            .setColor(context.getColor(R.color.emrys_accent))
             .setContentTitle(group.title(children.size))
             .setStyle(inbox)
             .setGroup(group.key)

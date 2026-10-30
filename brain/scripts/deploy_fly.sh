@@ -31,9 +31,7 @@ for name in EMRYS_EMAIL_ADDRESS EMRYS_EMAIL_PASSWORD EMRYS_EMAIL_IMAP_HOST EMRYS
   EMRYS_EMAIL_SMTP_HOST EMRYS_EMAIL_SMTP_PORT; do
   if [ -n "${!name:-}" ]; then printf '%s=%s\n' "$name" "${!name}" >>"$secrets"; fi
 done
-# An app deployed before the rename keeps its RIVET_DEVICE_TOKEN (the brain reads it as EMRYS_DEVICE_TOKEN), so the
-# phone stays paired; a new token is made only when neither is set.
-if ! "$FLY" secrets list -a "$APP" --json | grep -qE 'EMRYS_DEVICE_TOKEN|RIVET_DEVICE_TOKEN'; then
+if ! "$FLY" secrets list -a "$APP" --json | grep -q EMRYS_DEVICE_TOKEN; then
   (umask 077 && python3 -c 'import secrets; print(secrets.token_urlsafe(32))' >"$TOKEN_FILE")
   printf 'EMRYS_DEVICE_TOKEN=%s\n' "$(cat "$TOKEN_FILE")" >>"$secrets"
   echo "device token written to $TOKEN_FILE"

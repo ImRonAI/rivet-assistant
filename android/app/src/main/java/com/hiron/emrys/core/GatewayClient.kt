@@ -47,8 +47,6 @@ class GatewayClient(
     private var reconnect: Job? = null
     private var config: GatewayConfig? = null
 
-    val queued: Int get() = synchronized(lock) { outbox.size }
-
     fun connect(config: GatewayConfig) {
         synchronized(lock) {
             this.config = config
@@ -89,8 +87,11 @@ class GatewayClient(
             .url(cfg.socketUrl())
             .header("Authorization", "Bearer ${cfg.token}")
             .build()
-        val ws = http.newWebSocket(request, Listener())
-        synchronized(lock) { socket = ws }
+        // Stored under the lock the listener takes, so onOpen can't run before the socket is known.
+        synchronized(lock) {
+            if (!wanted) return
+            socket = http.newWebSocket(request, Listener())
+        }
     }
 
     private fun scheduleReconnect() {

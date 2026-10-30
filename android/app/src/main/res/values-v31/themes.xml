@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ splash: Emrys's head on the app's noir, so launch flows straight into the stage. -->
+    <!-- Android 12+ splash: Emrys's sigil, lit on the app's noir, so launch flows straight into the stage. -->
     <style name="Theme.Emrys" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/emrys_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

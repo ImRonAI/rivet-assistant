@@ -58,25 +58,19 @@ import kotlin.math.min
 /**
  * The robot's stage: a noir window with a soft spotlight and a pool of light on the floor ringed by two faint
  * circles, shown until the robot page has loaded (and under Robolectric), and an optional [hint] in a glass pill at
- * the bottom. [framed] sets it in a [radius]-cornered window behind a 1dp hairline. [mood] lights the floor in that
- * colour. The WebView goes in [content] and draws over the backdrop once its page is up.
+ * the bottom. [framed] sets it in a [radius]-cornered window behind a 1dp hairline. The WebView goes in [content]
+ * and draws over the backdrop once its page is up.
  */
 @Composable
 fun StageFrame(
     modifier: Modifier = Modifier,
     framed: Boolean = true,
     hint: String? = null,
-    mood: Color? = null,
     radius: Dp = 28.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val p = LocalPalette.current
     val shape = RoundedCornerShape(radius)
-    val breath = if (mood != null && !rememberReduceMotion()) {
-        rememberInfiniteTransition(label = "mood").animateFloat(0.7f, 1f, infiniteRepeatable(tween(Motion.BREATHE, easing = Motion.Standard), RepeatMode.Reverse), label = "mood").value
-    } else {
-        1f
-    }
     Box(
         modifier.testTag(STAGE_TAG)
             .then(if (framed) Modifier.clip(shape).border(1.dp, p.line, shape) else Modifier.clipToBounds())
@@ -84,7 +78,6 @@ fun StageFrame(
     ) {
         Canvas(Modifier.fillMaxSize()) {
             spotlight(p.ink)
-            if (mood != null) floorGlow(mood.copy(alpha = 0.16f * breath))
             floorRings(p.ink)
         }
         content()
@@ -103,19 +96,6 @@ fun StageFrame(
     }
 }
 
-/** The stage lights in the colour of what Emrys is doing: glacier working, honey waiting on you, sage done, coral listening or stuck. */
-@Composable
-internal fun moodColor(activity: Activity): Color? {
-    val p = LocalPalette.current
-    return when (activity) {
-        Activity.Listening, Activity.Failed -> p.rec
-        Activity.Waiting -> p.amb
-        Activity.Done -> p.ok
-        Activity.Thinking, Activity.Searching, Activity.Working, Activity.Texting, Activity.Emailing, Activity.Calling -> p.cy
-        Activity.Idle -> null
-    }
-}
-
 /** A soft spotlight falling from above the stage: a tall, faint porcelain ellipse centred high. */
 private fun DrawScope.spotlight(ink: Color) {
     val c = Offset(size.width * 0.5f, size.height * 0.30f)
@@ -123,16 +103,6 @@ private fun DrawScope.spotlight(ink: Color) {
     val ry = size.height * 0.75f
     scale(1f, ry / rx, pivot = c) {
         drawCircle(Brush.radialGradient(listOf(ink.copy(alpha = 0.055f), ink.copy(alpha = 0.02f), Color.Transparent), center = c, radius = rx), radius = rx, center = c)
-    }
-}
-
-/** The mood light on the floor: an ellipse 38% × 34% at 50% 72%. */
-private fun DrawScope.floorGlow(color: Color) {
-    val c = Offset(size.width * 0.5f, size.height * 0.72f)
-    val rx = size.width * 0.38f
-    val ry = size.height * 0.34f
-    scale(1f, ry / rx, pivot = c) {
-        drawCircle(Brush.radialGradient(listOf(color, Color.Transparent), center = c, radius = rx), radius = rx, center = c)
     }
 }
 
@@ -164,41 +134,6 @@ fun StepIndicator(step: Int, total: Int, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.weight(1f))
         Text("Step $step of $total", style = Type.labelLg.copy(fontFeatureSettings = "tnum"), color = p.ink2)
-    }
-}
-
-/** The sticky glass header of the voice setup: back (or a text action), the step counter, and the ElevenLabs credit. */
-@Composable
-fun StickyHeader(
-    counter: String,
-    modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null,
-    startText: Pair<String, () -> Unit>? = null,
-    badge: Boolean = true,
-) {
-    val p = LocalPalette.current
-    Column(modifier.fillMaxWidth().background(p.glass).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            when {
-                onBack != null -> Box(
-                    Modifier.size(44.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onBack).semantics { contentDescription = "Back" },
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null, tint = p.ink, modifier = Modifier.size(22.dp)) }
-                startText != null -> TextKey(startText.first, startText.second)
-            }
-            Spacer(Modifier.width(6.dp))
-            Text(counter, style = Type.tele, color = p.ink2, maxLines = 1)
-            Spacer(Modifier.weight(1f))
-            if (badge) {
-                val pill = RoundedCornerShape(50)
-                Text(
-                    "ElevenLabs", style = Type.labelMd, color = p.ink2,
-                    modifier = Modifier.clip(pill).border(1.dp, p.line, pill).padding(horizontal = 12.dp, vertical = 5.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-        }
-        Rule(color = p.line)
     }
 }
 

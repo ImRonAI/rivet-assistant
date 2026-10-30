@@ -1,11 +1,11 @@
 import { Component, Suspense, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { Orb, type AgentState } from "@/components/ui/orb"
-import { readSpeech, WORKING, type StageInfo } from "@/emrys"
+import { readSpeech, WORKING, type Mood, type StageInfo } from "@/emrys"
 
 /** The Orb's two ramp colours per mood (docs/design/EMRYS_DESIGN.md §3): aurora at rest and while Emrys speaks. */
 const AURORA: [string, string] = ["#CDD5FF", "#B7C2FF"]
-const MOOD_COLORS: Record<string, [string, string]> = {
+const MOOD_COLORS: Readonly<Record<Mood, [string, string]>> = {
   cy: ["#8FDBE8", "#C3EBF2"],
   amb: ["#E8C07C", "#F1D9AE"],
   ok: ["#97D4A6", "#C6E7CD"],
@@ -13,8 +13,7 @@ const MOOD_COLORS: Record<string, [string, string]> = {
 }
 
 export function haloColors(info: StageInfo): [string, string] {
-  if (info.talking || !info.mood) return AURORA
-  return MOOD_COLORS[info.mood] ?? AURORA
+  return info.talking || !info.mood ? AURORA : MOOD_COLORS[info.mood]
 }
 
 /** The Orb's agentState for what Emrys is doing: speech wins, then a live mic, then any kind of work. */
@@ -42,14 +41,14 @@ export function hasWebGL2(): boolean {
 
 /** Keeps a failed Orb (no WebGL context, the texture refused) from taking the stage down; the CSS glow stays. */
 class Fallback extends Component<{ children: ReactNode; onFail: () => void }, { failed: boolean }> {
-  state = { failed: false }
+  override state = { failed: false }
   static getDerivedStateFromError() {
     return { failed: true }
   }
-  componentDidCatch() {
+  override componentDidCatch() {
     this.props.onFail()
   }
-  render() {
+  override render() {
     return this.state.failed ? null : this.props.children
   }
 }
@@ -60,8 +59,8 @@ const FEATHER = "radial-gradient(closest-side, #000 18%, transparent 82%)"
 
 /**
  * The hero's backlight: an ElevenLabs Orb centred on Emrys's chest and head, large, soft and faint so the robot and
- * its Matrix read in front of it. Real voice levels drive it when the app sends them (a live ElevenLabs voice
- * session); otherwise the Orb animates itself from agentState, as the component documents.
+ * its Matrix read in front of it. While an ElevenLabs voice agent speaks, its real audio level drives it
+ * (`volumeMode="manual"`); otherwise the Orb animates itself from agentState, as the component documents.
  */
 export function Halo({ info }: { info: StageInfo }) {
   const colors = haloColors(info)
@@ -72,16 +71,8 @@ export function Halo({ info }: { info: StageInfo }) {
     colorsRef.current = [low, high]
   }, [low, high])
   const [failed, setFailed] = useState(false)
-  const [real, setReal] = useState(false)
-
-  useEffect(() => {
-    // A voice session's levels count from the first one the app sends until the session ends.
-    const timer = setInterval(() => {
-      const speech = readSpeech()
-      setReal(speech.output !== null || speech.input !== null)
-    }, 250)
-    return () => clearInterval(timer)
-  }, [])
+  // The agent's real audio level drives the Orb while it speaks; otherwise the Orb animates itself from agentState.
+  const real = info.turn === "speaking" && info.voiced
 
   useEffect(() => {
     if (failed) return
@@ -112,8 +103,7 @@ export function Halo({ info }: { info: StageInfo }) {
             seed={SEED}
             agentState={haloState(info)}
             volumeMode={real ? "manual" : "auto"}
-            getInputVolume={() => readSpeech().input ?? 0}
-            getOutputVolume={() => readSpeech().output ?? 0}
+            getOutputVolume={() => readSpeech().level ?? 0}
           />
         </Suspense>
       </Fallback>

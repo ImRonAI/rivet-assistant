@@ -30,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,9 +53,6 @@ import com.hiron.emrys.R
 import com.hiron.emrys.core.Activity
 import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysState
-
-/** Opens the voice setup screens over the whole app (provided by MainActivity). */
-val LocalOpenVoiceSetup = staticCompositionLocalOf<() -> Unit> { {} }
 
 /** The name the user sees and hears. */
 private const val BRAND = "Emrys"
@@ -133,7 +129,6 @@ private fun status(state: EmrysState, p: Palette): Status = when (state.connecti
         Activity.Working -> Status("Working", p.cy, live = true)
         Activity.Texting -> Status("Texting", p.cy, live = true)
         Activity.Emailing -> Status("Emailing", p.cy, live = true)
-        Activity.Calling -> Status("On a call", p.cy, live = true)
         Activity.Waiting -> Status("Needs your OK", p.amb, live = true)
         Activity.Done -> Status("Done", p.ok)
         Activity.Failed -> Status("Didn't finish", p.rec)

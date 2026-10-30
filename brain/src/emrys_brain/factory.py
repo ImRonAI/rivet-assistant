@@ -13,13 +13,16 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Never
 
+from mcp.shared.dispatcher import ProgressFnT
 from strands import Agent
+from strands.hooks import HookCallback
 from strands.models import Model
 from strands.session import SnapshotSessionManager
 from strands.storage import Storage
 from strands.tools.mcp import MCPAgentTool, MCPClient
+from strands.types.tools import AgentTool
 from strands.vended_memory_stores import FileMemoryStore
 from strands_harness import build_system_prompt, create_harness
 
@@ -71,10 +74,6 @@ def emrys_instructions(*, mailbox: bool = False, search: bool = False, native_se
     return "\n\n".join([emrys, device_tools.instructions(mailbox=mailbox), *email, *brave, CALL_INSTRUCTIONS])
 
 
-EMRYS_INSTRUCTIONS = emrys_instructions()
-"""The instructions when no mailbox is configured: email goes through the phone."""
-
-
 def instructions_for(tool_names: Iterable[str], *, native_search: bool = True) -> str:
     """Emrys's instructions for an agent with these tools, so the prompt never names a tool it lacks."""
     names = set(tool_names)
@@ -105,8 +104,8 @@ class Wiring:
     sink: UiSink | None = None
     on_activity: Callable[[str], None] | None = None
     on_backoff: Callable[[Exception], None] | None = None
-    on_mcp_progress: Any = None
-    hooks: Sequence[tuple[Callable[..., Any], float]] = ()
+    on_mcp_progress: ProgressFnT | None = None
+    hooks: Sequence[tuple[HookCallback[Never], float]] = ()
 
 
 @dataclass
@@ -118,8 +117,6 @@ class Generation:
     session_manager: SnapshotSessionManager
     storage: FencedStorage
     telnyx: MCPClient | None
-    retry: TransientRetry
-    bridge: EmrysEventBridge
     tool_timeouts: dict[str, float] = field(default_factory=dict)
 
 
@@ -167,6 +164,7 @@ def build_telnyx_client(settings: BrainSettings, wiring: Wiring) -> MCPClient:
         url=settings.telnyx_mcp_url,
         auth_provider=HorizonBearer(settings.horizon_api_key_env),
         prefix=TELNYX_PREFIX,
+        tool_filters={"allowed": ["search", "get_schema", "execute", "tags"]},
         startup_timeout=60,
         continue_on_error=False,
         progress_callback=wiring.on_mcp_progress,
@@ -174,7 +172,7 @@ def build_telnyx_client(settings: BrainSettings, wiring: Wiring) -> MCPClient:
     )
 
 
-def checkpoint_every_invocation(*, agent_data: Any, **kwargs: Any) -> bool:
+def checkpoint_every_invocation(*, agent_data: object, **kwargs: object) -> bool:
     """Append an immutable checkpoint after every invocation, for rollback after a bad restore."""
     return True
 
@@ -187,12 +185,11 @@ def build_agent(
     backend: Storage,
     approvals: EmrysApprovals,
     wiring: Wiring | None = None,
-    tools: Sequence[Any] = (),
+    tools: Sequence[AgentTool] = (),
     agent_id: str = "default",
     models: tuple[Model, Model] | None = None,
     telnyx: MCPClient | None = None,
     require_telnyx: bool = True,
-    plugins: Sequence[Any] = (),
 ) -> Generation:
     """Build the current generation of ``session_id``'s agent.
 
@@ -208,7 +205,6 @@ def build_agent(
         models: ``(main, aux)`` overrides; built from settings when omitted.
         telnyx: A Telnyx MCP client override; built from settings when omitted.
         require_telnyx: Refuse to return an agent without the Telnyx tools.
-        plugins: Extra SDK plugins (a ``GoalLoop`` for task agents).
     """
     wiring = wiring or Wiring()
     main, aux = models or build_models(settings)
@@ -233,7 +229,6 @@ def build_agent(
             (getattr(tool, "tool_name", "") for tool in tools), native_search=isinstance(main, PerplexityAgentModel)
         ),
         tools=[*([telnyx] if telnyx is not None else []), *tools],
-        plugins=list(plugins),
         # No shell/files (not a coding agent), no programmatic_tool_caller (its inner calls bypass
         # approvals), no subagent (it forwards plugins and hooks to children), no harness web_search
         # (Perplexity's native search is configured on the model; Brave search comes from ``search_tools``).
@@ -243,7 +238,7 @@ def build_agent(
         context_manager="auto",
         session=session_manager,
         skills=str(skills_dir) if skills_dir.is_dir() else False,
-        memory={"stores": [FileMemoryStore(name=MEMORY_STORE_NAME, storage=storage, writable=True, extraction=True)]},
+        memory={"stores": [FileMemoryStore(name=MEMORY_STORE_NAME, storage=backend, writable=True, extraction=True)]},
         builtin_plugins=["todos"],
         interventions=[approvals],
         storage=storage,
@@ -264,7 +259,7 @@ def build_agent(
         storage.generation,
         len(agent.tool_names),
     )
-    return Generation(storage.generation, agent, session_manager, storage, telnyx, retry, bridge, timeouts)
+    return Generation(storage.generation, agent, session_manager, storage, telnyx, timeouts)
 
 
 def apply_system_prompt(agent: Agent, telnyx: MCPClient | None) -> None:

@@ -2,14 +2,12 @@ package com.hiron.emrys.ui
 
 import android.provider.Settings as AndroidSettings
 import androidx.activity.ComponentActivity
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
@@ -18,7 +16,6 @@ import com.hiron.emrys.core.emrys
 import com.hiron.emrys.testing.shot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -37,14 +34,9 @@ class OnboardingTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private var finished = 0
-    private var voiceSetups = 0
 
     private fun show() = compose.setContent {
-        EmrysTheme {
-            CompositionLocalProvider(LocalOpenVoiceSetup provides { voiceSetups++ }) {
-                Onboarding(compose.activity.emrys, onFinish = { finished++ })
-            }
-        }
+        EmrysTheme { Onboarding(compose.activity.emrys, onFinish = { finished++ }) }
     }
 
     private fun tap(text: String) {
@@ -70,12 +62,8 @@ class OnboardingTest {
 
         tap("Save & continue")
         compose.onNodeWithText("Default assistant.").assertIsDisplayed()
-        compose.onNodeWithText("Long-press power button").assertIsSelected()
         compose.onNodeWithText("Then hold the power button", substring = true).assertIsDisplayed()
         shot("00c-onboarding-assistant")
-        tap("Corner swipe")
-        compose.onNodeWithText("Corner swipe").assertIsSelected()
-        compose.onNodeWithText("Then swipe up from a bottom corner", substring = true).assertIsDisplayed()
 
         tap("Skip for now")
         compose.onNodeWithText("System access.").assertIsDisplayed()
@@ -137,7 +125,6 @@ class OnboardingTest {
     fun theModelsStepWritesSettings() {
         val settings = compose.activity.emrys.settings
         settings.voiceModel = true
-        settings.speakReplies = false
         settings.elevenLabsAgents = true
         show()
         tap("Set up step by step")
@@ -153,18 +140,6 @@ class OnboardingTest {
         compose.waitForIdle()
         voice.assertIsOff()
         assertFalse(settings.voiceModel)
-
-        compose.onNode(isToggleable() and hasText("Read replies aloud when I type")).performClick()
-        compose.waitForIdle()
-        assertTrue(settings.speakReplies)
-    }
-
-    @Test
-    fun theVoiceLinkOpensVoiceSetup() {
-        show()
-        tap("Set up step by step")
-        tap("Choose Emrys's voice")
-        assertEquals(1, voiceSetups)
     }
 
     @Test

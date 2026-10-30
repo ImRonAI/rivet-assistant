@@ -30,9 +30,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 from strands.tools import PythonAgentTool
+from strands.tools.mcp import MCPClient
+from strands.tools.mcp.mcp_types import MCPToolResult
+from strands.types.tools import ToolResult, ToolSpec, ToolUse
 
 from .alerts import alert_for
 from .approvals import Tier, ToolPolicy
@@ -42,9 +45,6 @@ logger = logging.getLogger(__name__)
 
 ASSISTANT_NAME = "Emrys call answering"
 ASSISTANT_TAG = "emrys"
-# The assistant as set up before the rename: setup still finds it, and updating it gives it the names above.
-LEGACY_ASSISTANT_NAME = "Rivet call answering"
-LEGACY_ASSISTANT_TAG = "rivet"
 DEFAULT_MODEL = "Qwen/Qwen3-235B-A22B"
 DEFAULT_VOICE = "Telnyx.Natural.Marissa"
 MESSAGE_LIMIT = 1000
@@ -52,8 +52,6 @@ INBOX_LIMIT = 200
 TELNYX_EXECUTE_TOOL = "telnyx_execute"
 SETUP_TIMEOUT = timedelta(seconds=90)
 CALL_ID_VARIABLE = "emrys_call_id"
-# An assistant set up before the rename fills its webhooks from this variable until setup runs again.
-LEGACY_CALL_ID_VARIABLE = "rivet_call_id"
 CALL_ID = re.compile(r"^c-[0-9a-f]{12}$")
 SUMMARY_OUTCOMES = ("message_taken", "no_message", "caller_hung_up", "spam")
 # Preset webhook body fields: Telnyx fills them in from the start webhook's answer; the model never sees them.
@@ -116,7 +114,7 @@ class CallLine:
         base = self.public_url.rstrip("/")
         return f"{base}/v1/calls/{session_id}/{call_token(self.device_token, session_id)}/{kind}"
 
-    def assistant_config(self, session_id: str, owner_name: str) -> dict[str, Any]:
+    def assistant_config(self, session_id: str, owner_name: str) -> dict[str, object]:
         """Body for creating (or updating) the session's answering assistant."""
         return {
             "name": ASSISTANT_NAME,
@@ -184,7 +182,7 @@ class CallLine:
         }
 
 
-def setup_code(config: Mapping[str, Any], number: str, *, reassign: bool) -> str:
+def setup_code(config: Mapping[str, object], number: str, *, reassign: bool) -> str:
     """Telnyx ``execute`` code that creates or updates the assistant and routes ``number`` to it.
 
     Nothing is written when the number is unknown, or when it is routed to some other connection and
@@ -194,7 +192,6 @@ def setup_code(config: Mapping[str, Any], number: str, *, reassign: bool) -> str
 NUMBER = {number!r}
 NAME = {ASSISTANT_NAME!r}
 TAG = {ASSISTANT_TAG!r}
-LEGACY = ({LEGACY_ASSISTANT_NAME!r}, {LEGACY_ASSISTANT_TAG!r})
 REASSIGN = {reassign!r}
 CONFIG = {dict(config)!r}
 query = {{'filter': {{'phone_number': NUMBER}}, 'page': {{'size': 1, 'number': 1}}}}
@@ -204,9 +201,7 @@ if not numbers:
     return {{'ok': False, 'reason': 'not_found'}}
 number = numbers[0]
 existing = await call_tool('get_assistants_public_assistants_get', {{}})
-ours = ((NAME, TAG), LEGACY)
-mine = [a for a in (existing.get('data') or [])
-        if any(a.get('name') == n and t in (a.get('tags') or []) for n, t in ours)]
+mine = [a for a in (existing.get('data') or []) if a.get('name') == NAME and TAG in (a.get('tags') or [])]
 texml = ((mine[0].get('telephony_settings') or {{}}).get('default_texml_app_id')) if mine else None
 current = number.get('connection_id')
 if current and current != texml and not REASSIGN:
@@ -237,22 +232,44 @@ _REASONS = {
 }
 
 
+CallRecord = TypedDict(
+    "CallRecord",
+    {
+        "at": float,
+        "kind": str,
+        "call_id": str,
+        "from": str,
+        "verified": bool,
+        "caller": str,
+        "caller_name": str,
+        "callback_number": str,
+        "message": str,
+        "urgent": bool,
+        "hung_up_early": bool,
+        "summary": str,
+        "outcome": str,
+    },
+    total=False,
+)
+"""One line of a session's call inbox: an ``answering`` call, a ``message`` a caller left, or a call's ``summary``."""
+
+
 class CallInbox:
     """Calls Emrys answered and messages it took, one JSON-lines file per session."""
 
     def __init__(self, directory: str | Path) -> None:
         self.directory = Path(directory)
 
-    def add(self, session_id: str, record: Mapping[str, Any]) -> dict[str, Any]:
+    def add(self, session_id: str, record: CallRecord) -> CallRecord:
         """Append a record (stamped with ``at``) and return it."""
-        entry = {"at": time.time(), **record}
+        entry: CallRecord = {"at": time.time(), **record}
         self.directory.mkdir(parents=True, exist_ok=True)
         path = self.directory / f"{session_id}.jsonl"
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
         return entry
 
-    def recent(self, session_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    def recent(self, session_id: str, limit: int = 20) -> list[CallRecord]:
         """Newest first."""
         path = self.directory / f"{session_id}.jsonl"
         if not path.exists():
@@ -266,7 +283,7 @@ class CallInbox:
         return rows[::-1][: max(1, min(limit, INBOX_LIMIT))]
 
 
-def _texts(body: Any) -> tuple[Mapping[str, Any], Callable[[str], str]]:
+def _texts(body: object) -> tuple[Mapping[str, object], Callable[[str], str]]:
     data = body if isinstance(body, Mapping) else {}
 
     def text(key: str) -> str:
@@ -276,12 +293,12 @@ def _texts(body: Any) -> tuple[Mapping[str, Any], Callable[[str], str]]:
     return data, text
 
 
-def _call_id(data: Mapping[str, Any]) -> str:
+def _call_id(data: Mapping[str, object]) -> str:
     value = data.get("call_id")
     return value if isinstance(value, str) and CALL_ID.match(value) else ""
 
 
-def clean_message(body: Any) -> dict[str, Any]:
+def clean_message(body: object) -> CallRecord:
     """The take_message webhook body, reduced to known fields of bounded size."""
     data, text = _texts(body)
     return {
@@ -295,7 +312,7 @@ def clean_message(body: Any) -> dict[str, Any]:
     }
 
 
-def clean_summary(body: Any) -> dict[str, Any]:
+def clean_summary(body: object) -> CallRecord:
     """The call_summary webhook body, reduced to known fields of bounded size."""
     data, text = _texts(body)
     outcome = text("outcome")
@@ -309,7 +326,7 @@ def clean_summary(body: Any) -> dict[str, Any]:
     }
 
 
-def caller_of(body: Any) -> tuple[str, bool]:
+def caller_of(body: object) -> tuple[str, bool]:
     """``(caller, verified)`` from Telnyx's ``assistant.initialization`` webhook."""
     payload = body.get("data", {}).get("payload", {}) if isinstance(body, Mapping) else {}
     if not isinstance(payload, Mapping):
@@ -340,16 +357,16 @@ carrier's call forwarding).
  - Messages callers left are in `call_messages`; offer to text the caller back."""
 
 
-def _mcp_client(agent: Any) -> Any:
+def _mcp_client(agent: object) -> MCPClient:
     registry = getattr(getattr(agent, "tool_registry", None), "registry", {})
     tool = registry.get(TELNYX_EXECUTE_TOOL)
-    client = getattr(tool, "mcp_client", None)
+    client: MCPClient | None = getattr(tool, "mcp_client", None)
     if client is None:
         raise RuntimeError("the Telnyx MCP connection is not available")
     return client
 
 
-def _parse(result: Mapping[str, Any]) -> Any:
+def _parse(result: MCPToolResult) -> object:
     structured = result.get("structuredContent")
     if isinstance(structured, Mapping) and structured:
         return structured.get("result", structured)
@@ -360,7 +377,7 @@ def _parse(result: Mapping[str, Any]) -> Any:
         return text
 
 
-def _result(tool_use_id: str, ok: bool, data: Any) -> dict[str, Any]:
+def _result(tool_use_id: str, ok: bool, data: object) -> ToolResult:
     text = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
     return {"toolUseId": tool_use_id, "status": "success" if ok else "error", "content": [{"text": text}]}
 
@@ -368,7 +385,7 @@ def _result(tool_use_id: str, ok: bool, data: Any) -> dict[str, Any]:
 def tools_for(bridge: DeviceBridge, session_id: str, line: CallLine | None, inbox: CallInbox) -> list[PythonAgentTool]:
     """The call-answering tools for one session."""
 
-    async def setup(tool_use: Any, **state: Any) -> Any:
+    async def setup(tool_use: ToolUse, **state: object) -> ToolResult:
         tool_use_id = tool_use["toolUseId"]
         data = tool_use.get("input") or {}
         if line is None:
@@ -408,11 +425,11 @@ def tools_for(bridge: DeviceBridge, session_id: str, line: CallLine | None, inbo
             },
         )
 
-    async def messages(tool_use: Any, **_: Any) -> Any:
+    async def messages(tool_use: ToolUse, **_: object) -> ToolResult:
         limit = (tool_use.get("input") or {}).get("limit") or 10
         return _result(tool_use["toolUseId"], True, {"calls": inbox.recent(session_id, int(limit))})
 
-    setup_spec = {
+    setup_spec: ToolSpec = {
         "name": "call_answering_setup",
         "description": (
             "Set up Emrys to answer the user's calls: creates (or updates) Emrys's Telnyx AI answering assistant "
@@ -433,7 +450,7 @@ def tools_for(bridge: DeviceBridge, session_id: str, line: CallLine | None, inbo
             }
         },
     }
-    messages_spec = {
+    messages_spec: ToolSpec = {
         "name": "call_messages",
         "description": "Calls Emrys answered, the messages callers left and call summaries, newest first.",
         "inputSchema": {
@@ -441,6 +458,6 @@ def tools_for(bridge: DeviceBridge, session_id: str, line: CallLine | None, inbo
         },
     }
     return [
-        PythonAgentTool("call_answering_setup", setup_spec, setup),  # type: ignore[arg-type]
-        PythonAgentTool("call_messages", messages_spec, messages),  # type: ignore[arg-type]
+        PythonAgentTool("call_answering_setup", setup_spec, setup),
+        PythonAgentTool("call_messages", messages_spec, messages),
     ]

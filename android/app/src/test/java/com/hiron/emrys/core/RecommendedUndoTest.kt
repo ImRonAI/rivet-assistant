@@ -38,7 +38,7 @@ class RecommendedUndoTest {
         runCatching { server.close() }
     }
 
-    private fun snapshot() = RecommendedUndo(offerReplies = false, ruleTargets = setOf(listed, unlisted), at = 1)
+    private fun snapshot() = RecommendedUndo(speakInOverlay = true, ruleTargets = setOf(listed, unlisted))
 
     private fun next(type: String): JSONObject {
         while (true) {
@@ -57,15 +57,15 @@ class RecommendedUndoTest {
 
     @Test
     fun offlineItChangesNothingWhileThereAreRulesToRemove() {
-        runtime.settings.offerReplies = true
+        runtime.settings.speakInOverlay = false
         runtime.settings.recommendedUndo = snapshot()
         assertFalse(runtime.undoRecommended())
         assertEquals(snapshot(), runtime.settings.recommendedUndo)
-        assertTrue(runtime.settings.offerReplies)
+        assertFalse(runtime.settings.speakInOverlay)
 
-        runtime.settings.recommendedUndo = RecommendedUndo(offerReplies = false, at = 1)
+        runtime.settings.recommendedUndo = RecommendedUndo(speakInOverlay = true)
         assertTrue(runtime.undoRecommended())
-        assertFalse(runtime.settings.offerReplies)
+        assertTrue(runtime.settings.speakInOverlay)
         assertNull(runtime.settings.recommendedUndo)
     }
 
@@ -96,10 +96,10 @@ class RecommendedUndoTest {
         )
         until { runtime.state.value.connection == Connection.Online && runtime.state.value.rules.match(listed) != null }
 
-        runtime.settings.offerReplies = true
+        runtime.settings.speakInOverlay = false
         runtime.settings.recommendedUndo = snapshot()
         assertTrue(runtime.undoRecommended())
-        assertFalse(runtime.settings.offerReplies)
+        assertTrue(runtime.settings.speakInOverlay)
         assertNull(runtime.settings.recommendedUndo)
         val revokes = listOf(next("rules.revoke"), next("rules.revoke"))
         assertEquals(setOf("sms_send?to=%2B18015550100"), revokes.mapNotNull { it.optString("key").ifEmpty { null } }.toSet())

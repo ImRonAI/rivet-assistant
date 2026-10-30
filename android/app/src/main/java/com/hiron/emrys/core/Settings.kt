@@ -44,11 +44,6 @@ class Settings(context: Context) : RecommendedPrefs {
         get() = prefs.getBoolean("speak_in_overlay", true)
         set(value) = prefs.edit().putBoolean("speak_in_overlay", value).apply()
 
-    /** Start a reply task for each new message notification (every reply still needs approval). */
-    override var offerReplies: Boolean
-        get() = prefs.getBoolean("offer_replies", false)
-        set(value) = prefs.edit().putBoolean("offer_replies", value).apply()
-
     /** Emrys's Telnyx answering line (saved by the brain's call_answering_setup, or typed in Settings). */
     var answeringNumber: String
         get() = prefs.getString("answering_number", null) ?: BuildConfig.DEFAULT_ANSWERING_NUMBER
@@ -59,7 +54,7 @@ class Settings(context: Context) : RecommendedPrefs {
         get() = prefs.getString("own_number", "").orEmpty()
         set(value) = prefs.edit().putString("own_number", value.trim()).apply()
 
-    override var answeringMode: ForwardMode
+    var answeringMode: ForwardMode
         get() = runCatching { ForwardMode.valueOf(prefs.getString("answering_mode", null).orEmpty()) }.getOrDefault(ForwardMode.Unanswered)
         set(value) = prefs.edit().putString("answering_mode", value.name).apply()
 
@@ -83,24 +78,6 @@ class Settings(context: Context) : RecommendedPrefs {
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
 
-    /** What the voice setup saved: "" (nothing yet), "preset", "described", "recorded", "uploaded". */
-    var voiceKind: String
-        get() = prefs.getString("voice_kind", "").orEmpty()
-        set(value) = prefs.edit().putString("voice_kind", value).apply()
-
-    /** The saved voice as the user sees it ("Copper", "Described voice", "Your recording", "Uploaded recording"). */
-    var voiceLabel: String
-        get() = prefs.getString("voice_label", "").orEmpty()
-        set(value) = prefs.edit().putString("voice_label", value).apply()
-
-    var voicePreset: String
-        get() = prefs.getString("voice_preset", "").orEmpty()
-        set(value) = prefs.edit().putString("voice_preset", value).apply()
-
-    var voiceDescription: String
-        get() = prefs.getString("voice_description", "").orEmpty()
-        set(value) = prefs.edit().putString("voice_description", value).apply()
-
     /** Talk and type through the ElevenLabs agents (the brain needs `ELEVENLABS_API_KEY`). Off: the brain's own turns. */
     var elevenLabsAgents: Boolean
         get() = prefs.getBoolean("elevenlabs_agents", true)
@@ -119,22 +96,17 @@ class Settings(context: Context) : RecommendedPrefs {
             return RecommendedUndo(
                 autoConnect = flag(UNDO_AUTO_CONNECT),
                 speakInOverlay = flag(UNDO_SPEAK_IN_OVERLAY),
-                offerReplies = flag(UNDO_OFFER_REPLIES),
-                answeringMode = prefs.getString(UNDO_ANSWERING_MODE, null)?.let { runCatching { ForwardMode.valueOf(it) }.getOrNull() },
                 ruleTargets = prefs.getStringSet(UNDO_RULE_TARGETS, null).orEmpty().mapNotNull(RuleTargetCodec::decode).toSet(),
-                at = prefs.getLong(UNDO_AT, 0),
             )
         }
         set(value) {
             val edit = prefs.edit()
-            listOf(UNDO_AUTO_CONNECT, UNDO_SPEAK_IN_OVERLAY, UNDO_OFFER_REPLIES, UNDO_ANSWERING_MODE, UNDO_RULE_TARGETS, UNDO_AT).forEach(edit::remove)
+            listOf(UNDO_AUTO_CONNECT, UNDO_SPEAK_IN_OVERLAY, UNDO_RULE_TARGETS, UNDO_AT).forEach(edit::remove)
             if (value != null) {
                 value.autoConnect?.let { edit.putBoolean(UNDO_AUTO_CONNECT, it) }
                 value.speakInOverlay?.let { edit.putBoolean(UNDO_SPEAK_IN_OVERLAY, it) }
-                value.offerReplies?.let { edit.putBoolean(UNDO_OFFER_REPLIES, it) }
-                value.answeringMode?.let { edit.putString(UNDO_ANSWERING_MODE, it.name) }
                 if (value.ruleTargets.isNotEmpty()) edit.putStringSet(UNDO_RULE_TARGETS, value.ruleTargets.map(RuleTargetCodec::encode).toSet())
-                edit.putLong(UNDO_AT, value.at)
+                edit.putBoolean(UNDO_AT, true)
             }
             edit.apply()
         }
@@ -144,9 +116,9 @@ class Settings(context: Context) : RecommendedPrefs {
     private companion object {
         const val UNDO_AUTO_CONNECT = "undo_auto_connect"
         const val UNDO_SPEAK_IN_OVERLAY = "undo_speak_in_overlay"
-        const val UNDO_OFFER_REPLIES = "undo_offer_replies"
-        const val UNDO_ANSWERING_MODE = "undo_answering_mode"
         const val UNDO_RULE_TARGETS = "undo_rule_targets"
+
+        /** Marks that there is something to undo. */
         const val UNDO_AT = "undo_at"
     }
 }

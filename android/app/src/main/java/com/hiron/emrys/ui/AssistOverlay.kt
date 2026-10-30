@@ -294,7 +294,7 @@ private fun MicMeter(level: Float) {
         BoxWithConstraints(Modifier.weight(1f)) {
             // Each bar is 4dp wide with a 9dp gap after it.
             val fits = ((maxWidth + 9.dp) / 13.dp).toInt().coerceIn(1, METER_BARS)
-            LevelMeter(history.takeLast(fits), height = 28.dp, grouped = false)
+            LevelMeter(history.takeLast(fits), height = 28.dp)
         }
     }
 }

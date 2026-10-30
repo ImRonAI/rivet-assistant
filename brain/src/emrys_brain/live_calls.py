@@ -27,7 +27,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Literal
 
 from strands.tools.mcp import MCPClient
 
@@ -49,8 +49,8 @@ E164 = re.compile(r"^\+[1-9]\d{6,14}$")
 _SPEAKERS = {"user": "caller", "assistant": "emrys"}
 
 Status = Literal["answering", "transferring", "ended"]
-Emit = Callable[[dict[str, Any]], None]
-Spawn = Callable[[Coroutine[Any, Any, Any]], asyncio.Task[Any]]
+Emit = Callable[[dict[str, object]], None]
+Spawn = Callable[[Coroutine[object, object, None]], asyncio.Task[None]]
 
 _TAKE_OVER_ERRORS = {
     "no_conversation": "Telnyx has no record of this call yet. Try again in a moment.",
@@ -77,7 +77,7 @@ class TelnyxRunner:
         self._client: MCPClient | None = None
         self._lock = asyncio.Lock()
 
-    async def execute(self, code: str, *, label: str, timeout: timedelta) -> Any:
+    async def execute(self, code: str, *, label: str, timeout: timedelta) -> object:
         """Run ``code`` with the ``execute`` tool and return its result.
 
         Raises:
@@ -133,7 +133,7 @@ def _iso(timestamp: float) -> str:
 
 def _find_code(caller: str, started_at: float) -> str:
     """Code that sets ``conversation`` to the newest phone conversation with ``caller`` since the call began."""
-    query: dict[str, Any] = {
+    query: dict[str, object] = {
         "metadata->telnyx_conversation_channel": "eq.phone_call",
         "created_at": "gte." + _iso(started_at - LOOKBACK),
         "order": "created_at.desc",
@@ -196,7 +196,7 @@ return {{'ok': True, 'call_control_id': call}}
 """
 
 
-def transcript(messages: Any) -> list[dict[str, str]]:
+def transcript(messages: object) -> list[dict[str, str]]:
     """Conversation messages as transcript lines, oldest first: only what the caller and the assistant said."""
     rows = [row for row in messages if isinstance(row, Mapping)] if isinstance(messages, list) else []
     rows.sort(key=lambda row: str(row.get("at") or ""))
@@ -223,9 +223,9 @@ class LiveCall:
     seen: int = 0
     attempts: int = 0
     taken_over: bool = False
-    watcher: asyncio.Task[Any] | None = None
+    watcher: asyncio.Task[None] | None = None
 
-    def live_event(self, lines: Sequence[Mapping[str, str]], *, snapshot: bool = False) -> dict[str, Any]:
+    def live_event(self, lines: Sequence[Mapping[str, str]], *, snapshot: bool = False) -> dict[str, object]:
         """``call.live``: the call's state and its new transcript lines (all of them when ``snapshot``)."""
         return {
             "type": "call.live",
@@ -280,7 +280,7 @@ class LiveCalls:
         call.watcher = self._spawn(self._watch(call))
         return call
 
-    def end(self, summary: Mapping[str, Any]) -> dict[str, Any] | None:
+    def end(self, summary: Mapping[str, object]) -> dict[str, object] | None:
         """Settle the call a ``call_summary`` names; returns the ``call.ended`` event, or None for a repeat."""
         call = self.calls.get(str(summary.get("call_id") or ""))
         if call is None:
@@ -293,7 +293,7 @@ class LiveCalls:
             return None
         return self._settle(call, summary)
 
-    def take_over(self, call_id: str, to: Any) -> None:
+    def take_over(self, call_id: str, to: object) -> None:
         """Transfer a live call to the user's own number, as they asked from the phone."""
         call = self.calls.get(call_id)
         refusal = self._refusal(call, to)
@@ -303,13 +303,13 @@ class LiveCalls:
         call.status = "transferring"
         call.attempts += 1
         self._emit(call.live_event([]))
-        self._spawn(self._transfer(self._telnyx, call, str(to)))
+        _ = self._spawn(self._transfer(self._telnyx, call, str(to)))
 
-    def snapshots(self) -> list[dict[str, Any]]:
+    def snapshots(self) -> list[dict[str, object]]:
         """``call.live`` with every line for each call still live (sent when the phone resumes)."""
         return [call.live_event(call.lines, snapshot=True) for call in self.calls.values() if call.status != "ended"]
 
-    def _refusal(self, call: LiveCall | None, to: Any) -> str | None:
+    def _refusal(self, call: LiveCall | None, to: object) -> str | None:
         if call is None:
             return "Emrys is not on that call."
         if call.status == "ended":
@@ -360,7 +360,7 @@ class LiveCalls:
                 warned = True
             await asyncio.sleep(self._poll)
 
-    def _absorb(self, call: LiveCall, outcome: Any) -> None:
+    def _absorb(self, call: LiveCall, outcome: object) -> None:
         if not isinstance(outcome, Mapping) or call.status == "ended":
             return
         conversation = outcome.get("conversation_id")
@@ -373,7 +373,7 @@ class LiveCalls:
             call.lines = (call.lines + fresh)[-LINE_LIMIT:]
             self._emit(call.live_event(fresh))
 
-    def _settle(self, call: LiveCall, summary: Mapping[str, Any]) -> dict[str, Any]:
+    def _settle(self, call: LiveCall, summary: Mapping[str, object]) -> dict[str, object]:
         call.status = "ended"
         if call.watcher is not None and call.watcher is not asyncio.current_task():
             call.watcher.cancel()
@@ -388,10 +388,10 @@ def _ended(
     caller: str,
     started_at: float | None,
     ended_at: float,
-    summary: Mapping[str, Any],
+    summary: Mapping[str, object],
     *,
     taken_over: bool = False,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     return {
         "type": "call.ended",
         "call_id": call_id,
@@ -406,7 +406,7 @@ def _ended(
     }
 
 
-def _take_over_error(outcome: Any) -> str:
+def _take_over_error(outcome: object) -> str:
     if isinstance(outcome, Mapping):
         reason = _TAKE_OVER_ERRORS.get(str(outcome.get("reason")))
         if reason is not None:

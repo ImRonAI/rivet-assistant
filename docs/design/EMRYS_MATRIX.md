@@ -3,7 +3,7 @@
 The ElevenLabs UI `Matrix` (a dot-matrix display of circular SVG cells, brightness 0..1 per cell) is Emrys's second
 signature visual after the robot itself. It is how Emrys *shows* what it is doing: an app-specific light language
 built into the robot's armor, the stage floor and the mini band, so it is on screen wherever the stage is (the big
-stage on Home and onboarding, the band on every other tab and the voice setup).
+stage on Home and onboarding, the band on Activity and Settings).
 
 The component is installed verbatim with the ElevenLabs CLI and never edited. Everything here is our own frame data,
 composition and choreography (`android/stage-ui/src/matrix/`), fed by real state only.
@@ -30,8 +30,8 @@ composition and choreography (`android/stage-ui/src/matrix/`), fed by real state
 |---|---|---|---|
 | `chest` | 13×13, circular | The hero emblem on the chest plate, a recessed dark-glass disc | The sigil at rest; one glyph per state; the heart of every light show |
 | `mouth` | 3×15 | A slim dark-glass band across the lower visor, under the eyes | Emrys's voice: dot-matrix mouth shapes from the real visemes while it speaks |
-| `gauntlet-l`, `gauntlet-r` | 3×11 each | Outer forearm plates | Ambient chases that echo the chest; a beat-synced VU during music moves |
-| `floor` | 25×25, circular | A light floor under the robot's feet, in the floor plane | Ripples, radar, celebrations and an LED dance floor |
+| `gauntlet-l`, `gauntlet-r` | 3×11 each | Outer forearm plates | Ambient chases that echo the chest |
+| `floor` | 17×17, circular | A light floor under the robot's feet, in the floor plane | Ripples, radar and celebrations |
 | `band` | 7×7 (plus an optional 7×N ticker) | Beside the robot in the mini band (`stage.clientHeight < 200`) | The current state's glyph on every screen that shows the band |
 
 The robot's eyes stay the renderer's own soft luminous capsules (they carry gaze and blinks in 3D). The Matrix
@@ -75,24 +75,23 @@ fall on top of the floor dots. It's hidden on a squeezed stage and when the floo
 
 ### State the stage layer reads
 
-`window.emrys.slots()` → `{ chest: {visible, facing}, mouth: {...}, ... }` and `window.emrys.scene()` →
-`{ move: <current move id>, beat: { bpm, phase } | null }` (the beat of the music scenes, from the page's own
-clock or `emrys.beat`). Both are additions to the bridge API; nothing existing changes. The stage layer also hooks
-`emrys.state`, `emrys.mouth` / `emrys.viseme` / `emrys.quiet` (real speech timing from TTS word boundaries and the
-ElevenLabs agent's alignment) and any real levels the app sends.
+`window.emrys.slots()` → `{ chest: {visible, facing}, mouth: {...}, ... }` from the robot page, and from the bridge
+`window.emrys.stageInfo()` (state, mood, whose turn it is, `lowFx`, the stage size and where Emrys stands) and
+`window.emrys.speech()` (the current viseme and its weight, and the ElevenLabs agent's audio level as the SDK reports
+it), with an `emrys:stage` event when they change. These are additions to the bridge API; nothing existing changes.
+Speech timing comes only from `emrys.mouth` / `emrys.viseme` / `emrys.quiet` (TTS word boundaries and the agent's
+alignment) and `emrys.voice` / `emrys.level` (the agent's turn and level).
 
 ## 4. The light language (our frame data)
 
-Grids are drawn for the 13×13 chest; the band uses 7×7 versions; the floor uses radial generators.
+These are the states the app sends (idle, listening, thinking, searching, working, texting, emailing, calling,
+waiting, done, failed). Grids are drawn for the 13×13 chest; the band uses 7×7 versions; the floor uses radial generators.
 
 - **Sigil** (`docs/design/emrys-sigil.json`): an E inside a halo ring of dots, its middle bar ending in a half-lit
   spark. It's the resting chest, the boot finale, the app icon, the notification icon and the brand mark
   (`res/drawable/emrys_sigil.xml`).
 - **idle**: the sigil breathing (brightness 0.55 → 0.9 over 4 s), with a slow glint that crosses it every ~12 s.
-- **greeting**: the sigil assembles from scattered sparks (they converge over ~1.2 s), then one ripple leaves the
-  floor.
-- **listening** (coral, a live mic): concentric rings travel outward from the centre like sonar; when the app sends
-  real input levels, ring brightness follows them.
+- **listening** (coral, a live mic): concentric rings travel outward from the centre like sonar.
 - **speaking**: the mouth band shows the viseme shapes (`sil` a thin line, `PP` closed, `FF` lower-lip, `aa` wide
   oval, `O`/`U` round, `E`/`I` wide flat, and so on); the chest shows a radial VU from the same envelope; the floor
   breathes with it at low brightness.
@@ -102,14 +101,9 @@ Grids are drawn for the 13×13 chest; the band uses 7×7 versions; the floor use
 - **texting**: three typing dots that bounce, then resolve into a speech bubble.
 - **emailing**: an envelope drawn on dot by dot, its flap closing.
 - **calling**: a handset with signal arcs pulsing outward.
-- **video**: an aperture iris opening and closing.
 - **waiting** (honey, waiting on your OK): a keyhole that breathes; the floor holds one slow honey ring.
 - **done** (sage): a check drawn stroke by stroke, a burst of sparks outward across the floor, then back to the sigil.
 - **failed** (coral): a soft × that fades, then a dimmed sigil.
-- **sleeping**: the sigil at 25 % with a single `z` drifting up every few seconds, at a low frame rate.
-- **music moves** (DJ, rock, pop, reggae, country, folk, dance, robot): the floor becomes an LED dance floor locked to
-  the scene's beat (checker pulses for pop, rolling waves for reggae, equaliser columns for DJ and rock, a slow
-  campfire flicker for folk and country), the gauntlets run a beat VU, the chest pulses on the downbeat.
 - **Transitions**: a 180 ms column wipe from one glyph to the next. Never a hard cut.
 
 Colour: the mood colour of the design doc (aurora `#B7C2FF` at rest, glacier `#8FDBE8` working, honey `#E8C07C`
@@ -123,13 +117,12 @@ moods.
 2. **Every state change**: the chest wipes to the new glyph; the floor sends one ring in the new colour.
 3. **Done**: the celebration above. **Failed**: one soft coral ring inward, then dim.
 4. **Speech**: mouth + chest VU + floor breath for as long as real speech lasts; `quiet` returns to the state glyph.
-5. **Music**: the dance floor for as long as the scene plays.
 
 ## 6. Budget and fallbacks
 
 - At most about 800 cells on the page and about 150 cells above 0.5 (the glow filter) at any moment. Measure the
   page's own fps readout in Playwright with CPU throttling (CDP `Emulation.setCPUThrottlingRate` 4×) while the robot
-  dances; the stage must not trip the page's `degrade()`.
+  works; the stage must not trip the page's `degrade()`.
 - `lowFx`: unmount the floor and gauntlets (the robot draws its native look); keep the chest with static patterns.
 - Reduced motion: static patterns only (each state's resting glyph), no light shows, no floor.
 - Squeezed stage (the mini band): no floor, no gauntlets, no mouth; the `band` glyph instead.

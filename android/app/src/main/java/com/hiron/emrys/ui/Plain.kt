@@ -50,7 +50,7 @@ object Plain {
     )
 
     private val KINDS = mapOf(
-        "turn" to ("You asked" to Tone.Accent), "search" to ("Search" to Tone.Cyan), "tool" to ("Did" to Tone.Cyan),
+        "turn" to ("You asked" to Tone.Accent), "search" to ("Search" to Tone.Cyan),
         "device" to ("Phone" to Tone.Cyan), "approval" to ("Approval" to Tone.Amber), "backoff" to ("Trying again" to Tone.Amber),
         "restart" to ("Restart" to Tone.Amber), "notice" to ("Note" to Tone.Neutral), "error" to ("Problem" to Tone.Red),
         "call" to ("Call" to Tone.Green), "task" to ("Task" to Tone.Accent),
@@ -112,14 +112,17 @@ object Plain {
     /** The activity log's line for a tool: "Sent a text". */
     fun done(tool: String): String = TOOLS[tool]?.second ?: spoken(tool)
 
-    /** A log entry's text in plain words; anything that isn't a tool id or a retry passes through unchanged. */
+    /**
+     * A log entry's text in plain words; anything that isn't a tool id or a retry passes through unchanged.
+     * `sms_send` and `sms_send: done` read "Sent a text"; any other result reads after what Emrys tried ("Send a
+     * text · …"), so a failure never reads as done.
+     */
     fun log(kind: String, text: String): String {
         TOOL_LINE.matchEntire(text)?.let { m ->
             val id = m.groupValues[1]
             if (id in TOOLS) {
-                // "done" repeats what the past tense already says.
-                val rest = m.groupValues[2].trim().takeUnless { it.isEmpty() || it == "done" }
-                return done(id) + (rest?.let { " · ${numbers(it)}" } ?: "")
+                val rest = m.groupValues[2].trim()
+                return if (rest.isEmpty() || rest == "done") done(id) else "${action(id)} · ${numbers(rest)}"
             }
         }
         if (kind == "backoff") BACKOFF.matchEntire(text)?.let { return "Emrys's model is busy. Trying again in ${it.groupValues[1]}s." }

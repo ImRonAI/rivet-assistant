@@ -1,7 +1,10 @@
 package com.hiron.emrys.ui
 
 import android.content.Context
+import android.view.ViewGroup
 import androidx.test.core.app.ApplicationProvider
+import com.hiron.emrys.core.EmrysRuntime
+import com.hiron.emrys.core.NameLookup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -10,11 +13,21 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.security.MessageDigest
 
-/** The robot page's one request outside the app's assets: the Orb's noise texture, answered from the bundled copy. */
+/** The robot host's WebView: it fills its slot, and its one request outside the app's assets is the Orb's texture. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class StageAssetTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
+
+    @Test
+    fun theRobotsWebViewFillsItsSlot() {
+        val host = RobotHost(context, EmrysRuntime(context, names = NameLookup { null }), dark = true, focus = RobotFocus.Stage) {}
+        // A WebView that wraps its content gets a 0 px layout viewport, and the robot never draws.
+        val params = checkNotNull(host.webView.layoutParams)
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.width)
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.height)
+        host.destroy()
+    }
 
     @Test
     fun theOrbsNoiseTextureComesFromTheBundledCopy() {

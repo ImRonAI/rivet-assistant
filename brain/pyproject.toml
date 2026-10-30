@@ -28,7 +28,7 @@ dev = [
     "pytest-asyncio>=1.0.0",
     "pytest-timeout>=2.3.0",
     "ruff>=0.16.0,<0.17.0",
-    "mypy>=1.15.0,<2.4.0",
+    "mypy>=2.3.1,<2.4.0",
 ]
 
 [project.scripts]
@@ -59,6 +59,23 @@ select = ["E", "F", "I", "UP", "B", "G"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-warn_unused_ignores = true
-ignore_missing_imports = true
+warn_unreachable = true
+strict_equality_for_none = true
+disallow_any_unimported = true
+disallow_any_explicit = true
+disallow_any_decorated = true
+enable_error_code = [
+    "redundant-self",
+    "deprecated",
+    "redundant-expr",
+    "possibly-undefined",
+    "truthy-bool",
+    "truthy-iterable",
+    "ignore-without-code",
+    "unused-awaitable",
+    "explicit-override",
+    "mutable-override",
+    "unimported-reveal",
+    "exhaustive-match",
+]
 files = ["src/emrys_brain"]

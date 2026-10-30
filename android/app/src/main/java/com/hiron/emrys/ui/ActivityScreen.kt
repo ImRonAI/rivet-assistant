@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -37,16 +36,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hiron.emrys.core.LogEntry
 import com.hiron.emrys.core.EmrysRuntime
 import com.hiron.emrys.core.EmrysState
+import com.hiron.emrys.core.LogEntry
 import com.hiron.emrys.device.Times
-import org.json.JSONArray
-import org.json.JSONObject
 import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** The trace's serif heading. */
 private val TraceTitle = Type.step.copy(fontSize = 28.sp, lineHeight = 32.sp)
@@ -61,8 +60,8 @@ private val TraceTop = 10.dp
 private val TraceText = Type.body.copy(fontSize = 14.sp, lineHeight = 20.sp)
 
 /**
- * What Emrys did and what it has scheduled: today's counters as serif figures, pending reminders, then the activity
- * log as a trace grouped by day (newest first), each day under an eyebrow.
+ * What Emrys did and what it has scheduled: pending reminders, then the activity log as a trace grouped by day
+ * (newest first), each day under an eyebrow.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -75,29 +74,11 @@ fun ActivityScreen(runtime: EmrysRuntime, state: EmrysState) {
     }
     val time = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     val days = remember(state.log) { state.log.asReversed().groupBy { dayOf(it.at) } }
-    val today = state.log.filter { dayOf(it.at) == dayOf(System.currentTimeMillis()) }
     val newest = state.log.lastOrNull()
     LazyColumn(Modifier.fillMaxSize().background(p.bg), contentPadding = PaddingValues(bottom = 40.dp)) {
-        item(key = "stats") {
-            Column(Modifier.fillMaxWidth().padding(start = gutter, end = gutter, top = 24.dp)) {
-                Row(Modifier.enter(0), verticalAlignment = Alignment.CenterVertically) {
-                    Eyebrow("Today", tone = Tone.Neutral, dot = false)
-                    Spacer(Modifier.width(14.dp))
-                    Rule(Modifier.weight(1f), color = p.line)
-                }
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                    CountTile(today.count { it.kind in setOf("device", "tool", "task", "turn") }, "Things done", p.cy, Modifier.weight(1f).enter(0), first = true)
-                    Seam()
-                    CountTile(today.count { it.kind == "approval" }, "Approvals", p.amb, Modifier.weight(1f).enter(1))
-                    Seam()
-                    CountTile(today.count { it.kind == "call" }, "Calls", p.ok, Modifier.weight(1f).enter(2))
-                }
-                Rule(color = p.line)
-            }
-        }
         if (reminders.length() > 0) {
             item(key = "reminders") {
-                Reminders(reminders, Modifier.padding(start = gutter, end = gutter, top = 24.dp).enter(3)) { id ->
+                Reminders(reminders, Modifier.padding(start = gutter, end = gutter, top = 24.dp).enter(0)) { id ->
                     runtime.reminders.cancel(id)
                     reminders = (runtime.reminders.list().data as? JSONObject)?.optJSONArray("reminders") ?: JSONArray()
                 }
@@ -139,34 +120,6 @@ fun ActivityScreen(runtime: EmrysRuntime, state: EmrysState) {
 /** Screen gutters: 20dp, and 16dp on phones under 360dp wide. */
 @Composable
 private fun gutter(): Dp = if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < 360.dp) 16.dp else 20.dp
-
-/** The hairline standing between two counters. */
-@Composable
-private fun Seam() {
-    Box(Modifier.width(1.dp).fillMaxHeight().padding(vertical = 16.dp).background(LocalPalette.current.line))
-}
-
-/**
- * A counter: a serif figure that settles when it changes, marked by a status dot at its shoulder, over a Geist label
- * that has the counter's whole width, so three fit side by side on a narrow phone at a large text size.
- */
-@Composable
-private fun CountTile(value: Int, label: String, color: Color, modifier: Modifier, first: Boolean = false) {
-    val p = LocalPalette.current
-    // The dot sits level with the top of the figure, at any text size.
-    val dotTop = with(LocalDensity.current) { 12.sp.toDp() }
-    Column(
-        modifier.padding(start = if (first) 0.dp else 14.dp, end = 4.dp, top = 16.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row {
-            Odometer("$value", Type.stat.copy(fontSize = 44.sp, lineHeight = 46.sp), p.ink)
-            Spacer(Modifier.width(6.dp))
-            SignalDot(color, Modifier.padding(top = dotTop))
-        }
-        Text(label, style = Type.labelLg, color = p.ink2, maxLines = 2)
-    }
-}
 
 /** Reminders Emrys has set, soonest first, each with a cancel key. */
 @Composable

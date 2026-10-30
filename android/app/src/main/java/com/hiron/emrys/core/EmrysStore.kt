@@ -6,7 +6,6 @@ data class EmrysState(
     val messages: List<ChatMessage> = emptyList(),
     val activeTurn: String? = null,
     val activity: Activity = Activity.Idle,
-    val trace: List<TraceStep> = emptyList(),
     val approvals: List<ApprovalRequest> = emptyList(),
     val log: List<LogEntry> = emptyList(),
     val lastError: String? = null,
@@ -61,7 +60,7 @@ data class CallLineText(val speaker: String, val text: String)
 enum class Connection { Offline, Connecting, Online }
 
 /** What Emrys is doing right now; drives the robot's moves. */
-enum class Activity { Idle, Listening, Thinking, Searching, Working, Texting, Emailing, Calling, Waiting, Done, Failed }
+enum class Activity { Idle, Listening, Thinking, Searching, Working, Texting, Emailing, Waiting, Done, Failed }
 
 data class ChatMessage(
     val id: String,
@@ -81,8 +80,6 @@ data class ChatMessage(
     /** A bubble with words in it: a reply or the user's own message. */
     val spoken: Boolean get() = search == null && searching == null && !system
 }
-
-data class TraceStep(val tag: String, val text: String, val tone: String)
 
 data class LogEntry(val at: Long, val kind: String, val text: String)
 
@@ -125,36 +122,33 @@ object CallText {
 
 object EmrysStore {
     private const val LOG_LIMIT = 200
-    private const val TRACE_LIMIT = 7
     const val CALL_LINE_LIMIT = 50
 
     fun userSent(state: EmrysState, turnId: String, text: String, attachments: List<ContextItem> = emptyList()): EmrysState = state.copy(
         messages = state.messages + ChatMessage(turnId + ":user", true, text, attachments = attachments),
         activeTurn = turnId,
         activity = Activity.Thinking,
-        trace = listOf(TraceStep("goal", text.take(44), "acc")),
         lastError = null,
     )
 
     fun reduce(state: EmrysState, event: ServerEvent, now: Long): EmrysState = when (event) {
         is ServerEvent.TurnStarted -> state.copy(
             activeTurn = if (event.lane == "default") event.turnId else state.activeTurn,
-            activity = Activity.Thinking,
-        ).log(now, "turn", event.goal?.let { "Task started: $it" } ?: "Working on it")
+            activity = if (event.lane == "default") Activity.Thinking else state.activity,
+        ).log(now, if (event.lane == "default") "turn" else "task", event.goal?.let { "Task started: $it" } ?: "Working on it")
         is ServerEvent.TextDelta -> if (event.lane != "default") state else state.appendAssistant(event.delta)
-        is ServerEvent.Thinking -> state.copy(activity = Activity.Thinking)
-        is ServerEvent.Searching -> state.copy(activity = Activity.Searching)
-            .trace("search", event.queries.joinToString(" · "), "cy")
+        is ServerEvent.Thinking -> if (event.lane != "default") state else state.copy(activity = Activity.Thinking)
+        is ServerEvent.Searching -> (if (event.lane != "default") state else state.copy(activity = Activity.Searching))
             .log(now, "search", event.queries.joinToString(", "))
-        is ServerEvent.Sources -> state.trace("observe", "${event.titles.size} sources", "mut")
-        is ServerEvent.ToolStarted -> state.copy(activity = activityFor(event.name))
-            .trace("tool", event.name, "cy")
-            .log(now, "tool", event.name)
-            .let { s -> SearchKind.ofBrainTool(event.name)?.takeIf { event.lane == "default" }?.let { searchStarted(s, brainSearch(event.id), it) } ?: s }
+        is ServerEvent.ToolStarted -> if (event.lane != "default") {
+            state
+        } else {
+            state.copy(activity = activityFor(event.name))
+                .let { s -> SearchKind.ofBrainTool(event.name)?.let { searchStarted(s, brainSearch(event.id), it) } ?: s }
+        }
         is ServerEvent.ToolsDone -> {
             val failed = event.results.filter { it.second != "success" }
             failed.fold(state) { s, (id, _) -> searchFailed(s, brainSearch(id), null) }
-                .trace("check", if (failed.isEmpty()) "tools finished" else "${failed.size} tool(s) failed", if (failed.isEmpty()) "ok" else "amb")
         }
         is ServerEvent.SearchResults -> if (event.lane != "default") state else searchShown(state, brainSearch(event.toolId), event.results)
         is ServerEvent.TurnAccepted -> {
@@ -164,11 +158,11 @@ object EmrysStore {
         is ServerEvent.Model -> state.copy(brainModel = event.model, availableModels = event.available, modelError = null)
         is ServerEvent.ModelRefused -> state.copy(modelError = event.error)
         is ServerEvent.Backoff -> state.log(now, "backoff", "Model busy; retrying in ${event.delaySeconds.toInt()}s")
-        is ServerEvent.Restart -> state.trace("restart", event.reason, "amb").log(now, "restart", event.reason)
+        is ServerEvent.Restart -> state.log(now, "restart", event.reason)
         is ServerEvent.Notice -> state.log(now, "notice", event.detail)
         is ServerEvent.ApprovalsRequested -> state.copy(
             approvals = state.approvals.filterNot { a -> event.approvals.any { it.id == a.id } } + event.approvals,
-            activity = Activity.Waiting,
+            activity = if (event.lane == "default") Activity.Waiting else state.activity,
         ).let { if (event.resent) it else it.log(now, "approval", asked(event.approvals)) }
         is ServerEvent.ApprovalExpired -> state.copy(
             approvals = state.approvals.filterNot { it.turnId == event.turnId && it.lane == event.lane },
@@ -184,7 +178,6 @@ object EmrysStore {
             messages = state.closeStreaming(failedText = "I couldn't finish that: ${event.error}"),
         ).log(now, "error", event.error).let { if (event.lane == "default") it.dropPlaceholders() else it }
         is ServerEvent.Error -> state.copy(lastError = event.message).log(now, "error", event.message)
-        is ServerEvent.DeviceCall -> state.log(now, "device", event.tool)
         is ServerEvent.CallAnswering -> state.log(now, "call", "Emrys is answering a call from ${event.from.ifBlank { "an unknown number" }}")
         is ServerEvent.CallMessage -> state.copy(liveCall = state.liveCall?.withMessage(event))
             .log(now, "call", CallText.describe(event))
@@ -216,8 +209,10 @@ object EmrysStore {
     fun dismissCall(state: EmrysState): EmrysState =
         state.copy(liveCall = state.liveCall?.takeIf { it.status != LiveCallStatus.Ended })
 
-    fun answered(state: EmrysState, ids: Set<String>): EmrysState =
-        state.copy(approvals = state.approvals.filterNot { it.id in ids }, activity = Activity.Thinking)
+    fun answered(state: EmrysState, ids: Set<String>, lane: String): EmrysState = state.copy(
+        approvals = state.approvals.filterNot { it.id in ids },
+        activity = if (lane == "default") Activity.Thinking else state.activity,
+    )
 
     const val EXPIRED = "Nobody answered in time, so Emrys didn't do it."
 
@@ -274,10 +269,8 @@ object EmrysStore {
 
     fun activityFor(tool: String): Activity = when {
         SearchKind.ofBrainTool(tool) != null -> Activity.Searching
-        tool.startsWith("sms_") || tool == "notification_reply" -> Activity.Texting
-        tool.startsWith("email_") -> Activity.Emailing
-        tool == "phone_call" -> Activity.Calling
-        tool.startsWith("telnyx_") -> Activity.Working
+        tool == "sms_send" || tool == "notification_reply" -> Activity.Texting
+        tool == "email_draft" || tool == "email_send" || tool == "email_reply" -> Activity.Emailing
         else -> Activity.Working
     }
 
@@ -304,7 +297,6 @@ object EmrysStore {
             messages
         }
         val done = copy(messages = finished, activity = Activity.Done, activeTurn = null).dropPlaceholders()
-            .trace("decide", event.text.lineSequence().firstOrNull().orEmpty().take(44), "acc")
         return if (event.restarts > 0) done.log(now, "restart", "Finished after ${event.restarts} restart(s)") else done
     }
 
@@ -368,9 +360,6 @@ object EmrysStore {
         val named = if (event.callerName.isBlank()) this else copy(caller = event.callerName)
         return if (event.callId.isNotBlank() && event.callId == callId) named.copy(message = event.message, urgent = event.urgent) else named
     }
-
-    private fun EmrysState.trace(tag: String, text: String, tone: String): EmrysState =
-        copy(trace = (trace + TraceStep(tag, text.take(44), tone)).takeLast(TRACE_LIMIT))
 
     private fun EmrysState.log(now: Long, kind: String, text: String): EmrysState =
         copy(log = (log + LogEntry(now, kind, text)).takeLast(LOG_LIMIT))

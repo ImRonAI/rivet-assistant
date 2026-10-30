@@ -118,7 +118,7 @@ fun rememberTypingHelp(text: String, enabled: Boolean, suggester: Suggester?): T
     val q = text.trim()
     val on = enabled && suggester != null
     LaunchedEffect(q, on) {
-        if (!on || suggester == null || q.length < 2) {
+        if (!on || q.length < 2) {
             suggestions = emptyList()
             return@LaunchedEffect
         }
@@ -127,7 +127,7 @@ fun rememberTypingHelp(text: String, enabled: Boolean, suggester: Suggester?): T
     }
     LaunchedEffect(q, on) {
         corrected = null
-        if (!on || suggester == null || q.length < 4) return@LaunchedEffect
+        if (!on || q.length < 4) return@LaunchedEffect
         delay(800)
         corrected = suggester.spellcheck(q)?.takeUnless { it.equals(q, ignoreCase = true) }
     }

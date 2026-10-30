@@ -41,7 +41,26 @@ class EmrysStoreTest {
         s = EmrysStore.reduce(s, ServerEvent.ApprovalsRequested("t1", "default", listOf(approval("a")), true), 2)
         assertEquals(1, s.approvals.size)
         assertEquals(Activity.Waiting, s.activity)
-        s = EmrysStore.answered(s, setOf("a"))
+        s = EmrysStore.answered(s, setOf("a"), "default")
+        assertTrue(s.approvals.isEmpty())
+    }
+
+    @Test
+    fun aBackgroundTaskLeavesWhatEmrysIsDoingAlone() {
+        val asked = EmrysStore.reduce(EmrysState(), ServerEvent.TurnStarted("t1", "default", null), 1)
+        assertEquals(Activity.Thinking, asked.activity)
+        assertEquals(LogEntry(1, "turn", "Working on it"), asked.log.single())
+
+        var s = EmrysStore.reduce(EmrysState(), ServerEvent.TurnStarted("9", "task-9", "book it"), 1)
+        assertEquals(Activity.Idle, s.activity)
+        assertEquals(LogEntry(1, "task", "Task started: book it"), s.log.single())
+        s = EmrysStore.reduce(s, ServerEvent.ToolStarted("tu1", "sms_send", "task-9"), 2)
+        assertEquals(Activity.Idle, s.activity)
+        s = EmrysStore.reduce(s, ServerEvent.ApprovalsRequested("9", "task-9", listOf(approval("a", lane = "task-9", turn = "9")), false), 3)
+        assertEquals(Activity.Idle, s.activity)
+        assertEquals(listOf("a"), s.approvals.map { it.id })
+        s = EmrysStore.answered(s, setOf("a"), "task-9")
+        assertEquals(Activity.Idle, s.activity)
         assertTrue(s.approvals.isEmpty())
     }
 
@@ -67,14 +86,11 @@ class EmrysStoreTest {
     }
 
     @Test
-    fun toolsDriveActivityAndTraceIsBounded() {
-        var s = EmrysState()
-        repeat(12) { s = EmrysStore.reduce(s, ServerEvent.ToolStarted("$it", "sms_send", "default"), it.toLong()) }
+    fun toolsDriveActivity() {
+        val s = EmrysStore.reduce(EmrysState(), ServerEvent.ToolStarted("1", "sms_send", "default"), 1)
         assertEquals(Activity.Texting, s.activity)
-        assertEquals(7, s.trace.size)
         assertEquals(Activity.Emailing, EmrysStore.activityFor("email_draft"))
-        assertEquals(Activity.Calling, EmrysStore.activityFor("phone_call"))
-        assertEquals(Activity.Working, EmrysStore.activityFor("telnyx_execute"))
+        listOf("sms_list", "email_search", "phone_call", "telnyx_execute").forEach { assertEquals(it, Activity.Working, EmrysStore.activityFor(it)) }
     }
 
     @Test
@@ -172,9 +188,9 @@ class EmrysStoreTest {
     }
 
     @Test
-    fun deviceCallsAreLogged() {
+    fun aDeviceCallIsNotLoggedBeforeThePhoneRunsIt() {
         val s = EmrysStore.reduce(EmrysState(), ServerEvent.DeviceCall("a", "calendar_list", JSONObject()), 5)
-        assertEquals(LogEntry(5, "device", "calendar_list"), s.log.single())
+        assertTrue(s.log.isEmpty())
     }
 
     @Test

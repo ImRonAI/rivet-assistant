@@ -1,36 +1,28 @@
 /* Emrys app bridge. Loaded after the robot page's own script, so it shares its top-level bindings
-   (play, D, TRACE, EMAIL_LINES, THREAD, H$, emote, body, time, cam, stage, and, where the page has them, BONES, BN,
-   mPt, proj, lowFx).
-   The app drives it with window.emrys.{state,trace,email,thread,say,mouth,quiet,viseme,theme,focus,voice,levels}; the
-   page reports back to the app through the EmrysHost web message listener the app installs. The stage layer
-   (android/stage-ui, loaded after this script) reads window.emrys.stageInfo() and window.emrys.speech() and hears
-   a `emrys:stage` event on document whenever stageInfo changes. */
+   (play, D, time, cam, stage, LETTER_VIS, and for the stage layer BONES, BN, mPt, proj, body, lowFx).
+   The app drives it with window.emrys.{state,mouth,quiet,viseme,theme,focus,voice,level}; the page reports back to
+   the app through the EmrysHost web message listener the app installs. The stage layer (android/stage-ui, loaded
+   after this script) reads window.emrys.stageInfo() and window.emrys.speech(), and hears an `emrys:stage` event on
+   document whenever stageInfo changes. */
 (() => {
-  D.attract = false; // the robot moves only when the agent does something
-
+  /** @type {Record<string, string>} */
   const STATE_MOVE = {
-    idle: 'idle', listening: 'idle', greeting: 'wave', thinking: 'think', searching: 'think',
-    working: 'desk', texting: 'text', emailing: 'email', calling: 'phone', video: 'video',
-    done: 'cheer', failed: 'shrug', sleeping: 'sleep', waiting: 'idle',
+    idle: 'idle', listening: 'idle', thinking: 'think', searching: 'think', working: 'desk',
+    texting: 'text', emailing: 'email', calling: 'phone', waiting: 'idle', done: 'cheer', failed: 'shrug',
   };
-  /* one-shot scenes that should keep playing while the state holds */
-  const HOLD = new Set(['think']);
-  const TONES = new Set(['acc', 'cy', 'mut', 'ok', 'amb']);
-  const THREAD_SLOTS = [0.8, 3.4, 4.0, 8.2];
-  let current = 'idle';
-  let emailMeta = null;
-  let contact = null;
   const html = document.documentElement;
 
+  /** @param {{ type: string }} message */
   function post(message) {
     try { window.EmrysHost && window.EmrysHost.postMessage(JSON.stringify(message)); } catch (e) { }
   }
 
   /* the stage glows behind Emrys in the Noir status colour of what it is doing: glacier working, honey waiting on
      the user, sage done, coral listening (a live mic) or stuck */
+  /** @type {Record<string, Mood>} */
   const MOOD = {
     listening: 'rec', thinking: 'cy', searching: 'cy', working: 'cy', texting: 'cy', emailing: 'cy',
-    calling: 'cy', video: 'cy', waiting: 'amb', done: 'ok', failed: 'rec',
+    calling: 'cy', waiting: 'amb', done: 'ok', failed: 'rec',
   };
   const glow = document.createElement('style');
   glow.textContent = `
@@ -46,6 +38,8 @@
     @media (prefers-reduced-motion: reduce){html[data-mood] .stage::before{animation:none}}`;
   document.head.appendChild(glow);
 
+  let current = 'idle';
+  /** @param {string} name */
   function state(name) {
     const id = STATE_MOVE[name] || 'idle';
     current = name in STATE_MOVE ? name : 'idle';
@@ -57,104 +51,75 @@
     publish();
   }
 
-  /* steps: [{tag, text, tone}] newest last; the trace panel shows the last seven */
-  function trace(steps) {
-    const rows = (steps || []).slice(-7).map(s => ({
-      tag: String(s.tag || 'step').slice(0, 8),
-      c: TONES.has(s.tone) ? s.tone : 'cy',
-      text: String(s.text || '').slice(0, 44),
-    }));
-    TRACE.splice(0, TRACE.length, ...rows);
-    if (H$.kind === 'think') H$.kind = null; // rebuild with the new rows
-  }
-
-  function email(o) {
-    const lines = (o && o.lines ? o.lines : []).slice(0, 3).map(l => String(l).slice(0, 46));
-    EMAIL_LINES.splice(0, EMAIL_LINES.length, ...(lines.length ? lines : ['']));
-    emailMeta = { to: String((o && o.to) || ''), subject: String((o && o.subject) || '') };
-  }
-
-  /* messages: [{me: bool, text}] oldest first; the last four play out in the phone card */
-  function thread(messages, name) {
-    contact = name ? String(name).slice(0, 20) : null;
-    const last = (messages || []).slice(-4);
-    THREAD.splice(0, THREAD.length, ...last.map((m, i) => [THREAD_SLOTS[i], m.me ? 1 : 0, String(m.text || '').slice(0, 28)]));
-    if (H$.kind === 'text') H$.kind = null;
-  }
-
-  function say(text) {
-    // A bubble on a squeezed stage is too small to read.
-    if (!text || stage.clientHeight < 200) return;
-    emote(String(text).slice(0, 40), [body.x, 1.95, body.z], { vy: .25, life: 3.2, size: .9 });
-  }
-
-  /* What is being said, for the stage layer: the last viseme and its weight, and until when words are still being
-     spoken (each word's length plus a breath, so the gaps between TTS words count as speech). */
-  const SPEECH = { key: 'sil', weight: 0, at: 0, until: 0 };
-  const now = () => performance.now();
+  /* What is being said, for the stage layer: the viseme on the mouth now and its weight (0 between letters), and
+     whether words are being spoken, from the first word until the app says quiet. */
+  const SPEECH = { viseme: 'sil', weight: 0, mouthing: false };
   const pageViseme = window.emrys.viseme;
+  /** @param {string} key @param {number} value */
   function viseme(key, value) {
     pageViseme(key, value);
     const name = String(key).replace(/^viseme_/, '');
-    const weight = +value || 0;
-    if (weight > 0) Object.assign(SPEECH, { key: name, weight, at: now() });
-    else if (name === SPEECH.key) SPEECH.weight = 0;
+    const weight = Number(value) || 0;
+    if (weight > 0) Object.assign(SPEECH, { viseme: name, weight });
+    else if (name === SPEECH.viseme) SPEECH.weight = 0;
   }
 
   /* lip sync for one spoken word: the app calls this from TTS word boundaries */
-  let mouthTimer = null;
+  let mouthTimer = 0;
+  /** @type {string | null} */
   let mouthKey = null;
   function quiet() {
     clearInterval(mouthTimer);
     if (mouthKey) window.emrys.viseme(mouthKey, 0);
     mouthKey = null;
   }
+  /** @param {string} word @param {number} seconds */
   function mouth(word, seconds) {
     const letters = String(word || '').toLowerCase().replace(/[^a-z]/g, '');
     quiet();
     if (!letters) return;
-    const length = seconds > 0 ? seconds : letters.length / 13;
-    SPEECH.until = Math.max(SPEECH.until, now() + length * 1000 + 600);
-    const step = Math.max(40, (length * 1000) / letters.length);
+    SPEECH.mouthing = true;
+    const step = Math.max(40, ((seconds > 0 ? seconds : letters.length / 13) * 1000) / letters.length);
     let i = 0;
     mouthTimer = setInterval(() => {
       if (mouthKey) window.emrys.viseme(mouthKey, 0);
       if (i >= letters.length) { clearInterval(mouthTimer); mouthKey = null; return; }
-      mouthKey = LETTER_VIS[letters[i++]] || 'nn';
+      mouthKey = LETTER_VIS[letters.charAt(i++)] || 'nn';
       window.emrys.viseme(mouthKey, 0.85);
     }, step);
     publish();
   }
-  /* the app's quiet ends the speech too (TTS done, the agent interrupted or listening again) */
+  /* the app's quiet also ends the speech (TTS done, the agent interrupted or listening again) */
   function hush() {
     quiet();
-    SPEECH.until = 0;
-    SPEECH.weight = 0;
+    Object.assign(SPEECH, { weight: 0, mouthing: false });
     publish();
   }
 
-  /* The live voice of an ElevenLabs agent session: whose turn it is ('listening' or 'speaking', null when no voice
-     session runs), and the real levels the app measures, 0..1 (output: the agent's voice; input: how surely the user
-     is speaking), null for a level the app doesn't have. Ending the session clears both. */
-  const VOICE = { turn: null, output: null, input: null, at: 0 };
-  const unit = v => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null);
+  /* The live voice of an ElevenLabs voice session: whose turn it is ('none' when no voice session runs) and the
+     agent's audio level as the SDK reports it, 0..1 (null until it reports one; cleared when the session ends). */
+  /** @type {{ turn: Turn, level: number | null }} */
+  const VOICE = { turn: 'none', level: null };
+  /** @param {string} turn */
   function voice(turn) {
-    VOICE.turn = turn === 'listening' || turn === 'speaking' ? turn : null;
-    if (!VOICE.turn) Object.assign(VOICE, { output: null, input: null, at: 0 });
+    VOICE.turn = turn === 'listening' || turn === 'speaking' ? turn : 'none';
+    if (VOICE.turn === 'none') VOICE.level = null;
     publish();
   }
-  function levels(output, input) {
-    Object.assign(VOICE, { output: unit(output), input: unit(input), at: now() });
+  /** @param {number} value */
+  function level(value) {
+    const first = VOICE.level === null;
+    VOICE.level = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+    if (first) publish();
   }
+  const talking = () => VOICE.turn === 'speaking' || SPEECH.mouthing;
+  /** @returns {Speech} */
   function speech() {
-    return {
-      key: SPEECH.key, weight: SPEECH.weight, at: SPEECH.at, talking: talking(),
-      turn: VOICE.turn, output: VOICE.output, input: VOICE.input, levelAt: VOICE.at,
-    };
+    return { viseme: SPEECH.viseme, weight: SPEECH.weight, talking: talking(), level: VOICE.level };
   }
-  const talking = () => VOICE.turn === 'speaking' || now() < SPEECH.until;
 
   /* the app's light/dark setting wins over the WebView's media query */
+  /** @param {string} name */
   function theme(name) {
     document.documentElement.setAttribute('data-theme', name === 'dark' ? 'dark' : 'light');
   }
@@ -166,11 +131,13 @@
   const FOCUS = { stage: { zoom: 1, ty: 1.1 }, card: { zoom: 1.3, ty: .86 }, greet: { zoom: 1.25, ty: .5 } };
   /* a short greeting stage (large text, small phones) stands Emrys further back so its feet stay above the words */
   const GREET_SHORT = { zoom: 1.5, ty: .34 };
+  /** @type {keyof typeof FOCUS} */
   let focusMode = 'stage';
   let focusZoom = 1;
   function framing() {
     return focusMode === 'greet' && stage.clientHeight < 470 ? GREET_SHORT : FOCUS[focusMode];
   }
+  /** @param {keyof typeof FOCUS} mode */
   function focus(mode) {
     if (!Object.prototype.hasOwnProperty.call(FOCUS, mode)) return;
     focusMode = mode;
@@ -183,42 +150,40 @@
   window.addEventListener('resize', () => { if (focusMode === 'greet') focus(focusMode); });
   stage.addEventListener('dblclick', () => { cam.zoom = focusZoom; cam.dirty = true; });
 
-  /* Where Emrys stands on the stage, in stage pixels: the head (just above the head bone) and the feet. Read through
-     the page's own camera; null when the page draws no such skeleton. */
-  const view = stage.querySelector(':scope > svg');
-  const point = view && view.createSVGPoint ? view.createSVGPoint() : null;
+  /* Where Emrys stands on the stage, in stage pixels: the head (just above the head bone) and the feet, through the
+     page's own camera. Null when the page has no such skeleton. */
+  const view = document.getElementById('view');
+  const svg = view instanceof SVGSVGElement ? view : null;
+  /** @type {[number, number, number]} */
   const out = [0, 0, 0];
+  /** @returns {Anchor | null} */
   function anchor() {
-    try {
-      const m = view.getScreenCTM(), r = stage.getBoundingClientRect();
-      const at = (x, y, z) => {
-        proj(x, y, z, out);
-        point.x = out[0]; point.y = out[1];
-        const p = point.matrixTransform(m);
-        return [Math.round(p.x - r.left), Math.round(p.y - r.top)];
-      };
-      const h = mPt(BONES[BN.head].W, 0, .22, 0);
-      const [x, y] = at(h[0], h[1], h[2]);
-      const [feetX, feetY] = at(body.x, 0, body.z);
-      return [x, y, feetX, feetY].every(Number.isFinite) ? { x, y, feetX, feetY } : null;
-    } catch (e) {
-      return null;
-    }
+    const head = BONES[BN['head'] ?? -1];
+    const screen = svg && svg.getScreenCTM();
+    if (!head || !screen) return null;
+    const box = stage.getBoundingClientRect();
+    /** @param {[number, number, number]} p @returns {[number, number]} */
+    const at = p => {
+      proj(p[0], p[1], p[2], out);
+      const q = new DOMPoint(out[0], out[1]).matrixTransform(screen);
+      return [Math.round(q.x - box.left), Math.round(q.y - box.top)];
+    };
+    const [x, y] = at(mPt(head.W, 0, .22, 0));
+    const [feetX, feetY] = at([body.x, 0, body.z]);
+    return [x, y, feetX, feetY].every(Number.isFinite) ? { x, y, feetX, feetY } : null;
   }
 
-  /* What the stage layer draws from, published as a `emrys:stage` event when any of it changes. */
-  let info = null;
-  let infoKey = '';
+  /** @returns {StageInfo} */
   function stageInfo() {
-    let hud = false, low = false, move = null;
-    try { hud = !!(H$.kind && H$.el && H$.a > .05); } catch (e) { }
-    try { low = typeof lowFx !== 'undefined' && !!lowFx; } catch (e) { }
-    try { move = D.cur.id || null; } catch (e) { }
     return {
-      state: current, mood: MOOD[current] || null, talking: talking(), turn: VOICE.turn, hud, lowFx: low, move,
-      width: stage.clientWidth, height: stage.clientHeight, short: stage.clientHeight < 200, anchor: anchor(),
+      state: current, mood: MOOD[current] ?? null, talking: talking(), turn: VOICE.turn, voiced: VOICE.level !== null,
+      lowFx, width: stage.clientWidth, height: stage.clientHeight, short: stage.clientHeight < 200, anchor: anchor(),
     };
   }
+  let info = stageInfo();
+  let infoKey = '';
+  /* What the stage layer draws from, published as an `emrys:stage` event when any of it changes; the anchor moves
+     with Emrys and the page can drop to lowFx on its own, so it is also looked at four times a second. */
   function publish() {
     const next = stageInfo();
     if (next.talking) html.setAttribute('data-voice', 'speaking');
@@ -227,29 +192,11 @@
     if (key === infoKey) return;
     infoKey = key;
     info = next;
-    document.dispatchEvent(new CustomEvent('emrys:stage', { detail: info }));
+    document.dispatchEvent(new Event('emrys:stage'));
   }
+  setInterval(publish, 250);
 
-  function tick() {
-    const id = STATE_MOVE[current];
-    if (HOLD.has(id) && D.cur.id !== id && D.settle !== id) play(id);
-    if (emailMeta && H$.kind === 'email' && H$.el) {
-      const fields = H$.el.querySelectorAll('.card text.hud-t:not(.ebody)');
-      if (fields[0] && fields[0].textContent !== emailMeta.to) fields[0].textContent = emailMeta.to;
-      if (fields[1] && fields[1].textContent !== emailMeta.subject) fields[1].textContent = emailMeta.subject;
-    }
-    if (contact && H$.kind === 'text' && H$.el) {
-      const title = H$.el.querySelector('.card .hud-h');
-      if (title && title.textContent !== contact) title.textContent = contact;
-    }
-    publish();
-  }
-  setInterval(tick, 250);
-
-  Object.assign(window.emrys, {
-    state, trace, email, thread, say, mouth, quiet: hush, viseme, theme, focus, voice, levels, speech,
-    stageInfo: () => info || stageInfo(), states: () => Object.keys(STATE_MOVE),
-  });
+  Object.assign(window.emrys, { state, mouth, quiet: hush, viseme, theme, focus, voice, level, speech, stageInfo: () => info });
   publish();
-  post({ type: 'ready', moves: window.emrys.moves(), states: Object.keys(STATE_MOVE) });
+  post({ type: 'ready' });
 })();

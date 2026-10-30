@@ -7,10 +7,21 @@
     "skipLibCheck": true,
     "module": "nodenext",
     "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
     "moduleDetection": "force",
     "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["playwright.config.ts", "tests", "scripts"]
+  "include": ["playwright.config.ts", "tests"]
 }

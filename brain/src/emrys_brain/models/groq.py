@@ -8,7 +8,7 @@ context manager own the conversation.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, override
+from typing import override
 
 import httpx
 from strands.models.openai_responses import OpenAIResponsesModel
@@ -47,7 +47,7 @@ class GroqModel(OpenAIResponsesModel):
         self._transport_factory = transport_factory
 
     @override
-    def _resolve_client_args(self) -> dict[str, Any]:
+    def _resolve_client_args(self) -> dict[str, object]:
         args = dict(super()._resolve_client_args())
         if self._transport_factory is not None:
             args["http_client"] = httpx.AsyncClient(transport=self._transport_factory())

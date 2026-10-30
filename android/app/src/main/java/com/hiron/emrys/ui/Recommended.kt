@@ -57,7 +57,6 @@ import com.hiron.emrys.core.PermissionGroups
 import com.hiron.emrys.core.Recommendation
 import com.hiron.emrys.core.Recommended
 import com.hiron.emrys.core.EmrysRuntime
-import com.hiron.emrys.device.ForwardMode
 
 /**
  * Emrys's suggested settings: a ruled list with one row per change and its own switch (all on), what it changes
@@ -170,9 +169,6 @@ fun currentFor(runtime: EmrysRuntime, context: Context): Current {
     return Current(
         autoConnect = s.autoConnect,
         speakInOverlay = s.speakInOverlay,
-        offerReplies = s.offerReplies,
-        answeringMode = s.answeringMode,
-        forwardingAllCalls = s.answeringMode == ForwardMode.Always && s.forwardedTo.isNotBlank(),
         missingPermissions = missing,
         assistantHeld = context.holdsAssistantRole(),
         denyCandidates = runtime.decisions.denyCandidates(runtime.state.value.rules),

@@ -85,12 +85,8 @@ data class Palette(
     val accentSoft: Color,
     /** A toggle's track when off. */
     val track: Color,
-    /** Unplayed waveform bars. */
-    val waveOff: Color,
     /** Translucent noir under sticky headers and the tab bar. */
     val glass: Color,
-    /** Dashed drop-zone border, disc border. */
-    val graphite: Color,
     val white: Color,
     val dark: Boolean,
 )
@@ -104,7 +100,7 @@ val DarkPalette = Palette(
     card = Color(0xFF111114), cardHi = Color(0xFF17171B), field = Color(0xFF131316), line = Color(0x12F3F2EE),
     lineHi = Color(0x24F3F2EE), edge = Color(0x17FFFFFF), edgeSoft = Color(0x0AFFFFFF), dot = Color(0x2EFFFFFF),
     accentHi = Color(0xFFCDD5FF), accentDeep = Color(0xFF7F8EF0), accentSoft = Color(0x1FB7C2FF), track = Color(0xFF1C1C21),
-    waveOff = Color(0xFF2E2E34), glass = Color(0xD90A0A0C), graphite = Color(0xFF2A2A30), white = Color(0xFFFFFFFF),
+    glass = Color(0xD90A0A0C), white = Color(0xFFFFFFFF),
     dark = true,
 )
 
@@ -146,12 +142,8 @@ object Type {
     val tele = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 14.sp, fontFeatureSettings = "tnum")
     val mono = TextStyle(fontFamily = Mono, fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 17.sp)
 
-    /** Voice-setup headlines: large serif, sentence case. */
-    val hero = TextStyle(fontFamily = Display, fontWeight = FontWeight.Normal, fontSize = 40.sp, lineHeight = 42.sp, letterSpacing = (-0.02).em)
     /** Onboarding step headlines. */
     val step = TextStyle(fontFamily = Display, fontWeight = FontWeight.Normal, fontSize = 32.sp, lineHeight = 36.sp, letterSpacing = (-0.015).em)
-    /** The larger call to action (voice setup). */
-    val cta = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 20.sp, letterSpacing = (-0.005).em)
     /** Call to action (onboarding, sheets). */
     val button = TextStyle(fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 15.sp, lineHeight = 20.sp)
     /** Secondary keys and text links. */
@@ -192,9 +184,6 @@ fun rememberReduceMotion(): Boolean {
         AndroidSettings.Global.getFloat(context.contentResolver, AndroidSettings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
 }
-
-/** Small interface labels. */
-val Label = Type.labelMd
 
 @Composable
 fun EmrysTheme(content: @Composable () -> Unit) {

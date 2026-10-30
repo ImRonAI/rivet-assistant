@@ -28,18 +28,20 @@ stream loop and request formatting:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-from collections.abc import AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeVar, cast, override
+from typing import Literal, TypedDict, TypeVar, Unpack, cast, override
 
 import httpx
 import openai
 from pydantic import BaseModel
+from strands.agent.agent_metadata import AgentMetadata
 from strands.models.openai_responses import OpenAIResponsesModel
-from strands.types.content import Messages
+from strands.types.citations import Citation, WebLocationDict
+from strands.types.content import ContentBlockStartToolUse, Messages
+from strands.types.event_loop import Usage
 from strands.types.exceptions import ContextWindowOverflowException, ModelThrottledException
 from strands.types.streaming import StreamEvent
 from strands.types.tools import ToolChoice, ToolSpec, ToolUse
@@ -50,7 +52,7 @@ T = TypeVar("T", bound=BaseModel)
 
 PERPLEXITY_BASE_URL = "https://api.perplexity.ai/v1"
 
-DEFAULT_NATIVE_TOOLS: tuple[dict[str, Any], ...] = (
+DEFAULT_NATIVE_TOOLS: tuple[Mapping[str, object], ...] = (
     {"type": "web_search", "search_type": "fast"},
     {"type": "fetch_url"},
     {"type": "image_search"},
@@ -89,7 +91,11 @@ _TRANSIENT_CODES = frozenset(
 _TRANSIENT_PATTERNS = ("overloaded", "temporarily unavailable", "try again", "upstream", "timed out", "timeout")
 
 # Output items whose results are web sources the answer may cite.
-_SOURCE_ITEMS = {"search_results": "results", "people_search_results": "results", "fetch_url_results": "contents"}
+_SOURCE_ITEMS: dict[str, Literal["results", "contents"]] = {
+    "search_results": "results",
+    "people_search_results": "results",
+    "fetch_url_results": "contents",
+}
 # Output items reported to the HUD only; their content reaches the model inside Perplexity's loop.
 _REPORT_ITEMS = frozenset(
     {
@@ -104,6 +110,79 @@ _REPORT_ITEMS = frozenset(
     }
 )
 _MAX_CITATIONS = 12
+
+
+# Perplexity's stream and response objects, as far as the handlers read them; each value is checked where it is used.
+class _Annotation(TypedDict, total=False):
+    type: object
+    url: object
+    title: object
+
+
+class _Item(TypedDict, total=False):
+    type: object
+    id: object
+    call_id: object
+    name: object
+    content: list[object]
+    queries: object
+    results: list[object]
+    contents: list[object]
+
+
+class _TokenDetails(TypedDict, total=False):
+    cached_tokens: int
+    cache_read_input_tokens: int
+    cache_creation_input_tokens: int
+    cache_write_tokens: int
+
+
+class _Usage(TypedDict, total=False):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    input_tokens_details: _TokenDetails
+    cost: object
+    tool_calls_details: object
+
+
+class _Error(TypedDict, total=False):
+    message: object
+    code: object
+    type: object
+
+
+class _IncompleteDetails(TypedDict, total=False):
+    reason: object
+
+
+class _Response(TypedDict, total=False):
+    id: object
+    usage: _Usage
+    output: list[object]
+    incomplete_details: _IncompleteDetails
+    error: _Error
+
+
+class _Event(TypedDict, total=False):
+    type: object
+    response: _Response
+    item_id: object
+    delta: str
+    arguments: str
+    annotation: _Annotation
+    item: _Item
+    error: _Error
+
+
+class ClientArgs(TypedDict, total=False):
+    """``openai.AsyncOpenAI`` arguments (:func:`build_perplexity_model` sets ``api_key``, ``base_url``, ``timeout``)."""
+
+    api_key: str | None
+    base_url: str
+    timeout: float
+    max_retries: int
+    http_client: httpx.AsyncClient
 
 
 class PerplexityTransientError(RuntimeError):
@@ -143,7 +222,7 @@ def translate_error(error: BaseException) -> BaseException:
     return error
 
 
-def _is_transient(error: BaseException, status: Any, code: str, lowered: str) -> bool:
+def _is_transient(error: BaseException, status: object, code: str, lowered: str) -> bool:
     if isinstance(error, (openai.APIConnectionError, httpx.TransportError)):
         return True
     if isinstance(status, int) and (status >= 500 or status in (408, 409, 424)):
@@ -151,20 +230,15 @@ def _is_transient(error: BaseException, status: Any, code: str, lowered: str) ->
     return code in _TRANSIENT_CODES or any(p in lowered for p in _TRANSIENT_PATTERNS)
 
 
-def emrys_chunk(kind: str, **fields: Any) -> StreamEvent:
+def emrys_chunk(kind: str, **fields: object) -> StreamEvent:
     """A custom stream chunk the SDK passes through to the callback handler as ``event``."""
     return cast(StreamEvent, {"emrys": {"type": kind, **fields}})
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
+def _as_dict(value: openai.BaseModel) -> dict[str, object]:
     """Normalize an OpenAI SDK object to a dict. Perplexity-only events parse into the wrong SDK classes,
     but ``to_dict`` keeps every field the server sent."""
-    if isinstance(value, dict):
-        return value
-    to_dict = getattr(value, "to_dict", None)
-    if to_dict is not None:
-        return cast(dict[str, Any], to_dict(warnings=False))
-    return dict(value)
+    return value.to_dict(warnings=False)
 
 
 @dataclass
@@ -179,14 +253,14 @@ class _FunctionCall:
 class _StreamState:
     """Accumulates one response's stream into Strands chunks."""
 
-    model_state: dict[str, Any] | None
+    model_state: dict[str, object] | None
     data_type: str | None = None
     calls: dict[str, _FunctionCall] = field(default_factory=dict)
-    pending_citations: list[dict[str, Any]] = field(default_factory=list)
+    pending_citations: list[Citation] = field(default_factory=list)
     cited_urls: set[str] = field(default_factory=set)
     text_item_ids: set[str] = field(default_factory=set)
     stop_reason: str | None = None
-    usage: dict[str, Any] | None = None
+    usage: _Usage | None = None
     done: bool = False
 
     def switch(self, data_type: str) -> list[StreamEvent]:
@@ -216,13 +290,14 @@ class _StreamState:
         self.pending_citations = []
         return chunks
 
-    def add_source(self, url: Any, title: Any) -> None:
+    def add_source(self, url: object, title: object) -> None:
         if not isinstance(url, str) or not url or url in self.cited_urls or len(self.cited_urls) >= _MAX_CITATIONS:
             return
         self.cited_urls.add(url)
-        self.pending_citations.append({"title": str(title or url), "location": {"web": {"url": url}}})
+        location: WebLocationDict = {"web": {"url": url}}
+        self.pending_citations.append({"title": str(title or url), "location": location})
 
-    def record_call(self, item: dict[str, Any], *, final: bool) -> None:
+    def record_call(self, item: Mapping[str, object], *, final: bool) -> None:
         key = str(item.get("id") or item.get("call_id") or "")
         call = self.calls.get(key)
         if call is None:
@@ -245,10 +320,10 @@ class PerplexityAgentModel(OpenAIResponsesModel):
 
     def __init__(
         self,
-        client_args: dict[str, Any] | None = None,
+        client_args: ClientArgs | None = None,
         *,
         transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
-        **model_config: Any,
+        **model_config: Unpack[OpenAIResponsesModel.OpenAIResponsesConfig],
     ) -> None:
         """Initialize the provider.
 
@@ -265,12 +340,16 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         """
         if model_config.get("stateful"):
             raise ValueError("PerplexityAgentModel runs stateless; sessions and the context manager own history.")
-        super().__init__(client_args=client_args, **model_config)
+        super().__init__(client_args=dict(client_args or {}), **model_config)
+        self._client_args: ClientArgs = {"max_retries": 0, **(client_args or {})}
         self._transport_factory = transport_factory
 
     @override
-    def _resolve_client_args(self) -> dict[str, Any]:
-        args: dict[str, Any] = {"max_retries": 0, **super()._resolve_client_args()}
+    def _resolve_client_args(self) -> dict[str, object]:
+        return dict(self._openai_args())
+
+    def _openai_args(self) -> ClientArgs:
+        args = self._client_args.copy()
         if self._transport_factory is not None:
             args["http_client"] = httpx.AsyncClient(transport=self._transport_factory())
         return args
@@ -283,9 +362,9 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         system_prompt: str | None = None,
         *,
         tool_choice: ToolChoice | None = None,
-        model_state: dict[str, Any] | None = None,
-        agent_metadata: Any | None = None,
-        **kwargs: Any,
+        model_state: dict[str, object] | None = None,
+        agent_metadata: AgentMetadata | None = None,
+        **kwargs: object,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream one Agent API response as Strands chunks.
 
@@ -296,12 +375,12 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         """
         request = self._format_request(messages, tool_specs, system_prompt, tool_choice, model_state, agent_metadata)
         state = _StreamState(model_state=model_state)
-        async with openai.AsyncOpenAI(**self._resolve_client_args()) as client:
+        async with openai.AsyncOpenAI(**self._openai_args()) as client:
             try:
                 response = await client.responses.create(**request)
                 yield {"messageStart": {"role": "assistant"}}
                 async for event in response:
-                    for chunk in self._handle_event(_as_dict(event), state):
+                    for chunk in self._handle_event(cast(_Event, _as_dict(event)), state):
                         yield chunk
                     if state.done:
                         break
@@ -314,7 +393,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         for chunk in self._finish(state):
             yield chunk
 
-    def _handle_event(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _handle_event(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         kind = str(event.get("type", ""))
         handler = _EVENT_HANDLERS.get(kind)
         if handler is not None:
@@ -325,13 +404,13 @@ class PerplexityAgentModel(OpenAIResponsesModel):
 
     # -- event handlers --
 
-    def _on_created(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_created(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         response_id = (event.get("response") or {}).get("id")
         if state.model_state is not None and response_id:
             state.model_state["response_id"] = response_id
         return [emrys_chunk("response_created", response_id=response_id)]
 
-    def _on_text_delta(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_text_delta(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         delta = event.get("delta")
         if not isinstance(delta, str):
             return []
@@ -339,27 +418,27 @@ class PerplexityAgentModel(OpenAIResponsesModel):
             state.text_item_ids.add(str(event["item_id"]))
         return [*state.switch("text"), {"contentBlockDelta": {"delta": {"text": delta}}}]
 
-    def _on_reasoning_delta(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_reasoning_delta(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         delta = event.get("delta")
         if not isinstance(delta, str):
             return []
         return [*state.switch("reasoning"), {"contentBlockDelta": {"delta": {"reasoningContent": {"text": delta}}}}]
 
-    def _on_annotation(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_annotation(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         annotation = event.get("annotation") or {}
         if annotation.get("type") == "url_citation":
             state.add_source(annotation.get("url"), annotation.get("title"))
         return []
 
-    def _on_reasoning_progress(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_reasoning_progress(self, event: Mapping[str, object], state: _StreamState) -> list[StreamEvent]:
         kind = str(event.get("type", "")).removeprefix("response.reasoning.")
-        fields: dict[str, Any] = {}
+        fields: dict[str, object] = {}
         for key in ("queries", "thought", "results", "contents"):
             if key in event:
                 fields[key] = _summarize(event[key]) if key in ("results", "contents") else event[key]
         return [emrys_chunk(f"reasoning.{kind}", **fields)]
 
-    def _on_item(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_item(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         item = event.get("item") or {}
         item_type = str(item.get("type", ""))
         final = event.get("type") == "response.output_item.done"
@@ -370,7 +449,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
             return [emrys_chunk("item_started", item_type=item_type)]
         return self._on_final_item(item, item_type, state)
 
-    def _on_final_item(self, item: dict[str, Any], item_type: str, state: _StreamState) -> list[StreamEvent]:
+    def _on_final_item(self, item: _Item, item_type: str, state: _StreamState) -> list[StreamEvent]:
         if item_type in _SOURCE_ITEMS:
             entries = item.get(_SOURCE_ITEMS[item_type]) or []
             for entry in entries:
@@ -383,7 +462,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
             return self._message_fallback(item, state)
         return [emrys_chunk("item", item_type=item_type)]
 
-    def _message_fallback(self, item: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _message_fallback(self, item: _Item, state: _StreamState) -> list[StreamEvent]:
         """Emit a message's text when it arrived only as a completed item, without text deltas."""
         if str(item.get("id", "")) in state.text_item_ids:
             return []
@@ -397,19 +476,19 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         state.text_item_ids.add(str(item.get("id", "")))
         return [*state.switch("text"), {"contentBlockDelta": {"delta": {"text": text}}}]
 
-    def _on_arguments_delta(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_arguments_delta(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         call = state.calls.get(str(event.get("item_id", "")))
         if call is not None and isinstance(event.get("delta"), str):
             call.arguments += event["delta"]
         return []
 
-    def _on_arguments_done(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_arguments_done(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         call = state.calls.get(str(event.get("item_id", "")))
         if call is not None and isinstance(event.get("arguments"), str):
             call.arguments = event["arguments"]
         return []
 
-    def _on_completed(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_completed(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         response = event.get("response") or {}
         state.usage = response.get("usage")
         # Recover function calls that only appear in the final snapshot.
@@ -419,7 +498,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         state.done = True
         return []
 
-    def _on_incomplete(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_incomplete(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         response = event.get("response") or {}
         state.usage = response.get("usage")
         reason = (response.get("incomplete_details") or {}).get("reason")
@@ -432,7 +511,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         state.done = True
         return [emrys_chunk("incomplete", reason=reason)]
 
-    def _on_failed(self, event: dict[str, Any], state: _StreamState) -> list[StreamEvent]:
+    def _on_failed(self, event: _Event, state: _StreamState) -> list[StreamEvent]:
         error = event.get("error") or (event.get("response") or {}).get("error") or {}
         message = str(error.get("message") or "Perplexity response failed")
         raise _stream_failure(message, error.get("code") or error.get("type"))
@@ -444,7 +523,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
         for call in state.calls.values():
             if not call.name:
                 continue
-            start: dict[str, Any] = {"name": call.name, "toolUseId": call.call_id}
+            start: ContentBlockStartToolUse = {"name": call.name, "toolUseId": call.call_id}
             if call.signature:
                 start["reasoningSignature"] = call.signature
             yield cast(StreamEvent, {"contentBlockStart": {"start": {"toolUse": start}}})
@@ -460,8 +539,8 @@ class PerplexityAgentModel(OpenAIResponsesModel):
 
     @override
     @classmethod
-    def _format_request_messages(cls, messages: Messages) -> list[dict[str, Any]]:
-        formatted: list[dict[str, Any]] = []
+    def _format_request_messages(cls, messages: Messages) -> list[dict[str, object]]:
+        formatted: list[dict[str, object]] = []
         for message in messages:
             items = super()._format_request_messages([message])
             outputs = [item for item in items if item.get("type") == "function_call_output"]
@@ -472,7 +551,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
 
     @override
     @classmethod
-    def _format_request_message_tool_call(cls, tool_use: ToolUse) -> dict[str, Any]:
+    def _format_request_message_tool_call(cls, tool_use: ToolUse) -> dict[str, object]:
         item = super()._format_request_message_tool_call(tool_use)
         signature = tool_use.get("reasoningSignature")
         if signature:
@@ -481,8 +560,8 @@ class PerplexityAgentModel(OpenAIResponsesModel):
 
     @override
     async def structured_output(
-        self, output_model: type[T], prompt: Messages, system_prompt: str | None = None, **kwargs: Any
-    ) -> AsyncGenerator[dict[str, T | Any], None]:
+        self, output_model: type[T], prompt: Messages, system_prompt: str | None = None, **kwargs: object
+    ) -> AsyncGenerator[dict[str, T], None]:
         """Get structured output through Perplexity's ``response_format`` JSON schema.
 
         Raises:
@@ -496,7 +575,7 @@ class PerplexityAgentModel(OpenAIResponsesModel):
             "type": "json_schema",
             "json_schema": {"name": _schema_name(output_model), "schema": output_model.model_json_schema()},
         }
-        async with openai.AsyncOpenAI(**self._resolve_client_args()) as client:
+        async with openai.AsyncOpenAI(**self._openai_args()) as client:
             try:
                 response = await client.responses.create(**request, extra_body=extra_body)
             except (openai.APIError, httpx.HTTPError) as error:
@@ -504,14 +583,14 @@ class PerplexityAgentModel(OpenAIResponsesModel):
                 if translated is error:
                     raise
                 raise translated from error
-        text = _output_text(_as_dict(response))
+        text = _output_text(cast(_Response, _as_dict(response)))
         try:
             yield {"output": output_model.model_validate_json(text)}
         except ValueError as error:
             raise ValueError(f"Perplexity returned output that does not match {output_model.__name__}") from error
 
 
-_Handler = Callable[[PerplexityAgentModel, dict[str, Any], _StreamState], list[StreamEvent]]
+_Handler = Callable[[PerplexityAgentModel, _Event, _StreamState], list[StreamEvent]]
 _EVENT_HANDLERS: dict[str, _Handler] = {
     "response.created": PerplexityAgentModel._on_created,
     "response.output_text.delta": PerplexityAgentModel._on_text_delta,
@@ -529,7 +608,7 @@ _EVENT_HANDLERS: dict[str, _Handler] = {
 }
 
 
-def _stream_failure(message: str, code: Any) -> BaseException:
+def _stream_failure(message: str, code: object) -> BaseException:
     carrier = PerplexityTransientError(message, code=str(code).lower() if code else None)
     translated = translate_error(carrier)
     if isinstance(translated, PerplexityTransientError):
@@ -549,8 +628,8 @@ def _stop_reason(state: _StreamState) -> str:
     return "end_turn"
 
 
-def _usage_chunk(usage: dict[str, Any]) -> StreamEvent:
-    data: dict[str, Any] = {
+def _usage_chunk(usage: _Usage) -> StreamEvent:
+    data: Usage = {
         "inputTokens": int(usage.get("input_tokens") or 0),
         "outputTokens": int(usage.get("output_tokens") or 0),
         "totalTokens": int(usage.get("total_tokens") or 0),
@@ -565,14 +644,14 @@ def _usage_chunk(usage: dict[str, Any]) -> StreamEvent:
     return cast(StreamEvent, {"metadata": {"usage": data, "metrics": {"latencyMs": 0}}})
 
 
-def _summarize(entries: Any, limit: int = 8) -> list[dict[str, Any]]:
+def _summarize(entries: object, limit: int = 8) -> list[dict[str, object]]:
     if not isinstance(entries, list):
         return []
     keep = ("id", "url", "title", "image_url", "origin_url", "date", "source")
     return [{k: v for k, v in entry.items() if k in keep} for entry in entries[:limit] if isinstance(entry, dict)]
 
 
-def _summarize_item(item: dict[str, Any]) -> dict[str, Any]:
+def _summarize_item(item: _Item) -> dict[str, object]:
     drop = {"results", "contents", "output", "tools", "input_schema"}
     summary = {k: v for k, v in item.items() if k not in drop and not isinstance(v, (dict, list))}
     if isinstance(item.get("results"), list):
@@ -580,7 +659,7 @@ def _summarize_item(item: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def _output_text(response: dict[str, Any]) -> str:
+def _output_text(response: _Response) -> str:
     return "".join(
         str(part.get("text", ""))
         for item in response.get("output") or []
@@ -601,10 +680,8 @@ def build_perplexity_model(
     model_id: str,
     base_url: str = PERPLEXITY_BASE_URL,
     fallback_models: tuple[str, ...] = (),
-    native_tools: tuple[dict[str, Any], ...] = DEFAULT_NATIVE_TOOLS,
+    native_tools: tuple[Mapping[str, object], ...] = DEFAULT_NATIVE_TOOLS,
     max_steps: int = 8,
-    max_output_tokens: int | None = None,
-    reasoning_effort: str | None = None,
     context_window_limit: int | None = None,
     timeout: float = 180.0,
     transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
@@ -620,9 +697,6 @@ def build_perplexity_model(
             calls (summaries, judging, memory extraction) never trigger searches.
         max_steps: Perplexity's per-request loop bound. Direct-model requests default to 1 server-side,
             which leaves no room for a tool call and a follow-up, so it is always sent.
-        max_output_tokens: Output cap. Required by Perplexity for ``anthropic/*`` models, so a default
-            is applied when the chain contains one.
-        reasoning_effort: ``reasoning.effort`` for models that support it.
         context_window_limit: The real context window, for the context manager's utilization math.
         timeout: Per-request timeout in seconds for the OpenAI client.
         transport_factory: Test seam: a fresh ``httpx`` transport per request.
@@ -631,20 +705,14 @@ def build_perplexity_model(
         The configured model.
     """
     chain = (model_id, *fallback_models)
-    params: dict[str, Any] = {}
+    params: dict[str, object] = {}
     if native_tools:
         params["tools"] = [dict(tool) for tool in native_tools]
-    extra_body: dict[str, Any] = {"max_steps": max_steps}
+    extra_body: dict[str, object] = {"max_steps": max_steps}
     if fallback_models:
         extra_body["models"] = list(chain)
     params["extra_body"] = extra_body
-    if max_output_tokens is None and any(name.startswith("anthropic/") for name in chain):
-        max_output_tokens = 16_384
-    if max_output_tokens:
-        params["max_output_tokens"] = max_output_tokens
-    if reasoning_effort:
-        params["reasoning"] = {"effort": reasoning_effort}
-    config: dict[str, Any] = {"model_id": model_id, "params": params, "stateful": False}
+    config: OpenAIResponsesModel.OpenAIResponsesConfig = {"model_id": model_id, "params": params, "stateful": False}
     if context_window_limit:
         config["context_window_limit"] = context_window_limit
     return PerplexityAgentModel(
@@ -652,14 +720,3 @@ def build_perplexity_model(
         transport_factory=transport_factory,
         **config,
     )
-
-
-def describe_tools(model: PerplexityAgentModel) -> list[str]:
-    """The native tool types a model sends, for logs and the HUD."""
-    params = model.get_config().get("params") or {}
-    return [str(tool.get("type")) for tool in params.get("tools", []) if isinstance(tool, dict)]
-
-
-def dumps_compact(value: Any) -> str:
-    """Compact JSON for logs and approval previews."""
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)

@@ -18,6 +18,16 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Strict: everything the verbatim ElevenLabs components pass. They don't pass noUncheckedIndexedAccess,
+       exactOptionalPropertyTypes or noPropertyAccessFromIndexSignature, and tsc checks the files it imports. */
+    "strict": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+    "noUncheckedSideEffectImports": true,
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,

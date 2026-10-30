@@ -5,7 +5,6 @@ import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
@@ -20,7 +19,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -47,7 +45,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Event
@@ -63,7 +60,6 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -81,8 +77,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -91,7 +87,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -103,18 +98,17 @@ import com.hiron.emrys.BuildConfig
 import com.hiron.emrys.core.BrainModel
 import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.Decision
-import com.hiron.emrys.core.PermissionGroups
 import com.hiron.emrys.core.EmrysRuntime
 import com.hiron.emrys.core.EmrysState
+import com.hiron.emrys.core.PermissionGroups
 import com.hiron.emrys.core.StandingRule
 import com.hiron.emrys.core.isE164
 import com.hiron.emrys.device.CallForwarding
 import com.hiron.emrys.device.CarrierStyle
-import com.hiron.emrys.device.ForwardMode
 import com.hiron.emrys.device.EmrysNotificationListener
+import com.hiron.emrys.device.ForwardMode
 import com.hiron.emrys.device.ScreenOperator
 import com.hiron.emrys.service.EmrysService
-import com.hiron.emrys.voice.LocalVoiceStudio
 import java.time.Instant
 import java.time.ZoneId
 
@@ -140,13 +134,6 @@ fun SettingsScreen(runtime: EmrysRuntime, state: EmrysState) {
     LifecycleResumeEffect(Unit) {
         refresh++
         onPauseOrDispose { }
-    }
-    // The voice setup draws over this screen and saves into the same preferences; follow its changes.
-    DisposableEffect(context) {
-        val prefs = context.getSharedPreferences("emrys", Context.MODE_PRIVATE)
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key -> if (key?.startsWith("voice_") == true) refresh++ }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     val hasToken = remember(refresh, token) { s.deviceToken.isNotBlank() }
     // A ready-to-use build hides the connection details; they open only when something needs changing.
@@ -324,28 +311,9 @@ private fun Latch(text: String, on: Boolean, onToggle: (Boolean) -> Unit, modifi
 
 @Composable
 private fun Voice(runtime: EmrysRuntime, refresh: Int) {
-    val p = LocalPalette.current
     val s = runtime.settings
-    val studio = LocalVoiceStudio.current
-    val openVoiceSetup = LocalOpenVoiceSetup.current
-    val current = remember(refresh, studio) { studio?.current() }
     var voiceModel by remember(refresh) { mutableStateOf(s.voiceModel) }
     EmrysCard(padding = PaddingValues(0.dp)) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 72.dp).clickable(role = Role.Button, onClick = openVoiceSetup)
-                .padding(horizontal = RowInset, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Emrys's voice", style = Type.bodyLg, color = p.ink)
-                Text(
-                    current ?: "Not chosen yet", style = Type.cardBody, color = if (current != null) p.accent else p.ink2,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = p.ink2, modifier = Modifier.size(22.dp))
-        }
-        RowRule()
         Toggle("Talk key", voiceModel, detail = "Shows the mic key, so you can talk to Emrys out loud.") {
             voiceModel = it
             s.voiceModel = it
@@ -362,7 +330,6 @@ private fun Behaviour(runtime: EmrysRuntime, state: EmrysState, onChanged: () ->
     var speak by remember(version) { mutableStateOf(s.speakReplies) }
     var overlay by remember(version) { mutableStateOf(s.speakInOverlay) }
     var auto by remember(version) { mutableStateOf(s.autoConnect) }
-    var offer by remember(version) { mutableStateOf(s.offerReplies) }
     var agents by remember { mutableStateOf(s.elevenLabsAgents) }
     var suggest by remember { mutableStateOf(s.searchSuggestions) }
     var undo by remember(version) { mutableStateOf(s.recommendedUndo) }
@@ -408,8 +375,6 @@ private fun Behaviour(runtime: EmrysRuntime, state: EmrysState, onChanged: () ->
         Toggle("Read replies aloud in the assistant overlay", overlay) { overlay = it; s.speakInOverlay = it }
         RowRule()
         Toggle("Connect automatically", auto, detail = "Also after a reboot.") { auto = it; s.autoConnect = it }
-        RowRule()
-        Toggle("Offer replies to new messages", offer, detail = "You approve each one.") { offer = it; s.offerReplies = it }
         RowRule()
         Toggle("Use ElevenLabs agents", agents, detail = "Talk and type with Emrys's ElevenLabs agents. Off: Emrys's own brain.") {
             agents = it
@@ -728,7 +693,7 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
         }
         val roles = context.getSystemService(RoleManager::class.java)
         val screening = remember(refresh) { roles?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true }
-        PermissionRow(Access(Icons.Outlined.PhoneInTalk, "Call screening", "See who's calling so Emrys can text back"), screening) {
+        PermissionRow(Access(Icons.Outlined.PhoneInTalk, "Call screening", "See who's calling"), screening) {
             roles?.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)?.let { role.launch(it) }
         }
         val assistant = remember(refresh) { roles?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true }

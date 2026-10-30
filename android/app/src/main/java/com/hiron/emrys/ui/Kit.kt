@@ -73,7 +73,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** How a key reads: a plain key, the one primary action (porcelain), or a destructive one (coral). */
-enum class KeyTone { Plain, Accent, Danger }
+enum class KeyTone { Plain, Accent }
 
 private val KeyShape = RoundedCornerShape(50)
 
@@ -167,7 +167,6 @@ private data class KeyColors(val fill: Color, val pressed: Color, val line: Colo
 private fun keyColors(p: Palette, tone: KeyTone) = when (tone) {
     KeyTone.Plain -> KeyColors(p.key, p.cardHi, p.line, p.lineHi, p.ink, p.ink2)
     KeyTone.Accent -> KeyColors(p.ink, p.ink, p.ink, p.accentHi, p.accentInk, p.accentInk)
-    KeyTone.Danger -> KeyColors(p.key, p.cardHi, p.rec.copy(alpha = 0.45f), p.rec.copy(alpha = 0.8f), p.rec, p.rec)
 }
 
 @Composable
@@ -211,86 +210,6 @@ private fun breathe(from: Float, to: Float, halfPeriodMs: Int): Float {
     return t.animateFloat(to, from, infiniteRepeatable(tween(halfPeriodMs, easing = Motion.Standard), RepeatMode.Reverse), label = "breathe").value
 }
 
-/** A status dot in a [size]×2 square. [live] lets it breathe slowly in a faint bloom (the robot HUD's `live` pip). */
-@Composable
-fun Pip(color: Color, modifier: Modifier = Modifier, live: Boolean = false, size: Dp = 8.dp) {
-    val alpha = if (live) breathe(0.45f, 1f, Motion.BREATHE / 2) else 1f
-    Canvas(modifier.size(size * 2)) {
-        val r = size.toPx() * 0.375f
-        if (live) drawCircle(Brush.radialGradient(listOf(color.copy(alpha = 0.35f * alpha), Color.Transparent), center, r * 2.8f), r * 2.8f)
-        drawCircle(color.copy(alpha = 0.55f + 0.45f * alpha), r)
-    }
-}
-
-/** A status tag in the [StatusTag] style for any colour: a dot and a label. [hot] sets it on a soft wash of the colour. */
-@Composable
-fun Tag(text: String, color: Color, modifier: Modifier = Modifier, hot: Boolean = false) {
-    TagPlate(text, color, modifier, hot = hot)
-}
-
-/** Four small studs in the corners of a plate. */
-fun Modifier.emryss(color: Color, inset: Dp = 7.dp, radius: Dp = 1.6.dp) = drawBehind {
-    val i = inset.toPx()
-    val r = radius.toPx()
-    listOf(Offset(i, i), Offset(size.width - i, i), Offset(i, size.height - i), Offset(size.width - i, size.height - i)).forEach {
-        drawCircle(color, r, it)
-        drawCircle(Color.White.copy(alpha = 0.10f), r * 0.45f, it + Offset(-r * 0.3f, -r * 0.3f))
-    }
-}
-
-/**
- * A glass card: the translucent card fill and a hairline at a 20dp radius, a header row (an optional status dot,
- * a small figure, the title and a quiet right-hand note), a hairline, then the body.
- */
-@Composable
-fun HudCard(
-    title: String,
-    modifier: Modifier = Modifier,
-    index: String? = null,
-    pip: Color? = null,
-    live: Boolean = false,
-    meta: String? = null,
-    metaColor: Color? = null,
-    outline: Color? = null,
-    content: @Composable () -> Unit,
-) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(20.dp)
-    Column(modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, outline ?: p.line, shape)) {
-        HudHeaderRow(title, index = index, pip = pip, live = live, meta = meta, metaColor = metaColor)
-        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
-    }
-}
-
-/** The header row of a glass card, also used on its own above full-bleed lists. Text renders as written. */
-@Composable
-fun HudHeaderRow(
-    title: String,
-    modifier: Modifier = Modifier,
-    index: String? = null,
-    pip: Color? = null,
-    live: Boolean = false,
-    meta: String? = null,
-    metaColor: Color? = null,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val p = LocalPalette.current
-    Column(modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = if (pip != null) 12.dp else 18.dp, end = 18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (pip != null) Pip(pip, live = live)
-            if (pip != null) Spacer(Modifier.size(4.dp))
-            if (index != null) Text(index, style = Type.tele, color = p.ink2, modifier = Modifier.padding(end = 10.dp))
-            Text(title, style = Type.title, color = p.ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (meta != null) Odometer(meta, Type.labelMd, metaColor ?: p.ink2)
-            trailing?.invoke()
-        }
-        Rule(color = p.line)
-    }
-}
-
 @Composable
 fun Rule(modifier: Modifier = Modifier, color: Color = LocalPalette.current.rule) {
     Box(modifier.fillMaxWidth().height(1.dp).background(color))
@@ -316,19 +235,6 @@ fun Odometer(text: String, style: TextStyle, color: Color, modifier: Modifier = 
         modifier = modifier,
         label = "odometer",
     ) { value -> Text(value, style = style, color = color, maxLines = 1, overflow = overflow) }
-}
-
-/** A choice of a few options in a soft pill track; the chosen one is the raised active segment. */
-@Composable
-fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    val track = RoundedCornerShape(50)
-    Row(
-        modifier.fillMaxWidth().clip(track).background(p.field).border(1.dp, p.line, track).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEach { (value, label) -> Chip(label, value == selected, { onSelect(value) }, Modifier.weight(1f).height(40.dp), outlined = false) }
-    }
 }
 
 /**
@@ -383,10 +289,6 @@ fun RecessedField(
     }
 }
 
-/** A switch in Emrys's colours: the [EmrysToggle]. */
-@Composable
-fun EmrysSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) = EmrysToggle(checked, onCheckedChange, modifier)
-
 /** A label/value row: a quiet label and its value. [mono] sets the value in Geist Mono, for codes, addresses and ids. */
 @Composable
 fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color? = null, mono: Boolean = false) {
@@ -395,23 +297,5 @@ fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueCo
         Text(label, style = Type.body, color = p.ink2, modifier = Modifier.padding(end = 16.dp))
         Spacer(Modifier.weight(1f))
         Text(value, style = if (mono) Type.mono else Type.body.copy(fontWeight = Type.title.fontWeight), color = valueColor ?: p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-/** A counter: a serif figure over a status dot and a quiet label, on a glass card, for the activity summary. */
-@Composable
-fun StatTile(value: Int, label: String, color: Color, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(20.dp)
-    Column(
-        modifier.clip(shape).background(p.hud).border(1.dp, p.line, shape).padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Odometer("$value", Type.stat, p.ink)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SignalDot(color)
-            Spacer(Modifier.size(8.dp))
-            Text(label, style = Type.labelLg, color = p.ink2, maxLines = 1)
-        }
     }
 }

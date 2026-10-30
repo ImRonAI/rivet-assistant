@@ -36,7 +36,7 @@ from emrys_brain.email_tools import (
     search_criteria,
     tools_for,
 )
-from emrys_brain.factory import EMRYS_INSTRUCTIONS, emrys_instructions, instructions_for
+from emrys_brain.factory import emrys_instructions, instructions_for
 from emrys_brain.gateway import create_app
 from tests.chaos import FAST, Aux, fast_settings, make_build
 from tests.mail_server import ADDRESS, PASSWORD, FakeImap, FakeSmtp, SilentServer, throwaway_tls
@@ -192,8 +192,9 @@ def test_ports_that_would_not_use_tls_are_refused(overrides: dict[str, str]) -> 
 
 def test_without_a_mailbox_there_are_no_email_tools_and_email_goes_through_the_phone() -> None:
     assert tools_for(None) == []
-    assert EMRYS_INSTRUCTIONS == emrys_instructions() == instructions_for({"sms_send", "email_draft"})
-    assert "`email_draft` (the user sends it)" in EMRYS_INSTRUCTIONS and "email_send" not in EMRYS_INSTRUCTIONS
+    plain = emrys_instructions()
+    assert plain == instructions_for({"sms_send", "email_draft"})
+    assert "`email_draft` (the user sends it)" in plain and "email_send" not in plain
     with_mailbox = instructions_for({"sms_send", "email_draft", *TOOL_NAMES})
     assert with_mailbox == emrys_instructions(mailbox=True) and email_tools.INSTRUCTIONS in with_mailbox
     assert "rather than notification previews" in with_mailbox and "(the user sends it)" not in with_mailbox

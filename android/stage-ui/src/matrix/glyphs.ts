@@ -1,7 +1,7 @@
 import type { Frame } from "@/components/ui/matrix"
 import sigilSource from "../../../../docs/design/emrys-sigil.json"
 
-import { anim, memo, once, still, type Program } from "./program"
+import { anim, cache, once, still, type Program } from "./program"
 import {
   band,
   dist,
@@ -9,6 +9,7 @@ import {
   hash,
   inCircle,
   loop,
+  nth,
   paint,
   scale,
   segment,
@@ -21,6 +22,9 @@ import {
  * The light language on the chest emblem (13×13) and the mini band (7×7): the Emrys sigil and one glyph per state,
  * after docs/design/EMRYS_MATRIX.md §4. Geometry is in cell units so each glyph draws at both sizes.
  */
+
+const programs = cache<Program>()
+const levelSets = cache<Frame[]>()
 
 /** The seal: an E in a halo ring of dots, its middle bar ending in a half-lit spark (docs/design/emrys-sigil.json). */
 export const SIGIL_13: Frame = sigilSource.frame
@@ -42,12 +46,15 @@ const ringRadius = (n: number) => (n - 1) / 2 - 0.15
 
 function onSigil(n: number, f: (v: number, x: number, y: number) => number): Field {
   const s = sigil(n)
-  return (x, y) => (s[y][x] ? f(s[y][x], x, y) : 0)
+  return (x, y) => {
+    const v = s[y]?.[x] ?? 0
+    return v ? f(v, x, y) : 0
+  }
 }
 
 /** idle: the sigil breathing (0.55 → 0.9 over 4 s) with a slow glint crossing it every 12 s. */
 function idle(n: number): Program {
-  return memo(`idle${n}`, () =>
+  return programs(`idle${n}`, () =>
     anim(
       `idle${n}`,
       loop(n, n, 12, 6, (t) => {
@@ -86,11 +93,6 @@ function converge(n: number, seconds: number, fps: number): Frame[] {
   }).concat([s])
 }
 
-/** greeting: the sigil assembles from scattered sparks, then idles. */
-function greeting(n: number): Program {
-  return memo(`greeting${n}`, () => once(`greeting${n}`, converge(n, 1.2, 12), 12, idle(n)))
-}
-
 /** The boot show's chest: dark, then sparks converge into the sigil and hold. */
 export function bootChest(n: number, then: Program): Program {
   const dark = Array.from({ length: 4 }, () => scale(sigil(n), 0))
@@ -100,7 +102,7 @@ export function bootChest(n: number, then: Program): Program {
 
 /** listening: sonar rings travelling out from the centre (a live mic). */
 function listening(n: number): Program {
-  return memo(`listening${n}`, () => {
+  return programs(`listening${n}`, () => {
     const R = ringRadius(n) + 1
     return anim(
       `listening${n}`,
@@ -121,7 +123,7 @@ function listening(n: number): Program {
 
 /** thinking / searching: a comet orbiting the halo ring with a fading tail, inner dots twinkling into a constellation. */
 function thinking(n: number): Program {
-  return memo(`thinking${n}`, () => {
+  return programs(`thinking${n}`, () => {
     const R = ringRadius(n)
     return anim(
       `thinking${n}`,
@@ -144,7 +146,7 @@ function thinking(n: number): Program {
 
 /** working: a weave, two sets of diagonal threads crossing like a loom. */
 function working(n: number): Program {
-  return memo(`working${n}`, () =>
+  return programs(`working${n}`, () =>
     anim(
       `working${n}`,
       loop(n, n, 2, 8, (t) => (x, y, c) => {
@@ -160,7 +162,7 @@ function working(n: number): Program {
 
 /** texting: three typing dots that bounce, then resolve into a speech bubble. */
 function texting(n: number): Program {
-  return memo(`texting${n}`, () => {
+  return programs(`texting${n}`, () => {
     const p = at(n)
     const dots = [p(3), p(6), p(9)]
     const bubble = stroke([
@@ -190,7 +192,7 @@ function texting(n: number): Program {
 
 /** emailing: an envelope drawn on dot by dot, then its flap closing. */
 function emailing(n: number): Program {
-  return memo(`emailing${n}`, () => {
+  return programs(`emailing${n}`, () => {
     const p = at(n)
     const box: [number, number][] = [[p(1.2), p(3)], [p(10.8), p(3)], [p(10.8), p(10)], [p(1.2), p(10)], [p(1.2), p(3)]]
     return anim(
@@ -208,7 +210,7 @@ function emailing(n: number): Program {
 
 /** calling: a handset with signal arcs pulsing outward. */
 function calling(n: number): Program {
-  return memo(`calling${n}`, () => {
+  return programs(`calling${n}`, () => {
     const p = at(n)
     const handset = stroke([[p(3.2), p(2.6)], [p(2.4), p(5)], [p(3.4), p(7.6)], [p(5.4), p(9.6)], [p(8), p(10.6)], [p(10), p(10)]])
     const ends: [number, number][] = [[p(3.4), p(2.4)], [p(10.2), p(9.8)]]
@@ -233,30 +235,9 @@ function calling(n: number): Program {
   })
 }
 
-/** video: an aperture iris opening and closing. */
-function video(n: number): Program {
-  return memo(`video${n}`, () => {
-    const R = ringRadius(n)
-    return anim(
-      `video${n}`,
-      loop(n, n, 3, 10, (t) => {
-        const open = R * (0.25 + 0.55 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 3)))
-        return (x, y, c) => {
-          if (!inCircle(x, y, c)) return 0
-          const d = dist(x, y, c.x, c.y)
-          if (d < open - 0.3) return d < 0.6 ? 0.3 : 0
-          const blade = ((turn(x, y, c) + d * 0.05) * 6) % 1 < 0.5 ? 0.62 : 0.32
-          return Math.max(band(d, R, 0.35, 0.8) * 0.75, d <= R ? blade : 0)
-        }
-      }),
-      10
-    )
-  })
-}
-
 /** waiting: a keyhole that breathes (waiting on the user's OK). */
 function waiting(n: number): Program {
-  return memo(`waiting${n}`, () => {
+  return programs(`waiting${n}`, () => {
     const p = at(n)
     const R = ringRadius(n)
     return anim(
@@ -277,7 +258,7 @@ function waiting(n: number): Program {
 
 /** done: a check drawn stroke by stroke, held, then back to the sigil. */
 function done(n: number): Program {
-  return memo(`done${n}`, () => {
+  return programs(`done${n}`, () => {
     const p = at(n)
     const check: [number, number][] = [[p(2.4), p(6.6)], [p(5), p(9.2)], [p(10.6), p(3.4)]]
     const frames = loop(n, n, 2, 12, (t) => {
@@ -290,7 +271,7 @@ function done(n: number): Program {
 
 /** failed: a soft × that fades, then a dimmed sigil. */
 function failed(n: number): Program {
-  return memo(`failed${n}`, () => {
+  return programs(`failed${n}`, () => {
     const p = at(n)
     const frames = loop(n, n, 2.4, 10, (t) => {
       const k = t < 0.6 ? t / 0.6 : t < 1.6 ? 1 : Math.max(0, 1 - (t - 1.6) / 0.8)
@@ -306,28 +287,8 @@ function failed(n: number): Program {
   })
 }
 
-/** sleeping: the sigil at 25 % with a single z drifting up every few seconds, at a low frame rate. */
-function sleeping(n: number): Program {
-  return memo(`sleeping${n}`, () => {
-    const p = at(n)
-    const s = n === 13 ? 1.1 : 0.8
-    return anim(
-      `sleeping${n}`,
-      loop(n, n, 4, 4, (t) => {
-        const u = Math.min(1, t / 3)
-        const zx = p(8) + p(1.5) * u, zy = p(8) - p(5.5) * u
-        const fade = t < 3 ? 0.5 * Math.sin(Math.PI * u) : 0
-        const z = stroke([[zx - s, zy - s], [zx + s, zy - s], [zx - s, zy + s], [zx + s, zy + s]])
-        return (x, y) => Math.max((sigil(n)[y][x] || 0) * 0.25, fade * edge(z(x, y) - 0.2, 0.8))
-      }),
-      4
-    )
-  })
-}
-
-const PROGRAMS: Record<string, (n: number) => Program> = {
+const PROGRAMS: Partial<Record<string, (n: number) => Program>> = {
   idle,
-  greeting,
   listening,
   thinking,
   searching: thinking,
@@ -335,36 +296,29 @@ const PROGRAMS: Record<string, (n: number) => Program> = {
   texting,
   emailing,
   calling,
-  video,
   waiting,
   done,
   failed,
-  sleeping,
 }
 
 /** The glyph program for a state on an n×n emblem (13 on the chest, 7 on the band). */
 export const glyph = (state: string, n: number): Program => (PROGRAMS[state] ?? idle)(n)
 
+/** Where in its program each state rests (0 the start, 1 the end: the drawn bubble, envelope or check). */
+const RESTS_AT: Partial<Record<string, number>> = { texting: 1, emailing: 1, done: 1, calling: 0, failed: 0.4 }
+
 /** Each state's resting glyph, a still: for reduced motion and lowFx. */
 export function restingGlyph(state: string, n: number): Program {
-  return memo(`rest:${state}${n}`, () => {
-    const program = glyph(state, n)
-    const pick: Record<string, number> = { texting: -1, emailing: -1, done: -1, calling: 0, video: 0.5, failed: 0.4 }
-    let frame: Frame
-    if (state === "idle" || state === "greeting" || !(state in PROGRAMS)) frame = scale(sigil(n), 0.8)
-    else if (state === "sleeping") frame = scale(sigil(n), 0.25)
-    else {
-      const f = program.frames
-      const where = pick[state]
-      frame = where === undefined ? f[0] : where < 0 ? f[f.length - 1] : f[Math.floor(where * (f.length - 1))]
-    }
+  return programs(`rest:${state}${n}`, () => {
+    const frames = glyph(state, n).frames
+    const frame = state === "idle" || !(state in PROGRAMS) ? scale(sigil(n), 0.8) : nth(frames, Math.round((RESTS_AT[state] ?? 0) * (frames.length - 1)))
     return still(`rest:${state}${n}`, frame)
   })
 }
 
 /** The chest's radial VU while Emrys speaks: the speech envelope, 0..1, as a disc growing from the centre. */
 export function radialVu(n: number, env: number): Frame {
-  const levels = memo(`vu${n}`, () =>
+  const levels = levelSets(`vu${n}`, () =>
     Array.from({ length: 9 }, (_, l) =>
       paint(n, n, (x, y, c) => {
         if (!inCircle(x, y, c)) return 0
@@ -375,15 +329,5 @@ export function radialVu(n: number, env: number): Frame {
       })
     )
   )
-  return levels[Math.max(0, Math.min(8, Math.round(env * 8)))]
+  return nth(levels, Math.round(env * 8))
 }
-
-/** The chest on a music move: the sigil pulsing on each downbeat. */
-export function downbeat(n: number, beats: number): Frame {
-  const pulses = memo(`downbeat${n}`, () =>
-    Array.from({ length: 4 }, (_, i) => scale(sigil(n), 0.5 + 0.45 * (1 - i / 4) ** 2))
-  )
-  const frac = beats - Math.floor(beats)
-  return pulses[Math.min(3, Math.floor(frac * 4))]
-}
-

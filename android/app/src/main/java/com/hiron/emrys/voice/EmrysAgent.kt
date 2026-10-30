@@ -24,6 +24,7 @@ import com.hiron.emrys.core.SearchKind
 import com.hiron.emrys.core.SearchQuery
 import com.hiron.emrys.core.SearchResults
 import com.hiron.emrys.core.Tier
+import com.hiron.emrys.core.VoiceTurn
 import com.hiron.emrys.device.ToolResult
 import io.elevenlabs.ClientTool
 import io.elevenlabs.ClientToolResult
@@ -38,12 +39,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -56,7 +55,7 @@ import java.util.concurrent.TimeUnit
 enum class AgentMode(val wire: String) { Voice("voice"), Text("text") }
 
 /** What the brain's `/v1/agent/session` issued: a conversation token for voice, a signed URL for text. */
-data class AgentCredential(val mode: AgentMode, val agentId: String, val credential: String)
+data class AgentCredential(val mode: AgentMode, val credential: String)
 
 /**
  * Emrys's ElevenLabs agents (brain/src/emrys_brain/gateway.py `ELEVENLABS_AGENTS`): [start] a voice or text
@@ -96,7 +95,6 @@ class EmrysAgent(
     private var lips = Job()
     private var lastChunk: Job? = null
     private var lastMode: AgentMode? = null
-    private val levels = AgentLevels(robot)
 
     /** The mode of the session that is starting or running; null when there is none. */
     @Volatile
@@ -127,7 +125,7 @@ class EmrysAgent(
                 started = withContext(NonCancellable) { connect(config(credential, gen, connected), context) }
                 ensureActive()
                 if (messages.isNotEmpty() || added.isNotEmpty()) {
-                    checkNotNull(withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() }) { "the agent did not connect" }
+                    connected.await()
                     // The conversation so far, then what the user added, so the first message can refer to both.
                     earlier?.let(started::sendContextualUpdate)
                     if (added.isNotEmpty()) taint.mark()
@@ -196,10 +194,7 @@ class EmrysAgent(
         hush()
         val ending = session
         session = null
-        if (mode == AgentMode.Voice) {
-            levels.reset()
-            robot(RobotCommand("voice", listOf(null)))
-        }
+        if (mode == AgentMode.Voice) robot(RobotDirector.voice(VoiceTurn.None))
         mode = null
         ending?.let(::end)
         update { if (it.activity == Activity.Listening) it.copy(activity = Activity.Idle) else it }
@@ -208,8 +203,8 @@ class EmrysAgent(
     /** Sends [earlier] once [live] connects, if it is still the session. The session is in use before that. */
     private fun recap(live: ConversationSession, earlier: String, connected: CompletableDeferred<Unit>) {
         scope.launch(Dispatchers.Main) {
-            val up = runCatching { withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() } }.getOrNull()
-            if (up != null && session === live) runCatching { live.sendContextualUpdate(earlier) }
+            val up = runCatching { connected.await() }.isSuccess
+            if (up && session === live) runCatching { live.sendContextualUpdate(earlier) }
         }
     }
 
@@ -224,7 +219,7 @@ class EmrysAgent(
             conversationToken = credential.credential.takeIf { voice },
             signedUrl = credential.credential.takeUnless { voice },
             textOnly = !voice,
-            clientTools = AgentTools.build(::runOnPhone, approve, rules, setRule, taint, scope, noted = { note(it, kind = "approval") }) +
+            clientTools = AgentTools.build(::runOnPhone, approve, rules, setRule, taint, noted = { note(it, kind = "approval") }) +
                 SearchTools.build(search, update, taint),
             onConnect = { connected.complete(Unit) },
             onDisconnect = {
@@ -237,15 +232,19 @@ class EmrysAgent(
                     if (mode != heard) {
                         heard = mode
                         if (mode == ConversationMode.LISTENING) robot(RobotCommand("quiet", emptyList()))
-                        if (voice) robot(RobotCommand("voice", listOf(if (mode == ConversationMode.LISTENING) "listening" else "speaking")))
+                        if (voice) {
+                            val turn = when (mode) {
+                                ConversationMode.LISTENING -> VoiceTurn.Listening
+                                ConversationMode.SPEAKING -> VoiceTurn.Speaking
+                            }
+                            robot(RobotDirector.voice(turn))
+                        }
                         activity(if (mode == ConversationMode.LISTENING) Activity.Listening else Activity.Idle)
                     }
                 }
             },
-            // Real levels for the stage's voice layer: the agent's voice as the call hears it, and how surely the user
-            // is speaking (the agent's voice activity score). Only voice sessions have audio.
-            onAudioLevelChanged = { level -> if (voice) onMain(gen) { levels.output(level) } },
-            onVadScore = { score -> if (voice) onMain(gen) { levels.input(score) } },
+            // The agent's audio level as the SDK reports it (every 50 ms in a voice session), for the stage's Orb.
+            onAudioLevelChanged = { level -> if (voice) onMain(gen) { robot(RobotDirector.level(level)) } },
             onStatusChange = { status ->
                 if (status == ConversationStatus.DISCONNECTED || status == ConversationStatus.ERROR) onMain(gen) { activity(Activity.Idle) }
             },
@@ -262,7 +261,6 @@ class EmrysAgent(
     }
 
     private suspend fun runOnPhone(name: String, input: JSONObject): ToolResult {
-        RobotDirector.forDeviceCall(name, input).forEach(robot)
         val result = withContext(Dispatchers.Default) { run(name, input) }
         note("$name: ${if (result.ok) "done" else result.data.toString().take(120)}", kind = "device")
         return result
@@ -317,49 +315,6 @@ class EmrysAgent(
 
     companion object {
         const val NEEDS_MICROPHONE = "Emrys needs the microphone to talk. Tap the mic to allow it."
-    }
-}
-
-/**
- * Passes a voice session's real audio levels to the robot stage (`window.emrys.levels(output, input)`, 0..1, null for
- * a level not heard yet). The SDK reports the agent's level every 50 ms, so only a change of [STEP] hundredths or more
- * is sent; a value that isn't a number is ignored. Main thread only.
- */
-internal class AgentLevels(private val robot: (RobotCommand) -> Unit) {
-    // In hundredths, so a step is compared exactly.
-    private var output: Int? = null
-    private var input: Int? = null
-
-    fun output(level: Float) {
-        hundredths(level)?.let { send(it, input) }
-    }
-
-    fun input(score: Float) {
-        hundredths(score)?.let { send(output, it) }
-    }
-
-    /** Forgets the levels; the next session starts from nothing heard. */
-    fun reset() {
-        output = null
-        input = null
-    }
-
-    private fun send(nextOutput: Int?, nextInput: Int?) {
-        if (moved(output, nextOutput) || moved(input, nextInput)) {
-            output = nextOutput
-            input = nextInput
-            robot(RobotCommand("levels", listOf(nextOutput?.div(100.0), nextInput?.div(100.0))))
-        }
-    }
-
-    private fun moved(before: Int?, after: Int?) =
-        (before == null) != (after == null) || (before != null && after != null && kotlin.math.abs(after - before) >= STEP)
-
-    private fun hundredths(value: Float): Int? = value.takeIf { it.isFinite() }?.let { Math.round(it.coerceIn(0f, 1f) * 100) }
-
-    companion object {
-        /** The smallest change sent, in hundredths. */
-        const val STEP = 2
     }
 }
 
@@ -435,7 +390,7 @@ internal suspend fun fetchAgentCredential(http: OkHttpClient, config: GatewayCon
             }
             val field = if (mode == AgentMode.Voice) "conversation_token" else "signed_url"
             val credential = body.optString(field).ifBlank { throw AgentStartError.NotSetUp }
-            AgentCredential(mode, body.optString("agent_id"), credential)
+            AgentCredential(mode, credential)
         }
     }
 
@@ -449,12 +404,6 @@ object AgentTools {
     )
     const val LANE = "agent"
 
-    /** The SDK gives a client tool 30 seconds in all; the action itself needs the rest. */
-    const val APPROVAL_TIMEOUT_MS = 20_000L
-
-    /** How long a tool waits for its action before answering [STILL_RUNNING], inside the SDK's 30 seconds. */
-    const val TOOL_BUDGET_MS = 27_000L
-    const val CONNECT_TIMEOUT_MS = 15_000L
     const val DECLINED = "The user declined, so it was not done."
 
     /** brain/src/emrys_brain/approvals.py `STANDING_DENY`, the same words. */
@@ -464,11 +413,8 @@ object AgentTools {
 
     /** Tools whose results carry third-party text; mirrors `untrusted_output=True` in brain/src/emrys_brain/device_tools.py. */
     val UNTRUSTED = setOf("sms_list", "calendar_list", "notifications_list", "screen_read")
-    const val STILL_RUNNING = "This is still running on the phone and may already have happened. Do not do it again; " +
-        "Emrys shows the outcome in its activity log."
     /**
-     * The action runs in [scope], so it finishes even when the agent has stopped waiting for it. Before it runs, a
-     * standing deny refuses it and a standing allow skips the question (never for a high tier, a deny-only kind of
+     * Before the action runs, a standing deny refuses it and a standing allow skips the question (never for a high tier, a deny-only kind of
      * action, or while [taint] holds); otherwise [approve] asks, and a ticked "don't ask again" goes to [setRule].
      * [noted] gets the activity line when a rule decided.
      */
@@ -478,22 +424,18 @@ object AgentTools {
         rules: () -> RuleSet,
         setRule: (Decision, RuleTarget) -> Unit,
         taint: AgentTaint,
-        scope: CoroutineScope,
-        budgetMs: Long = TOOL_BUDGET_MS,
         noted: (String) -> Unit = {},
     ): Map<String, ClientTool> = NAMES.associateWith { name ->
         object : ClientTool {
             override suspend fun execute(parameters: Map<String, Any>): ClientToolResult = try {
-                val deadline = System.currentTimeMillis() + budgetMs
                 val input = json(parameters)
                 val refusal = gate(name, input, approve, rules, setRule, taint, noted)
                 if (refusal != null) {
                     ClientToolResult.failure(refusal)
                 } else {
-                    val action = scope.async { run(name, input) }
-                    val done = withTimeoutOrNull(deadline - System.currentTimeMillis()) { result(action.await()) }
+                    val done = result(run(name, input))
                     if (name in UNTRUSTED) taint.mark()
-                    done ?: ClientToolResult.success(STILL_RUNNING)
+                    done
                 }
             } catch (e: CancellationException) {
                 throw e

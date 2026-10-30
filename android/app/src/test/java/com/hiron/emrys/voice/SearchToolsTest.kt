@@ -25,8 +25,8 @@ class SearchToolsTest {
     private var state = EmrysState()
     private val asked = mutableListOf<SearchQuery>()
 
-    private fun tools(answer: suspend (SearchQuery) -> Result<SearchResults>, taint: AgentTaint = AgentTaint(), budgetMs: Long = 2_000) =
-        SearchTools.build({ asked += it; answer(it) }, { change -> state = change(state) }, taint, budgetMs)
+    private fun tools(answer: suspend (SearchQuery) -> Result<SearchResults>, taint: AgentTaint = AgentTaint()) =
+        SearchTools.build({ asked += it; answer(it) }, { change -> state = change(state) }, taint)
 
     @Test
     fun theSevenNamesSitNextToThePhoneToolsWithoutClashing() {
@@ -71,12 +71,6 @@ class SearchToolsTest {
     }
 
     @Test
-    fun theSearchPathAnswersBeforeTheAgentsTwentySecondCut() {
-        assertTrue(SearchClient.SEARCH_TIMEOUT_S * 1_000 < SearchTools.BUDGET_MS)
-        assertTrue(SearchTools.BUDGET_MS <= 20_000 - 2_000)
-    }
-
-    @Test
     fun aResultIsShownMarksTheTurnAndTellsTheAgentWhatIsOnScreen() = runBlocking {
         val taint = AgentTaint()
         val result = tools({ Result.success(SearchFixtures.webResults) }, taint).getValue("web_search").run(mapOf("q" to "trail running shoes"))
@@ -109,9 +103,6 @@ class SearchToolsTest {
         assertFalse(taint.tainted)
         assertEquals("Search didn't work: Search is busy. Try again in a moment.", state.messages.single().text)
         assertTrue(state.approvals.isEmpty())
-
-        val slow = tools({ delay(5_000); Result.success(SearchFixtures.webResults) }, budgetMs = 100).getValue("web_search").run(mapOf("q" to "x"))
-        assertEquals("Search took too long. Try again.", slow.error)
 
         val nothing = tools({ Result.success(SearchFixtures.webResults) }).getValue("web_search").run(emptyMap())
         assertFalse(nothing.success)

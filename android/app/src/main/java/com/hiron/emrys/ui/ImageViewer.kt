@@ -128,7 +128,7 @@ fun ImageViewer(item: ImageItem, n: Int, onAdd: (ContextItem) -> Unit, onDismiss
     val scope = rememberCoroutineScope()
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    val zoom = rememberTransformableState { change, pan, _ ->
+    val zoom = rememberTransformableState { _, change, pan, _ ->
         scale = (scale * change).coerceIn(1f, 5f)
         offset = if (scale == 1f) Offset.Zero else offset + pan
     }

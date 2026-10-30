@@ -146,10 +146,10 @@ installing and the on-device checklist.
   (talk, type, catch me up, my day) and two home-screen widgets: a search bar ("Ask Emrys anything" with
   a talk key) and a panel with link status, Emrys's latest reply and quick keys. Widgets and shortcuts open
   the app through fixed actions; a quick key carries only its name, never free text.
-- **Robot**: the original `Emrys_the_Robot.html`, bundled with offline fonts and a small bridge
-  (`android/robot/bridge.js`) so the app drives its moves, trace HUD, email and text cards, lip sync from
-  text-to-speech, and a stage glow in the colour of what Emrys is doing. Served from app assets only (no
-  network, no file access).
+- **Robot**: `Emrys_the_Robot.html`, a porcelain hero with ElevenLabs UI's Matrix in its armor and the Orb and
+  ShimmeringText on its stage (`android/stage-ui`), bundled with offline fonts and a small bridge
+  (`android/robot/bridge.js`) so the app drives its moves, lip sync from text-to-speech, and a stage glow in the
+  colour of what Emrys is doing. Served from app assets only (no network, no file access).
 - **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
   reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
 - **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that

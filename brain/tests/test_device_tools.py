@@ -94,9 +94,9 @@ def test_the_app_operator_asks_at_commit_points(tool_input: dict[str, Any], tier
 
 
 def test_phone_instructions_reach_the_system_prompt() -> None:
-    from emrys_brain.factory import EMRYS_INSTRUCTIONS
+    from emrys_brain.factory import emrys_instructions
 
-    assert device_tools.INSTRUCTIONS in EMRYS_INSTRUCTIONS
+    assert device_tools.instructions() in emrys_instructions()
 
 
 def _until(socket: Any, kind: str, limit: int = 300) -> tuple[dict[str, Any], list[dict[str, Any]]]:

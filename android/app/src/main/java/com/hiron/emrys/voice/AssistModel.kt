@@ -74,7 +74,6 @@ object AssistModel {
             Activity.Working -> "WORKING"
             Activity.Texting -> "TEXTING"
             Activity.Emailing -> "EMAILING"
-            Activity.Calling -> "CALLING"
             else -> "THINKING"
         }
     }

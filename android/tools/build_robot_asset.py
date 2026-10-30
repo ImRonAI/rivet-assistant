@@ -1,17 +1,18 @@
-"""Builds app/src/main/assets/emrys/index.html from the original robot page.
+"""Builds app/src/main/assets/emrys/index.html from the robot page.
 
-Four changes, nothing else: Google Fonts links become local @font-face rules (the app works offline),
-an ``embedded`` class hides the page's own move dock, telemetry strip and hint (the app draws its own), bridge.js is appended
-after the page script, and the stage layer (the ElevenLabs UI voice layer built from android/stage-ui into
-assets/emrys/vendor/stage-ui.{js,css} by ``npm ci && npm run build`` there) is linked from the head and loaded after
-the bridge. The built layer is checked in, so this script needs no Node; it only requires the files to be there.
+Four changes, nothing else: Google Fonts links become local @font-face rules for the Noir faces (the app works
+offline), an ``embedded`` class makes the stage fill the WebView, bridge.js is appended after the page script, and the
+stage layer (the ElevenLabs UI layer built from android/stage-ui into assets/emrys/vendor/stage-ui.{js,css} by
+``npm ci && npm run build`` there, and checked in) is linked from the head and loaded after the bridge.
+``--check`` also type-checks bridge.js with TypeScript (robot/tsconfig.json), fetched at its pinned version by npx.
 
-Usage: python3 tools/build_robot_asset.py  (from android/); ``--check`` fails if the page is stale.
+Usage: python3 tools/build_robot_asset.py [--check]  (from android/)
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,6 +22,7 @@ BRIDGE = ROOT / "robot" / "bridge.js"
 OUT = ROOT / "app" / "src" / "main" / "assets" / "emrys" / "index.html"
 VENDOR = OUT.parent / "vendor"
 STAGE_FILES = ("stage-ui.js", "stage-ui.css", "perlin-noise.png")
+TYPESCRIPT = "7.0.2"
 
 FONTS = [
     ("Instrument Serif", 400, "normal", "instrument_serif_regular"),
@@ -32,7 +34,6 @@ FONTS = [
     ("Geist Mono", 500, "normal", "geist_mono_medium"),
 ]
 EMBEDDED_CSS = (
-    "html.embedded .hud,html.embedded .dock,html.embedded .hint{display:none}"
     "html.embedded .app{grid-template-rows:minmax(0,1fr);height:100%}"
     "html.embedded,html.embedded body{overflow:hidden}"
 )
@@ -61,6 +62,12 @@ def build(source: str, bridge: str) -> str:
     )
 
 
+def typecheck() -> None:
+    tsc = ["npx", "--yes", f"--package=typescript@{TYPESCRIPT}", "tsc", "--project", str(ROOT / "robot")]
+    if subprocess.run(tsc).returncode:
+        raise SystemExit("robot/bridge.js has type errors")
+
+
 def main() -> None:
     missing = [name for name in STAGE_FILES if not (VENDOR / name).is_file()]
     if missing:
@@ -68,6 +75,7 @@ def main() -> None:
     html = build(SOURCE.read_text(encoding="utf-8"), BRIDGE.read_text(encoding="utf-8"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     if "--check" in sys.argv:
+        typecheck()
         if OUT.read_text(encoding="utf-8") != html:
             raise SystemExit(f"{OUT} is stale; run tools/build_robot_asset.py")
         return

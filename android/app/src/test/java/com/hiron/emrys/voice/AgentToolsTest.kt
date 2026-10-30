@@ -66,7 +66,6 @@ class AgentToolsTest {
             rules = { rules },
             setRule = { decision, target -> calls.rules += decision to target },
             taint = taint,
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             noted = { calls.notes += it },
         )
         return calls to built
@@ -206,7 +205,7 @@ class AgentToolsTest {
     }
 
     @Test
-    fun approvalGatedToolsRefuseOnDenyTimeoutOrError() = runBlocking {
+    fun approvalGatedToolsRefuseOnDenyOrError() = runBlocking {
         val gated = mapOf(
             "sms_send" to mapOf("to" to "+18015550100", "body" to "On my way"),
             "phone_call" to mapOf("number" to "+18015550100"),
@@ -214,7 +213,6 @@ class AgentToolsTest {
             "calendar_create" to mapOf("title" to "Dentist", "start" to "2026-10-27T09:00"),
             "screen_act" to mapOf("action" to "tap", "node" to 1, "label" to "Place order"),
         )
-        // A deny and a timeout both reach the tool as "no" from EmrysRuntime.approveOnPhone.
         val (denied, deny) = tools(no)
         for ((name, input) in gated) {
             assertEquals(name, ClientToolResult.failure(AgentTools.DECLINED), deny.getValue(name).execute(input))
@@ -256,23 +254,6 @@ class AgentToolsTest {
             if ("assess=screen_act_tier" in rest) continue
             assertEquals(name, tier, AgentTools.tier(name, JSONObject()).wire)
         }
-    }
-
-    @Test
-    fun aSlowActionKeepsRunningAndTheAgentIsToldNotToRepeatIt() = runBlocking {
-        val finished = CompletableDeferred<String>()
-        val built = AgentTools.build(
-            run = { name, _ -> delay(200); finished.complete(name); ToolResult.ok("sent") },
-            approve = { Protocol.Answer(true) },
-            rules = { RuleSet.EMPTY },
-            setRule = { _, _ -> },
-            taint = AgentTaint(),
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-            budgetMs = 50,
-        )
-        val answer = built.getValue("sms_send").execute(mapOf("to" to "+18015550100", "body" to "hi"))
-        assertEquals(ClientToolResult.success(AgentTools.STILL_RUNNING), answer)
-        assertEquals("sms_send", withTimeout(5_000) { finished.await() })
     }
 
     @Test
@@ -340,12 +321,12 @@ class AgentToolsTest {
             val config = GatewayConfig(server.url("/").toString(), "device-token", "phone-1")
             val http = OkHttpClient()
 
-            assertEquals(AgentCredential(AgentMode.Voice, "agent_v", "lk-1"), fetchAgentCredential(http, config, AgentMode.Voice))
+            assertEquals(AgentCredential(AgentMode.Voice, "lk-1"), fetchAgentCredential(http, config, AgentMode.Voice))
             val first = server.takeRequest()
             assertEquals("/v1/agent/session?mode=voice", first.path)
             assertEquals("Bearer device-token", first.getHeader("Authorization"))
 
-            assertEquals(AgentCredential(AgentMode.Text, "agent_t", "wss://x/y?s=1"), fetchAgentCredential(http, config, AgentMode.Text))
+            assertEquals(AgentCredential(AgentMode.Text, "wss://x/y?s=1"), fetchAgentCredential(http, config, AgentMode.Text))
             assertEquals("/v1/agent/session?mode=text", server.takeRequest().path)
 
             val error = runCatching { fetchAgentCredential(http, config, AgentMode.Voice) }.exceptionOrNull()

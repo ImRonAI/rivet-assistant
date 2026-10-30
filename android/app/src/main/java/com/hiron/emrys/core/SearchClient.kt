@@ -104,7 +104,6 @@ class SearchClient(http: OkHttpClient, private val gateway: () -> GatewayConfig)
     }
 
     companion object {
-        /** Inside the agents' search tool budget ([com.hiron.emrys.voice.SearchTools.BUDGET_MS]); the brain answers sooner. */
         const val SEARCH_TIMEOUT_S = 15L
         const val QUICK_TIMEOUT_S = 5L
         const val SUGGESTIONS = 8

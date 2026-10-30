@@ -134,7 +134,7 @@ val ACCESS_GROUPS = listOf(
         },
     ),
     AccessGroup(
-        "Messages & actions", "Reads and sends texts, finds contacts and calls people back, always asking first.",
+        "Messages & actions", "Reads and sends texts, finds contacts and calls people back, asking before it sends or calls.",
         Icons.Outlined.Forum, Tone.Cyan,
         listOf(
             Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS,
@@ -365,7 +365,7 @@ private fun MeetStep(runtime: EmrysRuntime, next: () -> Unit, onFinish: () -> Un
             SetupRow(Icons.Outlined.Shield, "You stay in control", "Emrys only uses what you turn on, and you can turn any of it off.")
         }
         Ruled(1) {
-            SetupRow(Icons.Outlined.GppGood, "Asks before it acts", "Always confirms before sending messages, booking, or taking actions.")
+            SetupRow(Icons.Outlined.GppGood, "Asks before it acts", "Confirms before sending messages, booking, or taking actions.")
         }
         Ruled(2, last = true) {
             SetupRow(
@@ -378,11 +378,9 @@ private fun MeetStep(runtime: EmrysRuntime, next: () -> Unit, onFinish: () -> Un
 
 @Composable
 private fun ModelsStep(runtime: EmrysRuntime, next: () -> Unit) {
-    val p = LocalPalette.current
     val settings = runtime.settings
     var agents by remember { mutableStateOf(settings.elevenLabsAgents) }
     var voice by remember { mutableStateOf(settings.voiceModel) }
-    var speak by remember { mutableStateOf(settings.speakReplies) }
     val setAgents = { on: Boolean ->
         agents = on
         runtime.useAgents(on)
@@ -391,12 +389,8 @@ private fun ModelsStep(runtime: EmrysRuntime, next: () -> Unit) {
         voice = on
         settings.voiceModel = on
     }
-    val openVoice = LocalOpenVoiceSetup.current
     StepScaffold(
-        keys = {
-            StepKey("Save & continue", next)
-            FooterLink("Choose Emrys's voice", openVoice, leading = Icons.Outlined.GraphicEq, tone = Tone.Accent)
-        },
+        keys = { StepKey("Save & continue", next) },
     ) {
         Ruled(0) {
             SetupRow(
@@ -413,25 +407,13 @@ private fun ModelsStep(runtime: EmrysRuntime, next: () -> Unit) {
                 note = "When you talk" to Tone.Accent,
                 checked = voice, onToggle = { setVoice(!voice) }, trailing = { EmrysToggle(voice, null) },
             )
-            Rule(Modifier.padding(start = 56.dp), color = p.edgeSoft)
-            NestedRow(
-                "Read replies aloud when I type", speak,
-                {
-                    speak = it
-                    settings.speakReplies = it
-                },
-                Modifier.padding(start = 56.dp, top = 4.dp, bottom = 8.dp),
-            )
         }
     }
 }
 
-private enum class Summon { Power, Corner }
-
 @Composable
 private fun AssistantStep(next: () -> Unit) {
     val context = LocalContext.current
-    var summon by rememberSaveable { mutableStateOf(Summon.Power) }
     val held = remember { context.holdsAssistantRole() }
     StepScaffold(
         keys = {
@@ -450,97 +432,11 @@ private fun AssistantStep(next: () -> Unit) {
             }
         },
     ) {
-        val power = @Composable { m: Modifier, stretched: Boolean ->
-            SummonCard(
-                Summon.Power, summon, { summon = it }, 0, Icons.Outlined.PowerSettingsNew,
-                "Long-press power button", "Hold the power button to call Emrys from anywhere.", m, stretched, tag = "Primary",
-            )
-        }
-        val corner = @Composable { m: Modifier, stretched: Boolean ->
-            SummonCard(
-                Summon.Corner, summon, { summon = it }, 1, Icons.Outlined.Swipe,
-                "Corner swipe", "Swipe up from a bottom corner, on phones that use gesture navigation.", m, stretched,
-            )
-        }
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            if (maxWidth >= 340.dp) {
-                EqualRow(12.dp) {
-                    power(Modifier.fillMaxHeight(), true)
-                    corner(Modifier.fillMaxHeight(), true)
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    power(Modifier, false)
-                    corner(Modifier, false)
-                }
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        val strip = Modifier.enter(2)
-        when {
-            held -> InfoStrip("Emrys is already your assistant.", strip, icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
-            summon == Summon.Power -> InfoStrip(
-                "Tapping below will open Android Assistant settings to select Emrys. Then hold the power button to call it.", strip,
-            )
-            else -> InfoStrip(
-                "Tapping below will open Android Assistant settings to select Emrys. Then swipe up from a bottom corner to call it.", strip,
-            )
-        }
-    }
-}
-
-/** Lays its children side by side in equal widths, [gap] apart, all as tall as the tallest at that width. */
-@Composable
-private fun EqualRow(gap: Dp, content: @Composable () -> Unit) {
-    Layout(content) { measurables, constraints ->
-        val space = gap.roundToPx()
-        val width = ((constraints.maxWidth - space * (measurables.size - 1)) / measurables.size.coerceAtLeast(1)).coerceAtLeast(0)
-        val height = measurables.maxOfOrNull { it.maxIntrinsicHeight(width) } ?: 0
-        val placeables = measurables.map { it.measure(Constraints.fixed(width, height)) }
-        layout(constraints.maxWidth, height) {
-            placeables.forEachIndexed { i, placeable -> placeable.placeRelative(i * (width + space), 0) }
-        }
-    }
-}
-
-/**
- * One way to call Emrys, as a choice tile: its icon and radio over the title and body; chosen, it wears the halo ring.
- * [stretched] tiles share their neighbour's height, so the tag sits at the foot.
- */
-@Composable
-private fun SummonCard(
-    value: Summon,
-    chosen: Summon,
-    onChoose: (Summon) -> Unit,
-    index: Int,
-    icon: ImageVector,
-    title: String,
-    body: String,
-    modifier: Modifier,
-    stretched: Boolean,
-    tag: String? = null,
-) {
-    val p = LocalPalette.current
-    val on = value == chosen
-    EmrysCard(
-        modifier.enter(index).ring(p.accent.copy(alpha = 0.2f), RoundedCornerShape(20.dp), on, gap = 3.dp).semantics { selected = on },
-        selected = on, onClick = { onChoose(value) }, role = Role.RadioButton,
-        padding = PaddingValues(start = 18.dp, end = 14.dp, top = 16.dp, bottom = 18.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(icon, selected = on, size = 40.dp, iconSize = 20.dp)
-            Spacer(Modifier.weight(1f))
-            RadioDot(on)
-        }
-        Spacer(Modifier.height(20.dp))
-        Text(title, style = Type.title, color = p.ink)
-        Spacer(Modifier.height(6.dp))
-        Text(body, style = Type.cardBody, color = p.ink2)
-        if (tag != null) {
-            // Side by side, the tag sits at the foot of the taller tile.
-            if (stretched) Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(14.dp))
-            StatusTag(tag, Tone.Accent, outline = true)
+        val strip = Modifier.enter(0)
+        if (held) {
+            InfoStrip("Emrys is already your assistant.", strip, icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
+        } else {
+            InfoStrip("Tapping below will open Android Assistant settings to select Emrys. Then hold the power button to call it.", strip)
         }
     }
 }
@@ -580,7 +476,7 @@ private fun AccessStep(onFinish: () -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
         TrustFooter(
-            "Revocable any time in Android Settings\nNothing goes out without your OK",
+            "Revocable any time in Android Settings",
             Modifier.enter(ACCESS_GROUPS.size), tone = Tone.Neutral,
         )
     }
@@ -601,12 +497,12 @@ private fun StepKey(text: String, onClick: () -> Unit) {
 
 /** A text link in [TextKey]'s look whose label wraps instead of clipping on narrow screens with large text. */
 @Composable
-private fun FooterLink(text: String, onClick: () -> Unit, leading: ImageVector? = null, tone: Tone = Tone.Neutral) {
+private fun FooterLink(text: String, onClick: () -> Unit) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val ink = if (tone == Tone.Accent) p.accent else p.ink2
+    val ink = p.ink2
     Row(
         Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(50))
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
@@ -616,10 +512,6 @@ private fun FooterLink(text: String, onClick: () -> Unit, leading: ImageVector? 
             .alpha(if (pressed) 0.55f else 1f).padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (leading != null) {
-            Icon(leading, contentDescription = null, tint = ink, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(8.dp))
-        }
         CapsText(text, Type.monoKey.copy(fontSize = 14.sp, lineHeight = 18.sp), ink, textAlign = TextAlign.Center)
     }
 }

@@ -118,7 +118,7 @@ class NotificationsTest {
         runtime.visible = false
         val request = textApproval("agent:1", lane = AgentTools.LANE)
         coroutineScope {
-            val waiting = async { runtime.approveOnPhone(request, timeoutMs = 10_000) }
+            val waiting = async { runtime.approveOnPhone(request) }
             withTimeout(5_000) { while (active().none { it.id == Notifications.approvalId("agent:1") }) yield() }
             val posted = active().single { it.id == Notifications.approvalId("agent:1") }.notification
             assertEquals("Text Dana: “Friday at 9 works!”", text(posted, Notification.EXTRA_TITLE))

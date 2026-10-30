@@ -10,8 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -45,9 +42,8 @@ import com.hiron.emrys.core.EmrysState
 const val MINI_STAGE_TAG = "mini-stage"
 
 /**
- * Emrys in a short glass band at the top of a screen that isn't Home, so it stays in view. Tapping it runs
- * [onOpen] when given (back to Home); without it the band only shows Emrys. It steps aside while the keyboard is up
- * and on short windows. [layer] is where the band sits.
+ * Emrys in a short glass band at the top of a screen that isn't Home, so it stays in view. Tapping it runs [onOpen]
+ * (back to Home). It steps aside while the keyboard is up and on short windows.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -56,8 +52,7 @@ fun MiniStage(
     state: EmrysState,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
-    layer: StageLayer = StageLayer.Screen,
-    onOpen: (() -> Unit)? = null,
+    onOpen: () -> Unit,
 ) {
     val p = LocalPalette.current
     val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
@@ -78,18 +73,16 @@ fun MiniStage(
             Modifier.testTag(MINI_STAGE_TAG).fillMaxWidth().background(p.bg)
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp).height(h),
         ) {
-            StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, mood = moodColor(state.activity), radius = 22.dp) {
-                // A leaving band lets go of the page at once, so the screen it uncovers gets Emrys back.
-                if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card, layer = layer)
+            StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, radius = 22.dp) {
+                // A leaving band drops its page at once.
+                if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card)
             }
             // The cover sits over the WebView, so a drag or pinch in the band never orbits the robot.
             val status = stageStatus(state)
-            val cover = if (onOpen != null) {
-                Modifier.clickable(role = Role.Button, onClickLabel = OPEN_LABEL, onClick = onOpen)
-            } else {
-                Modifier.pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() } }
-            }
-            Box(Modifier.matchParentSize().then(cover).semantics { contentDescription = status })
+            Box(
+                Modifier.matchParentSize().clickable(role = Role.Button, onClickLabel = OPEN_LABEL, onClick = onOpen)
+                    .semantics { contentDescription = status },
+            )
         }
     }
 }
@@ -119,7 +112,6 @@ internal fun stageStatus(state: EmrysState): String = when (state.connection) {
             Activity.Working -> "Emrys is working on it."
             Activity.Texting -> "Emrys is writing a text."
             Activity.Emailing -> "Emrys is writing an email."
-            Activity.Calling -> "Emrys is on a call."
             Activity.Waiting -> "Emrys needs your OK."
             Activity.Done -> "Emrys is done."
             Activity.Failed -> "Emrys didn't finish."

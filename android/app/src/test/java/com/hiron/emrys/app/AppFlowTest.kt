@@ -1,19 +1,17 @@
 package com.hiron.emrys.app
 
-import android.content.Intent
 import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -27,11 +25,10 @@ import com.hiron.emrys.testing.FakeAndroidKeyStore
 import com.hiron.emrys.testing.shot
 import com.hiron.emrys.testing.windowRoots
 import com.hiron.emrys.ui.COMPOSER_TAG
+import com.hiron.emrys.ui.MAX_ROBOT_CRASHES
 import com.hiron.emrys.ui.MINI_STAGE_TAG
 import com.hiron.emrys.ui.STAGE_TAG
 import com.hiron.emrys.ui.TAB_TAG_PREFIX
-import com.hiron.emrys.widget.EmrysWidgets
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.webkit.WebViewFeature
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -55,10 +52,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import kotlin.math.abs
 
 private const val ROBOT_PAGE = "https://appassets.androidplatform.net/assets/emrys/index.html"
-private const val MARKER = "/* marker */"
+private const val CRASHING = "Emrys's robot keeps crashing on this phone."
+private const val NOT_LOADED = "Emrys's robot didn't load (error 404)."
 
 /**
  * Drives the real app (MainActivity, runtime, gateway client, screens) against a stand-in brain over a real
@@ -252,39 +249,14 @@ class AppFlowTest {
     }
 
     @Test
-    fun firstRunWalksEveryStepAndTheVoiceSetupOpensFromOnboardingAndSettings() {
+    fun firstRunWalksEveryStep() {
         compose.onNodeWithText("Set up step by step").performClick()
         compose.onNodeWithText("Save & continue").assertIsDisplayed()
-
-        // The voice link on step 2 opens the voice setup over onboarding; skipping it lands back on step 2.
-        compose.onNodeWithText("Choose Emrys's voice").performClick()
-        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
-        shot("09-voice-from-onboarding")
-        compose.onAllNodesWithText("Skip voice setup")[0].performClick()
-        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
-
         compose.onNodeWithText("Save & continue").performClick()
         compose.onNodeWithText("Skip for now").performClick()
         compose.onNodeWithText("Customize later in Settings").performClick()
         compose.waitForIdle()
         assertTrue(compose.activity.emrys.settings.onboarded)
-
-        // Settings' Voice section opens the same setup.
-        compose.onNodeWithTag(TAB_TAG_PREFIX + "settings").performClick()
-        compose.onNodeWithText("Not chosen yet").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Emrys's voice").performScrollTo().performClick()
-        compose.onNodeWithText("Choose or make a voice").performClick()
-        compose.onNodeWithText("Preset library.").assertIsDisplayed()
-        compose.onNodeWithText("Sol").performClick()
-        compose.onNodeWithText("Continue").performClick()
-        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
-
-        // Back closes the setup, and the Voice section shows the saved voice.
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        compose.waitForIdle()
-        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
-        compose.onNodeWithText("Sol").performScrollTo().assertIsDisplayed()
-        shot("10-settings-voice-chosen")
     }
 
     /**
@@ -320,9 +292,6 @@ class AppFlowTest {
 
         /** The band under the app's header on Activity and Settings. */
         Band,
-
-        /** The band in the voice setup, drawn over the whole app. */
-        VoiceBand,
     }
 
     private fun boundsOf(tag: String): List<Rect> = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().map { it.boundsInWindow }
@@ -332,7 +301,7 @@ class AppFlowTest {
 
     /**
      * The robot frame of each slot on screen. Every slot draws Emrys in a [STAGE_TAG] frame; a band's frame sits
-     * inside its [MINI_STAGE_TAG] band. The voice setup is composed after the app under it, so its band comes last.
+     * inside its [MINI_STAGE_TAG] band.
      */
     private fun slotFrames(): Map<Slot, Rect> {
         val bands = boundsOf(MINI_STAGE_TAG)
@@ -340,7 +309,6 @@ class AppFlowTest {
         return buildMap {
             stages.singleOrNull()?.let { put(Slot.Stage, it) }
             inBands.firstOrNull()?.let { put(Slot.Band, it) }
-            inBands.lastOrNull()?.let { put(Slot.VoiceBand, it) }
         }
     }
 
@@ -351,92 +319,56 @@ class AppFlowTest {
         return Rect(at[0].toFloat(), at[1].toFloat(), (at[0] + holder.width).toFloat(), (at[1] + holder.height).toFloat())
     }
 
-    /** The page fills [slot]'s frame: the frame holds it, and no other frame starts nearer to it (bands overlap). */
-    private fun assertPageIn(page: WebView, slot: Slot, step: String) {
+    /** Each of [slots] shows its own live robot page, drawn in its frame, and no other page is on screen. */
+    private fun assertPages(step: String, vararg slots: Slot): Map<Slot, WebView> {
+        compose.waitForIdle()
+        val pages = webViews()
         val frames = slotFrames()
-        val drawn = page.drawnBounds()
-        val expected = frames[slot] ?: error("no $slot on screen after $step: $frames")
-        val nearest = frames.values.minBy { abs(it.left - drawn.left) + abs(it.top - drawn.top) }
-        assertTrue("the page is drawn after $step: $drawn", drawn.width > 0f && drawn.height > 0f)
-        assertTrue("the page is in the $slot after $step: page $drawn, frames $frames", expected.holds(drawn) && nearest == expected)
+        assertEquals("robot pages after $step", slots.size, pages.size)
+        return slots.toList().associateWith { slot ->
+            val frame = frames[slot] ?: error("no $slot on screen after $step: $frames")
+            val inSlot = pages.filter { page -> frame.holds(page.drawnBounds()) }
+            val page = inSlot.singleOrNull() ?: error("${inSlot.size} pages in the $slot after $step: frames $frames")
+            assertTrue("the page in the $slot is drawn after $step", page.drawnBounds().let { it.width > 0f && it.height > 0f })
+            assertFalse("the page in the $slot is alive after $step", shadowOf(page).wasDestroyCalled())
+            assertEquals(ROBOT_PAGE, shadowOf(page).lastLoadedUrl)
+            page
+        }
     }
 
-    /** The robot page on screen is [first], still alive, the only one, and drawn in [slot]. */
-    private fun assertOnlyPage(first: WebView, step: String, slot: Slot) {
+    /** Robolectric's WebView has no message listener, so the host takes a page as ready once it finishes loading. */
+    private fun ready(page: WebView) {
+        compose.runOnUiThread { shadowOf(page).webViewClient.onPageFinished(page, ROBOT_PAGE) }
         compose.waitForIdle()
-        val shown = webViews()
-        assertEquals("one robot page after $step", 1, shown.size)
-        assertSame("the same robot page after $step", first, shown.single())
-        assertFalse("the page survived $step", shadowOf(first).wasDestroyCalled())
-        assertEquals(ROBOT_PAGE, shadowOf(first).lastLoadedUrl)
-        assertPageIn(first, slot, step)
     }
 
-    private fun openVoiceSetupFromSettings() {
-        compose.onNodeWithText("Emrys's voice").performScrollTo().performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
-    }
-
-    private fun pressBack() {
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+    private fun crash(page: WebView) {
+        compose.runOnUiThread { shadowOf(page).webViewClient.onRenderProcessGone(page, null) }
         compose.waitForIdle()
     }
 
     @Test
-    fun oneRobotPageAcrossScreens() {
-        compose.waitForIdle()
-        val first = webViews().single()
-        assertOnlyPage(first, "launch", Slot.Stage)
+    fun everyScreenShowsTheRobot() {
+        val onboarding = assertPages("launch", Slot.Stage).getValue(Slot.Stage)
         skipOnboarding()
-        assertOnlyPage(first, "finishing onboarding", landing())
+        assertTrue("onboarding's page is destroyed", shadowOf(onboarding).wasDestroyCalled())
+        assertPages("finishing onboarding", landing())
 
         tab("activity")
-        assertOnlyPage(first, "Activity", Slot.Band)
+        val band = assertPages("Activity", Slot.Band).getValue(Slot.Band)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
         tab("settings")
-        assertOnlyPage(first, "Settings", Slot.Band)
-        compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
+        assertSame("the band keeps its page from Activity to Settings", band, assertPages("Settings", Slot.Band).getValue(Slot.Band))
         tab("emrys")
-        assertOnlyPage(first, "Home", Slot.Stage)
+        assertPages("Home", Slot.Stage)
+        assertTrue("the band's page is destroyed", shadowOf(band).wasDestroyCalled())
         compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
         tab("settings")
-        assertOnlyPage(first, "back to Settings", Slot.Band)
-
-        openVoiceSetupFromSettings()
-        // The voice setup's band over the one Settings keeps underneath it.
-        compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(2)
-        assertOnlyPage(first, "opening the voice setup", Slot.VoiceBand)
-        pressBack()
-        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
-        assertOnlyPage(first, "closing the voice setup", Slot.Band)
-        compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
+        assertPages("back to Settings", Slot.Band)
 
         tab("emrys")
-        assertOnlyPage(first, "Home again", Slot.Stage)
+        assertPages("Home again", Slot.Stage)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
-    }
-
-    @Test
-    fun theVoiceSetupKeepsThePageWhenAWidgetOpensHome() {
-        compose.waitForIdle()
-        val page = webViews().single()
-        skipOnboarding()
-        tab("settings")
-        openVoiceSetupFromSettings()
-        assertOnlyPage(page, "opening the voice setup", Slot.VoiceBand)
-
-        // A widget's quick key switches the app under the voice setup to Home.
-        val quick = Intent(EmrysWidgets.ACTION_QUICK, Uri.parse("emrys://quick/MyDay"))
-        compose.runOnUiThread { InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(compose.activity, quick) }
-        compose.waitForIdle()
-        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
-        compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(1)
-        assertOnlyPage(page, "a widget opening Home under the voice setup", Slot.VoiceBand)
-
-        pressBack()
-        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
-        assertOnlyPage(page, "closing the voice setup over Home", Slot.Stage)
     }
 
     /** Taps a tab on a paused clock: the tap's state change is sent, and no frame runs until the test advances it. */
@@ -447,50 +379,80 @@ class AppFlowTest {
     }
 
     @Test
-    fun aQuickRoundTripHandsThePageBackToHome() {
-        compose.waitForIdle()
-        val page = webViews().single()
+    fun aQuickRoundTripLeavesOneRobotOnHome() {
         skipOnboarding()
         tab("emrys")
-        assertOnlyPage(page, "Home", Slot.Stage)
+        assertPages("Home", Slot.Stage)
 
         // Back to Home before the tab crossfade (220 ms) and the band's entrance finish.
         compose.mainClock.autoAdvance = false
         tapTabNow("settings")
         compose.mainClock.advanceTimeBy(100)
-        assertFalse("the band took the page", slotFrames().getValue(Slot.Stage).holds(page.drawnBounds()))
         tapTabNow("emrys")
         repeat(3) { compose.mainClock.advanceTimeByFrame() }
-        assertEquals("one robot page", listOf(page), webViews())
-        assertPageIn(page, Slot.Stage, "tapping Emrys mid-fade")
         compose.mainClock.autoAdvance = true
+        assertPages("tapping Emrys mid-fade", Slot.Stage)
     }
 
     @Test
     fun aRendererCrashBringsAFreshPageToTheSlotShowingIt() {
-        compose.waitForIdle()
-        val page = webViews().single()
         skipOnboarding()
         tab("settings")
-        assertOnlyPage(page, "Settings", Slot.Band)
+        val page = assertPages("Settings", Slot.Band).getValue(Slot.Band)
 
-        val gone = object : RenderProcessGoneDetail() {
-            override fun didCrash(): Boolean = true
-
-            override fun rendererPriorityAtExit(): Int = 0
-        }
-        compose.runOnUiThread { shadowOf(page).webViewClient.onRenderProcessGone(page, gone) }
-        compose.waitForIdle()
+        crash(page)
         assertTrue("the dead page is destroyed", shadowOf(page).wasDestroyCalled())
-        val fresh = webViews().single()
+        val fresh = assertPages("the renderer crash", Slot.Band).getValue(Slot.Band)
         assertNotSame(page, fresh)
-        assertOnlyPage(fresh, "the renderer crash", Slot.Band)
 
         // Commands wait for the fresh page; once it loads, Emrys's state is replayed there.
         assertNull(shadowOf(fresh).lastEvaluatedJavascript)
-        compose.runOnUiThread { shadowOf(fresh).webViewClient.onPageFinished(fresh, ROBOT_PAGE) }
-        compose.waitForIdle()
+        ready(fresh)
         assertEquals("""window.emrys && window.emrys.state("idle");""", shadowOf(fresh).lastEvaluatedJavascript)
+    }
+
+    @Test
+    fun aRendererThatKeepsCrashingSaysSoAndRetries() {
+        skipOnboarding()
+        tab("emrys")
+        repeat(MAX_ROBOT_CRASHES) { crash(webViews().single()) }
+        assertEquals("no page after $MAX_ROBOT_CRASHES crashes", emptyList<WebView>(), webViews())
+        compose.onNodeWithText(CRASHING).assertIsDisplayed()
+        shot("app-robot-crashing")
+
+        compose.onNodeWithText("Retry").performClick()
+        compose.onNodeWithText(CRASHING).assertDoesNotExist()
+        assertPages("Retry", Slot.Stage)
+    }
+
+    @Test
+    fun aPageThatFailsToLoadSaysWhyAndRetries() {
+        skipOnboarding()
+        tab("emrys")
+        val page = assertPages("Home", Slot.Stage).getValue(Slot.Stage)
+        val request = object : WebResourceRequest {
+            override fun getUrl(): Uri = Uri.parse(ROBOT_PAGE)
+
+            override fun isForMainFrame(): Boolean = true
+
+            override fun isRedirect(): Boolean = false
+
+            override fun hasGesture(): Boolean = false
+
+            override fun getMethod(): String = "GET"
+
+            override fun getRequestHeaders(): Map<String, String> = emptyMap()
+        }
+        val missing = WebResourceResponse("text/plain", "utf-8", 404, "blocked", null, null)
+        compose.runOnUiThread { shadowOf(page).webViewClient.onReceivedHttpError(page, request, missing) }
+        compose.onNodeWithText(NOT_LOADED).assertIsDisplayed()
+        shot("app-robot-not-loaded")
+
+        compose.onNodeWithText("Retry").performClick()
+        compose.onNodeWithText(NOT_LOADED).assertDoesNotExist()
+        val fresh = assertPages("Retry", Slot.Stage).getValue(Slot.Stage)
+        assertNotSame(page, fresh)
+        assertTrue("the failed page is destroyed", shadowOf(page).wasDestroyCalled())
     }
 
     @Test
@@ -505,30 +467,22 @@ class AppFlowTest {
     }
 
     @Test
-    fun commandsReachThePageOffHome() {
-        // Robolectric's WebView has no message listener, so the host takes the page as ready once it finishes loading.
+    fun commandsReachEveryRobot() {
         assertFalse(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))
-        compose.waitForIdle()
-        val page = webViews().single()
-        compose.runOnUiThread { shadowOf(page).webViewClient.onPageFinished(page, ROBOT_PAGE) }
-        assertEquals("""window.emrys && window.emrys.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
         skipOnboarding()
         tab("settings")
-        assertOnlyPage(page, "Settings", Slot.Band)
+        val band = assertPages("Settings", Slot.Band).getValue(Slot.Band)
+        assertNull("commands wait for the page", shadowOf(band).lastEvaluatedJavascript)
+        ready(band)
+        assertEquals("""window.emrys && window.emrys.state("idle");""", shadowOf(band).lastEvaluatedJavascript)
 
         compose.activity.emrys.listening(true)
         compose.waitForIdle()
-        assertEquals("""window.emrys && window.emrys.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
+        assertEquals("""window.emrys && window.emrys.state("listening");""", shadowOf(band).lastEvaluatedJavascript)
 
-        // Opening the voice setup frames Emrys for its band and replays the state there; only a replay
-        // overwrites the marker.
-        compose.runOnUiThread { page.evaluateJavascript(MARKER, null) }
-        assertEquals(MARKER, shadowOf(page).lastEvaluatedJavascript)
-        openVoiceSetupFromSettings()
-        assertEquals("""window.emrys && window.emrys.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
         compose.activity.emrys.listening(false)
         compose.waitForIdle()
-        assertEquals("""window.emrys && window.emrys.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
+        assertEquals("""window.emrys && window.emrys.state("idle");""", shadowOf(band).lastEvaluatedJavascript)
     }
 
     private fun miniStageScreens(suffix: String) {
@@ -537,8 +491,6 @@ class AppFlowTest {
         shot("app-activity-mini-stage$suffix")
         tab("settings")
         shot("app-settings-mini-stage$suffix")
-        openVoiceSetupFromSettings()
-        shot("app-voice-setup-mini-stage$suffix")
     }
 
     @Test

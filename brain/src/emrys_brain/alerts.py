@@ -23,8 +23,6 @@ _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
 _WORD_START = re.compile(r"(?<!^)(?=[A-Z])")
 _NOT_CHECKED = "Emrys can't tell what this does, so it asks first."
 _ON_TELNYX = "Runs on your Telnyx account."
-_NO_POLICY = "Emrys has no rule for this tool, so it asks first."
-_TAP_CHECKED = "Emrys checks the button still says this before it taps."
 
 
 class FieldBlock(TypedDict):

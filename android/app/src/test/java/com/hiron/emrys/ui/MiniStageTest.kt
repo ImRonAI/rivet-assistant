@@ -9,8 +9,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -45,7 +43,7 @@ class MiniStageTest {
 
     private val online = EmrysState(connection = Connection.Online)
 
-    private fun band(state: EmrysState = online, visible: MutableState<Boolean> = mutableStateOf(true), onOpen: (() -> Unit)? = null) {
+    private fun band(state: EmrysState = online, visible: MutableState<Boolean> = mutableStateOf(true), onOpen: () -> Unit = {}) {
         val runtime = compose.activity.emrys
         compose.setContent {
             EmrysTheme {
@@ -86,7 +84,6 @@ class MiniStageTest {
             Activity.Working to "Emrys is working on it.",
             Activity.Texting to "Emrys is writing a text.",
             Activity.Emailing to "Emrys is writing an email.",
-            Activity.Calling to "Emrys is on a call.",
             Activity.Waiting to "Emrys needs your OK.",
             Activity.Done to "Emrys is done.",
             Activity.Failed to "Emrys didn't finish.",
@@ -109,12 +106,6 @@ class MiniStageTest {
         assertEquals("Open Emrys", cover.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         cover.performClick()
         assertEquals(1, opened)
-    }
-
-    @Test
-    fun withoutOpenItIsNotAKey() {
-        band()
-        compose.onNodeWithContentDescription("Emrys is ready.").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
     }
 
     @Test

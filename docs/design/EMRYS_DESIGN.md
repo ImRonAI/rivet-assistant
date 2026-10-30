@@ -66,8 +66,8 @@ visor glow. Destructive confirmation uses coral text and a coral hairline, never
 
 ## 4. Type
 
-- **Instrument Serif** (`Display`, regular and italic): greetings, screen titles, onboarding and voice-setup
-  headlines, the approval headline, quotes (the message Emrys will send), counters and the wordmark. Sentence case,
+- **Instrument Serif** (`Display`, regular and italic): greetings, screen titles, onboarding
+  headlines, the approval headline, quotes (the message Emrys will send) and the wordmark. Sentence case,
   tight negative tracking. Italic for one emphasised word at most.
 - **Geist** (`Sans`): all interface text. Medium for labels and titles, Regular for body. No SemiBold except where a
   small label must hold its weight on glass.
@@ -130,8 +130,6 @@ rendered as a refined collectible, not a toy.
   `line`-weight darker strokes, halo piping on the gauntlets and boots. No orange anywhere.
 - **Stage:** replace the calibration turntable and its degree ticks/labels with a soft spotlight pool and two faint
   concentric rings. The mood glow stays and follows the same states.
-- **HUD cards on the stage** (reasoning trace, email, phone/text, video): glass cards in the Noir style, Geist text,
-  sentence case ("Thinking", not "REASONING TRACE"), status dots instead of tag plates.
 
 ## 9. The stage, the Matrix and ElevenLabs UI
 
@@ -156,9 +154,9 @@ and styled from our own code. Visual priority on the stage: **the robot first, t
 - Every action, state, screen, setting, sheet, notification and flow behaves exactly as before.
 - Every test tag, semantics role, content description and `contentDescription`-based lookup stays (renamed only
   where its text says Emrys).
-- The robot bridge API (`window.emrys.state/trace/email/thread/say/mouth/quiet/viseme/theme/focus/play/beat/moves`,
-  the `ready` message, `window.__emrys` test hook) keeps its names, arguments and behaviour; additions are allowed.
-- All 40+ robot moves still play and read clearly; all `STATE_MOVE` states and moods still apply.
+- The robot bridge API (`window.emrys.state/mouth/quiet/viseme/theme/focus` and the `ready` message) keeps its names,
+  arguments and behaviour; additions are allowed.
+- Every move the app reaches still plays and reads clearly; all `STATE_MOVE` states and moods still apply.
 - No new fakes, stubs or demo data in product code.
 
 ## 11. Verification

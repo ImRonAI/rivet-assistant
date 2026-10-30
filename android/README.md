@@ -12,7 +12,8 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 ```
 
 `app/src/main/assets/emrys/index.html` is generated from `robot/Emrys_the_Robot.html` and `robot/bridge.js`:
-`python3 tools/build_robot_asset.py` rebuilds it, and `--check` fails if it is stale.
+`python3 tools/build_robot_asset.py` rebuilds it, and `--check` fails if it is stale or if `bridge.js` fails
+TypeScript's strict type check (`robot/tsconfig.json`, TypeScript 7.0.2 through `npx`, so it needs Node).
 
 ### The stage layer (ElevenLabs UI)
 
@@ -55,12 +56,12 @@ The Orb's noise texture is bundled (`assets/emrys/vendor/perlin-noise.png`, prov
 There is no emulator in the build environment, so these are checked on a real phone:
 
 - [ ] Robot renders, follows light/dark, waves through states while a turn runs; mouth moves while replies are read aloud.
-- [ ] Emrys stays in view on Activity, Settings and the voice setup (a short band under the header); tapping the band on Activity or Settings opens Home.
+- [ ] Emrys stays in view on Activity and Settings (a short band under the header); tapping the band on Activity or Settings opens Home.
 - [ ] Switching tabs never reloads the robot (no stage flash on Home after the first load); the mouth keeps moving with read-aloud replies and ElevenLabs speech on every tab.
-- [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway and showreel stay off.
+- [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway stays off.
 - [ ] The stage layer: a soft Orb glows behind Emrys in the mood colour (also in airplane mode), the caption reads
-      "Thinking", "Working", … while it works, the Matrix lights the chest, visor, gauntlets and floor, and the mini
-      band shows the state's glyph; in an ElevenLabs voice session the Orb follows the agent's voice.
+      "Thinking", "Working", … while it works, and the Matrix lights the chest, visor, gauntlets and floor; in an
+      ElevenLabs voice session the Orb follows the agent's voice.
 - [ ] "What's on my calendar tomorrow?" lists events (calendar_list).
 - [ ] "Text <contact> I'm running late": contacts_search, then an approval card; Approve sends; the text appears in Messages.
 - [ ] Deny the same request: nothing is sent and Emrys says so.

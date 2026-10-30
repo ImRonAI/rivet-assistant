@@ -9,15 +9,15 @@ import { StageLayer } from "./stage"
  * the stage's first child, so the Orb sits under the robot's svg; the front layer is its last, for the caption and the
  * band glyph. A page without a stage is left alone.
  */
-const stage = document.querySelector<HTMLElement>(".stage")
-if (stage && window.emrys) {
+const stage = document.querySelector(".stage")
+if (stage instanceof HTMLElement && window.emrys) {
   const back = document.createElement("div")
   back.className = "emrys-layer"
-  back.dataset.emrys = "back"
+  back.setAttribute("data-emrys", "back")
   stage.prepend(back)
   const front = document.createElement("div")
   front.className = "emrys-layer"
-  front.dataset.emrys = "front"
+  front.setAttribute("data-emrys", "front")
   stage.append(front)
   createRoot(back).render(
     <StrictMode>

@@ -24,8 +24,6 @@ from urllib.parse import quote
 
 from strands.storage import InMemoryStorage, Storage
 
-from .legacy import read_with_legacy
-
 logger = logging.getLogger(__name__)
 
 Decision = Literal["allow", "deny"]
@@ -311,7 +309,7 @@ class StandingRules:
         """Read the stored rules; an unreadable document is set aside and the session starts with none."""
         async with self._lock:
             self._rules, self._revision = {}, 0
-            raw = await read_with_legacy(self._backend, self.key)
+            raw = await self._backend.read(self.key)
             if raw is None:
                 return
             document = _document(raw)

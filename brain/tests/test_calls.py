@@ -18,7 +18,6 @@ from emrys_brain.approvals import EmrysApprovals
 from emrys_brain.calls import (
     ASSISTANT_NAME,
     CALL_ID,
-    LEGACY_ASSISTANT_NAME,
     POLICIES,
     CallInbox,
     CallLine,
@@ -159,22 +158,6 @@ def test_running_setup_again_updates_the_same_assistant_and_leaves_the_number() 
     assert [name for name, _ in telnyx.writes] == ["update_assistant_public_assistants"]
 
 
-def test_an_assistant_set_up_before_the_rename_is_updated_and_renamed_not_duplicated() -> None:
-    before = {
-        "id": "assistant-rivet",
-        "name": LEGACY_ASSISTANT_NAME,
-        "tags": ["rivet"],
-        "telephony_settings": {"default_texml_app_id": "texml-rivet"},
-    }
-    telnyx = FakeTelnyx(connection_id="texml-rivet", assistants=[before])
-    outcome = _run(telnyx)
-    assert outcome["ok"] is True and outcome["moved_from"] is None
-    assert [name for name, _ in telnyx.writes] == ["update_assistant_public_assistants"]
-    update = telnyx.writes[0][1]
-    assert update["assistant_id"] == "assistant-rivet"
-    assert update["name"] == ASSISTANT_NAME and "emrys" in update["tags"]
-
-
 def test_an_unknown_number_writes_nothing() -> None:
     telnyx = FakeTelnyx()
     telnyx.numbers = []
@@ -305,11 +288,8 @@ def test_telnyx_webhooks_reach_the_phone_and_the_inbox(tmp_path: Path) -> None:
         with client.websocket_connect("/v1/sessions/phone-1", headers=AUTH) as socket:
             start = {"data": {"payload": CALLER}}
             response = client.post(f"/v1/calls/phone-1/{secret}/start", json=start)
-            variables = response.json()["dynamic_variables"]
-            call_id = variables["emrys_call_id"]
+            call_id = response.json()["dynamic_variables"]["emrys_call_id"]
             assert CALL_ID.match(call_id)
-            # An assistant set up before the rename still reads the id under its old name.
-            assert variables["rivet_call_id"] == call_id
             answering = _until(socket, "call.answering")
             assert answering == {"type": "call.answering", "call_id": call_id, "from": "+18015550100", "verified": True}
             body = {

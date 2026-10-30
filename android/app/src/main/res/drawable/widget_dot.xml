@@ -1,13 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A status LED with a faint bloom; the widget tints both to the status colour. -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape android:shape="oval">
-            <size android:width="12dp" android:height="12dp" />
-            <solid android:color="#38FFFFFF" />
-        </shape>
-    </item>
-    <item android:left="2.5dp" android:top="2.5dp" android:right="2.5dp" android:bottom="2.5dp">
-        <shape android:shape="oval"><solid android:color="#FFFFFFFF" /></shape>
-    </item>
-</layer-list>
+<!-- A status dot; the widget tints it to the status colour. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <size android:width="6dp" android:height="6dp" />
+    <solid android:color="#FFFFFFFF" />
+</shape>

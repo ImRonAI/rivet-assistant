@@ -1,7 +1,7 @@
 import type { Frame } from "@/components/ui/matrix"
 
-import { anim, memo, once, type Program } from "./program"
-import { edge, hash, loop, paint } from "./raster"
+import { anim, cache, once, type Program } from "./program"
+import { edge, loop, paint } from "./raster"
 
 /**
  * The armor's light: the gauntlets (3×11 forearm plates, column 0 at the wrist) and the mouth (3×15 across the
@@ -10,11 +10,14 @@ import { edge, hash, loop, paint } from "./raster"
 export const GAUNTLET = { rows: 3, cols: 11 }
 export const MOUTH = { rows: 3, cols: 15 }
 
-const WORK = new Set(["thinking", "searching", "working", "texting", "emailing", "calling", "video"])
+const programs = cache<Program>()
+const mouths = cache<Frame>()
+
+const WORK = new Set(["thinking", "searching", "working", "texting", "emailing", "calling"])
 
 /** A light running from wrist to elbow with a soft tail, echoing the chest; `side` offsets the right arm. */
 function chase(period: number, side: number, peak: number): Program {
-  return memo(`chase${period}:${side}:${peak}`, () =>
+  return programs(`chase${period}:${side}:${peak}`, () =>
     anim(
       `chase${period}:${side}:${peak}`,
       loop(GAUNTLET.rows, GAUNTLET.cols, period, 8, (t) => {
@@ -32,9 +35,8 @@ function chase(period: number, side: number, peak: number): Program {
 
 /** The gauntlet for a state: an ambient chase, quicker while Emrys works, a slow breath while it waits. */
 export function gauntletFor(state: string, side: 0 | 1): Program {
-  if (state === "sleeping") return memo("gauntlet-off", () => anim("gauntlet-off", [paint(3, 11, () => 0)], 1))
   if (state === "waiting")
-    return memo(`gauntlet-wait${side}`, () =>
+    return programs(`gauntlet-wait${side}`, () =>
       anim(
         `gauntlet-wait${side}`,
         loop(3, 11, 3, 6, (t) => (_, y) => (y === 1 ? 0.2 + 0.18 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 3)) : 0.06)),
@@ -53,24 +55,9 @@ export function bootGauntlet(then: Program): Program {
   return once("gauntlet:boot", frames, 10, then)
 }
 
-/** A beat VU along the forearm during music: it fills from the wrist on each beat and falls away. */
-export function beatVu(beats: number): Frame {
-  const cycle = memo("beat-vu", () => {
-    const frames: Frame[] = []
-    for (let beat = 0; beat < 4; beat++)
-      for (let s = 0; s < 4; s++) {
-        const reach = (0.55 + 0.45 * hash(beat, 3, 23)) * (1 - s / 4) ** 1.3 * GAUNTLET.cols
-        frames.push(paint(3, 11, (x) => (x < reach - 1 ? 0.45 : x < reach ? 0.75 : 0.05)))
-      }
-    return frames
-  })
-  const i = Math.floor(beats * 4)
-  return cycle[((i % cycle.length) + cycle.length) % cycle.length]
-}
-
 /* The mouth. Each viseme (the Oculus set the page's lip sync uses) is a dot-matrix shape on 3 rows: [row, from, to, v]. */
 type Run = [number, number, number, number]
-const SHAPES: Record<string, Run[]> = {
+const SHAPES: Partial<Record<string, Run[]>> = {
   sil: [[1, 4, 10, 0.35]],
   PP: [[1, 3, 11, 0.8]],
   FF: [[1, 4, 10, 0.25], [2, 4, 10, 0.75]],
@@ -89,13 +76,12 @@ const SHAPES: Record<string, Run[]> = {
   /* resting expressions */
   smile: [[0, 3, 3, 0.55], [0, 11, 11, 0.55], [1, 4, 4, 0.55], [1, 10, 10, 0.55], [2, 5, 9, 0.55]],
   frown: [[2, 3, 3, 0.45], [2, 11, 11, 0.45], [1, 4, 4, 0.45], [1, 10, 10, 0.45], [0, 5, 9, 0.45]],
-  rest: [[1, 6, 8, 0.22]],
   blink: [[0, 2, 12, 0.7], [1, 1, 13, 0.7], [2, 2, 12, 0.7]],
 }
-const ALIAS: Record<string, string> = { ih: "I", oh: "O", ou: "U", e: "E", i: "I", o: "O", u: "U" }
+const ALIAS: Partial<Record<string, string>> = { ih: "I", oh: "O", ou: "U", e: "E", i: "I", o: "O", u: "U" }
 
 /** How open each viseme is, for the speech envelope when the app sends no real level. */
-export const OPEN: Record<string, number> = {
+export const OPEN: Partial<Record<string, number>> = {
   sil: 0, PP: 0.25, FF: 0.35, TH: 0.4, DD: 0.5, kk: 0.5, nn: 0.45, CH: 0.55, SS: 0.55, RR: 0.6,
   aa: 1, E: 0.8, I: 0.7, O: 0.9, U: 0.7,
 }
@@ -106,15 +92,16 @@ export const visemeName = (key: string) => (key in SHAPES ? key : (ALIAS[key] ??
 export function mouthShape(key: string, weight = 1): Frame {
   const name = visemeName(key)
   const level = Math.round(Math.max(0, Math.min(1, weight)) * 4)
-  return memo(`mouth:${name}:${level}`, () => {
+  return mouths(`mouth:${name}:${level}`, () => {
     const k = name === "sil" || !(name in OPEN) ? 1 : 0.45 + 0.55 * (level / 4)
-    const frame = paint(MOUTH.rows, MOUTH.cols, () => 0)
-    for (const [row, from, to, v] of SHAPES[name]) for (let x = from; x <= to; x++) frame[row][x] = Math.max(frame[row][x], v * k)
-    return frame
+    const runs = SHAPES[name] ?? []
+    return paint(MOUTH.rows, MOUTH.cols, (x, y) =>
+      runs.reduce((v, [row, from, to, w]) => (row === y && x >= from && x <= to ? Math.max(v, w * k) : v), 0)
+    )
   })
 }
 
-/** The mouth at rest for a state: calm, a smile when done, a frown when failed, barely there asleep. */
+/** The mouth at rest for a state: calm, a smile when done, a frown when failed. */
 export function restingMouth(state: string): Frame {
-  return mouthShape(state === "done" ? "smile" : state === "failed" ? "frown" : state === "sleeping" ? "rest" : "sil")
+  return mouthShape(state === "done" ? "smile" : state === "failed" ? "frown" : "sil")
 }

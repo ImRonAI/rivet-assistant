@@ -7,10 +7,12 @@ import com.hiron.emrys.core.emrys
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,7 +30,7 @@ class AgentApprovalTest {
 
     private suspend fun answered(answer: Protocol.Answer): Protocol.Answer = kotlinx.coroutines.coroutineScope {
         val request = request()
-        val waiting = async { runtime.approveOnPhone(request, timeoutMs = 10_000) }
+        val waiting = async { runtime.approveOnPhone(request) }
         withTimeout(5_000) { while (runtime.state.value.approvals.none { it.id == request.id }) yield() }
         runtime.answer(AgentTools.LANE, mapOf(request.id to answer))
         waiting.await()
@@ -46,9 +48,9 @@ class AgentApprovalTest {
     }
 
     @Test
-    fun noAnswerInTimeIsANo() = runBlocking {
+    fun aRequestTheAgentStopsWaitingForLeavesTheSheet() = runBlocking {
         val request = request()
-        assertFalse(runtime.approveOnPhone(request, timeoutMs = 50).approved)
+        assertNull(withTimeoutOrNull(50) { runtime.approveOnPhone(request) })
         assertTrue(runtime.state.value.approvals.isEmpty())
         assertEquals(EmrysStore.EXPIRED, runtime.state.value.log.last().text)
     }

@@ -1,6 +1,5 @@
 package com.hiron.emrys.core
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,8 +9,8 @@ class RobotDirectorTest {
     @Test
     fun argumentsAreJsonEncodedNeverSpliced() {
         val hostile = "\");alert(1);//"
-        val script = RobotCommand("say", listOf(hostile)).script()
-        val prefix = "window.emrys && window.emrys.say("
+        val script = RobotCommand("state", listOf(hostile)).script()
+        val prefix = "window.emrys && window.emrys.state("
         assertTrue(script.startsWith(prefix) && script.endsWith(");"))
         // The whole argument is one JSON string literal that decodes back to the input.
         val literal = script.removePrefix(prefix).removeSuffix(");")
@@ -20,16 +19,15 @@ class RobotDirectorTest {
 
     @Test
     fun mixedArgumentsEncode() {
-        val script = RobotCommand("mouth", listOf("hello", 0.5, null, true)).script()
-        assertEquals("""window.emrys && window.emrys.mouth("hello",0.5,null,true);""", script)
+        val script = RobotCommand("mouth", listOf("hello", 0.5)).script()
+        assertEquals("""window.emrys && window.emrys.mouth("hello",0.5);""", script)
     }
 
     @Test
-    fun snapshotReplaysTraceAndState() {
-        val state = EmrysState(activity = Activity.Searching, trace = listOf(TraceStep("search", "q", "cy")))
-        val commands = RobotDirector.diff(null, state)
-        assertEquals(listOf("trace", "state"), commands.map { it.method })
-        assertEquals("searching", commands.last().args.single())
+    fun snapshotReplaysTheState() {
+        val commands = RobotDirector.diff(null, EmrysState(activity = Activity.Searching))
+        assertEquals(listOf("state"), commands.map { it.method })
+        assertEquals("searching", commands.single().args.single())
     }
 
     @Test
@@ -50,18 +48,10 @@ class RobotDirectorTest {
     }
 
     @Test
-    fun smsCallShowsTheThreadWithTheRecipient() {
-        val commands = RobotDirector.forDeviceCall("sms_send", JSONObject().put("to", "Mom").put("body", "On my way"))
-        assertEquals(listOf("thread", "state"), commands.map { it.method })
-        assertTrue(commands.first().script().contains("On my way"))
-        assertTrue(commands.first().script().contains("\"Mom\""))
-    }
-
-    @Test
-    fun emailCallFillsTheEmailCard() {
-        val commands = RobotDirector.forDeviceCall("email_draft", JSONObject().put("to", "a@b.co").put("subject", "Hi").put("body", "x".repeat(200)))
-        val card = commands.first().args.single() as JSONObject
-        assertEquals("a@b.co", card.getString("to"))
-        assertEquals(3, card.getJSONArray("lines").length())
+    fun theStageHearsWhoseTurnItIsAndTheAgentsLevel() {
+        assertEquals("""window.emrys && window.emrys.voice("speaking");""", RobotDirector.voice(VoiceTurn.Speaking).script())
+        assertEquals("""window.emrys && window.emrys.voice("listening");""", RobotDirector.voice(VoiceTurn.Listening).script())
+        assertEquals("""window.emrys && window.emrys.voice("none");""", RobotDirector.voice(VoiceTurn.None).script())
+        assertEquals("window.emrys && window.emrys.level(0.42);", RobotDirector.level(0.42f).script())
     }
 }

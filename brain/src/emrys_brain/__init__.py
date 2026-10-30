@@ -6,14 +6,11 @@ across hangs, context overflow, provider outages, MCP drops, and process restart
 """
 
 from emrys_brain.config import BrainSettings
-from emrys_brain.legacy import adopt_environment
 from emrys_brain.models.perplexity import (
     PerplexityAgentModel,
     PerplexityTransientError,
     build_perplexity_model,
 )
-
-adopt_environment()
 
 __all__ = [
     "BrainSettings",

@@ -1,26 +1,22 @@
 import { AnimatePresence, motion } from "motion/react"
 
 import { ShimmeringText } from "@/components/ui/shimmering-text"
-import { useHeld, useSettled, WORKING, type StageInfo } from "@/emrys"
+import { WORKING, type StageInfo } from "@/emrys"
 
 const INK2 = "#9E9DA4"
 const PORCELAIN = "#F3F2EE"
 
 /**
  * The big stage's one-line caption while Emrys works: a status dot in the mood colour and the activity in Geist,
- * ink2 with a porcelain shimmer, low on the stage. It steps aside while a glass card is on the stage (and for a
- * moment after, so the card's own fades don't flicker it) and on a squeezed stage, and waits a moment after each
- * change of state, so a state whose move brings a card never flashes its caption first.
+ * ink2 with a porcelain shimmer, low on the stage. It steps aside on a squeezed stage and while Emrys speaks.
  */
 export function Caption({ info, reduced }: { info: StageInfo; reduced: boolean }) {
   const text = WORKING[info.state]
-  const cardAway = useHeld(!info.hud, 1200)
-  const settled = useSettled(info.state, 900)
-  const shown = !!text && !info.short && cardAway && settled && !info.talking
+  const shown = text !== undefined && !info.short && !info.talking
   return (
     <div className="absolute inset-x-0 bottom-[max(14px,5%)] flex justify-center px-4" data-emrys="caption-slot">
       <AnimatePresence mode="wait">
-        {shown && (
+        {shown && text && (
           <motion.div
             key={text}
             data-emrys="caption"

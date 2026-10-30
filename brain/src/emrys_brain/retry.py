@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import override
 
 from strands import ModelRetryStrategy
 from strands.types.exceptions import ModelThrottledException
@@ -35,6 +36,7 @@ class TransientRetry(ModelRetryStrategy):
         self.max_delay = max_delay
         self._on_backoff = on_backoff
 
+    @override
     def is_retryable(self, exception: Exception) -> bool:
         """Throttling and typed transient Perplexity errors; bad requests and overflow are not retried here."""
         retryable = isinstance(exception, ModelThrottledException | PerplexityTransientError)

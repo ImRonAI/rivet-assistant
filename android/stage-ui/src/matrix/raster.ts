@@ -45,17 +45,19 @@ export function segment(px: number, py: number, ax: number, ay: number, bx: numb
 
 /** Distance to a polyline, drawn only up to `progress` (0..1) of its length, for strokes that write themselves on. */
 export function stroke(points: [number, number][], progress = 1) {
-  const lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]))
-  const total = lengths.reduce((a, b) => a + b, 0)
+  const segments = points.slice(1).map((b, i) => {
+    const a = points[i] ?? b
+    return { a, b, length: Math.hypot(b[0] - a[0], b[1] - a[1]) }
+  })
+  const total = segments.reduce((sum, s) => sum + s.length, 0)
   return (x: number, y: number) => {
     let left = total * clamp(progress)
     let best = Infinity
-    for (let i = 0; i < lengths.length && left > 0; i++) {
-      const [ax, ay] = points[i]
-      const [bx, by] = points[i + 1]
-      const k = Math.min(1, left / lengths[i])
-      best = Math.min(best, segment(x, y, ax, ay, ax + (bx - ax) * k, ay + (by - ay) * k))
-      left -= lengths[i]
+    for (const { a, b, length } of segments) {
+      if (left <= 0) break
+      const k = Math.min(1, left / length)
+      best = Math.min(best, segment(x, y, a[0], a[1], a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k))
+      left -= length
     }
     return best
   }
@@ -101,4 +103,11 @@ export function wipe(from: Frame, to: Frame, steps: number): Frame[] {
       })
     )
   })
+}
+
+/** The frame at index `i` of a list that has frames, held to its ends. */
+export function nth(frames: readonly Frame[], i: number): Frame {
+  const frame = frames[Math.max(0, Math.min(frames.length - 1, i))]
+  if (!frame) throw new Error("an empty frame list")
+  return frame
 }

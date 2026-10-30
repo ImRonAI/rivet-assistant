@@ -10,14 +10,23 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import TypedDict
 
 from strands.tools import PythonAgentTool
+from strands.types.tools import ToolResult, ToolResultContent, ToolSpec, ToolUse
 
 logger = logging.getLogger(__name__)
 
-Sender = Callable[[dict[str, Any]], Awaitable[None]]
+Sender = Callable[[dict[str, object]], Awaitable[None]]
+
+
+class DeviceResult(TypedDict, total=False):
+    """The phone's answer to a ``device.call``."""
+
+    ok: bool
+    content: list[ToolResultContent]
+    data: object
 
 
 class DeviceUnavailableError(RuntimeError):
@@ -30,7 +39,7 @@ class DeviceBridge:
     def __init__(self, session_id: str = "") -> None:
         self.session_id = session_id
         self._send: Sender | None = None
-        self._pending: dict[str, tuple[asyncio.Future[dict[str, Any]], dict[str, Any]]] = {}
+        self._pending: dict[str, tuple[asyncio.Future[DeviceResult], dict[str, object]]] = {}
 
     @property
     def connected(self) -> bool:
@@ -48,12 +57,12 @@ class DeviceBridge:
         if send is None or self._send is send:
             self._send = None
 
-    async def call(self, tool: str, tool_input: Any, action_id: str, timeout: float) -> dict[str, Any]:
+    async def call(self, tool: str, tool_input: object, action_id: str, timeout: float) -> DeviceResult:
         """Run ``tool`` on the phone and return its result payload."""
         if self._send is None:
             raise DeviceUnavailableError("the phone is not connected")
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        message = {"type": "device.call", "action_id": action_id, "tool": tool, "input": tool_input}
+        future: asyncio.Future[DeviceResult] = asyncio.get_running_loop().create_future()
+        message: dict[str, object] = {"type": "device.call", "action_id": action_id, "tool": tool, "input": tool_input}
         self._pending[action_id] = (future, message)
         try:
             await self._send(message)
@@ -61,17 +70,17 @@ class DeviceBridge:
         finally:
             self._pending.pop(action_id, None)
 
-    def resolve(self, action_id: str, result: Mapping[str, Any]) -> bool:
+    def resolve(self, action_id: str, result: DeviceResult) -> bool:
         """Deliver a ``device.result``; returns False when nothing waits for it (late or duplicate)."""
         entry = self._pending.get(action_id)
         if entry is None or entry[0].done():
             return False
-        entry[0].set_result(dict(result))
+        entry[0].set_result(result.copy())
         return True
 
 
 def device_tool(
-    bridge: DeviceBridge, name: str, description: str, input_schema: dict[str, Any], *, timeout: float = 60.0
+    bridge: DeviceBridge, name: str, description: str, input_schema: dict[str, object], *, timeout: float = 60.0
 ) -> PythonAgentTool:
     """A tool the model calls like any other, executed by the phone.
 
@@ -79,7 +88,7 @@ def device_tool(
     tool result content, otherwise ``data`` is sent as JSON text.
     """
 
-    async def run(tool_use: Any, **_: Any) -> Any:
+    async def run(tool_use: ToolUse, **_: object) -> ToolResult:
         tool_use_id = tool_use["toolUseId"]
         try:
             result = await bridge.call(name, tool_use.get("input") or {}, tool_use_id, timeout)
@@ -100,9 +109,9 @@ def device_tool(
             "content": content,
         }
 
-    spec = {"name": name, "description": description, "inputSchema": {"json": input_schema}}
-    return PythonAgentTool(name, spec, run)  # type: ignore[arg-type]
+    spec: ToolSpec = {"name": name, "description": description, "inputSchema": {"json": input_schema}}
+    return PythonAgentTool(name, spec, run)
 
 
-def _error(tool_use_id: str, text: str) -> dict[str, Any]:
+def _error(tool_use_id: str, text: str) -> ToolResult:
     return {"toolUseId": tool_use_id, "status": "error", "content": [{"text": text}]}

@@ -14,13 +14,11 @@ android {
         applicationId = "com.hiron.emrys"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.4.0"
+        versionCode = 13
+        versionName = "0.5.0"
         // Ready-to-use defaults from emrys.local.properties (never committed); all stay editable in Settings.
         val local = Properties().apply {
-            (rootProject.file("emrys.local.properties").takeIf { it.exists() }
-                // A checkout set up before the rename still has its defaults under the old name.
-                ?: rootProject.file("rivet.local.properties").takeIf { it.exists() })?.inputStream()?.use { load(it) }
+            rootProject.file("emrys.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         fun baked(key: String) = "\"" + local.getProperty(key, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         buildConfigField("String", "DEFAULT_BRAIN_URL", baked("brainUrl"))
@@ -66,6 +64,10 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        allWarningsAsErrors.set(true)
+        extraWarnings.set(true)
+        progressiveMode.set(true)
+        freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
 
@@ -81,7 +83,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
     implementation(libs.okhttp)

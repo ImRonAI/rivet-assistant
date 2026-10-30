@@ -4,22 +4,19 @@ import { createPortal } from "react-dom"
 import { Matrix } from "@/components/ui/matrix"
 import { Caption } from "@/caption"
 import { Halo, hasWebGL2 } from "@/halo"
-import { isMusic } from "@/matrix/floor"
 import { Panel } from "@/matrix/panel"
 import { emblemShow, floorShow, gauntletShow, mouthShow, type Moment } from "@/matrix/show"
 import { SlotPortal, SLOTS, slotBox, useSlotRoots, useSlotStates, type SlotName } from "@/matrix/slots"
-import { readScene, useDarkClass, usePageVisible, useReducedMotion, useStageInfo, WORKING, type StageInfo } from "@/emrys"
+import { useDarkClass, usePageVisible, useReducedMotion, useStageInfo, WORKING, type StageInfo } from "@/emrys"
 
 /** How long the boot show runs on a freshly loaded page (docs/design/EMRYS_MATRIX.md §5). */
 const BOOT_MS = 2200
-const CALM: Record<string, string> = {
+const CALM: Partial<Record<string, string>> = {
   idle: "Ready",
-  greeting: "Saying hello",
   listening: "Listening",
   waiting: "Waiting on your OK",
   done: "Done",
   failed: "Something went wrong",
-  sleeping: "Asleep",
 }
 
 const words = (info: StageInfo) => (info.talking ? "Speaking" : (WORKING[info.state] ?? CALM[info.state] ?? "Ready"))
@@ -51,7 +48,7 @@ function BandGlyph({ info, moment, paused }: { info: StageInfo; moment: Moment; 
       className="emrys-matrix absolute"
       style={{ left, top: (info.height - glyph) / 2, width: glyph, height: glyph }}
     >
-      <Panel rows={7} cols={7} size={size} gap={gap} show={emblemShow(moment, 7)} wipes paused={paused} label={`Emrys: ${words(info)}`} />
+      <Panel rows={7} cols={7} size={size} gap={gap} show={emblemShow(moment, 7)} wipes paused={paused} label={`Emrys: ${words(info)}`} brightness={1} />
     </div>
   )
 }
@@ -76,13 +73,9 @@ export function StageLayer({ stage, front }: { stage: HTMLElement; front: HTMLEl
     return () => clearTimeout(timer)
   }, [booting])
 
-  const scene = readScene()
-  const move = scene?.move ?? info.move
   const moment: Moment = {
     state: info.state,
     talking: info.talking,
-    move,
-    music: isMusic(move),
     reduced,
     lowFx: info.lowFx,
     short: info.short,

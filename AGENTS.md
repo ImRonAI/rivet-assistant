@@ -7,20 +7,20 @@ Emrys is an Android phone assistant built by Ron AI (founder Tim Hunter, https:/
 support@hi-ron.com). It handles texts, email, calls, apps, reminders and tasks. Anything that sends, buys,
 changes or deletes waits for the user's approval. Its face is the Emrys robot (`android/robot/Emrys_the_Robot.html`).
 
-## Status (2026-10-28)
+## Status (2026-10-30)
 
 | Area | State |
 |---|---|
-| App | **0.4.0** (versionCode 7) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): the robot kept in view on every screen (a mini stage on other tabs), tasks 3 and 4: plain alerts with "Don't ask again", standing approval rules, one notification per call, grouped notifications and recommended settings, on top of the v0.3 interface and the ElevenLabs agents. Release APK built and verified. Not yet tested on a physical phone; there is no emulator in the build container. The brain on Fly does not run this code yet: the app and the brain ship together (rules messages need the new brain). |
-| Emrys rename and Noir facelift | Local branch `design/facelift`, uncommitted (2026-10-29): Rivet is renamed Emrys everywhere in code — app ID `com.hiron.emrys` (it installs as a new app; existing installs keep running as Rivet until removed), Kotlin packages and classes, the robot bridge (`window.emrys`, `EmrysHost`), `assets/emrys/`, the brain package `emrys_brain`, `EMRYS_*` settings, storage paths and the call assistant's name, tag and call-id variable — and the whole interface is redesigned (`docs/design/EMRYS_DESIGN.md`, `docs/design/EMRYS_MATRIX.md`). The brain still reads the pre-rename names (`brain/src/emrys_brain/legacy.py`: `RIVET_*` secrets, `session/<id>/rivet/` files, `memory/rivet/` memories carried over once; `calls.py`: the old assistant is found and renamed, and `rivet_call_id` is still answered), and `deploy_fly.sh` keeps an existing `RIVET_DEVICE_TOKEN` so the phone stays paired. Live resources keep their old names until the owner renames them: the Fly app `rivet-assistant` and its URL, the volume `rivet_data`, the repository `ImRonAI/rivet-assistant`, the ElevenLabs agents' prompts and the live Telnyx assistant (renamed on the next call answering setup). |
-| Brain on Fly | `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, the owner's personal Fly organization) runs the brain with the ElevenLabs session endpoint (deployed 2026-10-28; `/healthz` ok, both agent credentials verified live). `EMRYS_DEVICE_TOKEN` and `ELEVENLABS_API_KEY` are set; **`PERPLEXITY_API_KEY` and `HORIZON_API_KEY` are not yet**, so chat and Telnyx don't work there until the owner sets them. Call answering still points at the old app `rivet-brain-hiron`, which keeps running until the owner shuts it down. Redeploy with `brain/scripts/deploy_fly.sh` and `FLY_LOCAL_BUILD=1` (Fly's remote builder isn't reachable from cloud sessions). If Docker Hub rate-limits the base image, pull `mirror.gcr.io/library/python:3.12-slim` and tag it `python:3.12-slim` first. |
+| Emrys | **0.5.0** (versionCode 13, app ID `com.hiron.emrys`) on branch `design/facelift`, a draft PR into `ccr-22d59ed7-dzijhh`: upstream 0.4.5 merged in with every behaviour change kept, Rivet renamed Emrys everywhere in code, and the Noir redesign with the new robot and the ElevenLabs Matrix, Orb and ShimmeringText on its stage (see the addendum at the end). It installs as a new app next to Rivet. |
+| App | **0.4.5** (versionCode 12) on branch `ccr-22d59ed7-dzijhh` (draft PR #3): both ElevenLabs agents have the 18 phone tools, and their sends, calls, replies, calendar adds and commit taps wait on the approval sheet; a connection that opens always goes online (the gateway client stores its socket before OkHttp can report it open, so `resume` and the queue are never skipped); the simulations are gone (the voice setup that only saved choices, the robot page's canned email, text, trace and call scenes and its hidden demo controls, the per-message reply tasks, the recommendation that changed no forwarding, and claims of actions that never ran); the robot kept in view on every screen (a mini stage on other tabs, each with its own page, and a plain sentence with Retry when the page fails), tasks 3 and 4: plain alerts with "Don't ask again", standing approval rules, one notification per call, grouped notifications and recommended settings, on top of the v0.3 interface and the ElevenLabs agents. Release APK built and verified; its built-in brain is `https://rivet.ron-ai.dev`. Not yet tested on a physical phone; there is no emulator in the build container. |
+| Brain on the VM | Runs on the workspace VM at https://rivet.ron-ai.dev (moved 2026-10-29): `/opt/rivet/compose.yaml` runs the brain image built from this repository (`docker build -t rivet-brain:<sha> brain/` in `/opt/rivet/src`; `rivet-brain:bbc4639`, the pre-rename code, since 2026-10-30) behind Caddy 2.11.7, which gets the Let's Encrypt certificate; secrets are in `/opt/rivet/brain.env` (mode 600) and data in `/opt/rivet/data`, both copied from Fly. Checked live: `/healthz` 200, 401 without the device token, the ElevenLabs session endpoint, Brave suggest and the app's WebSocket. Groq is the only model provider (no `PERPLEXITY_API_KEY`). The owner's phone uses it. The Fly app `rivet-assistant` is stopped with autostart off and its volume kept; call answering still points at the old app `rivet-brain-hiron`. Reach the VM over SSH through an IAP tunnel (`gcloud compute start-iap-tunnel instance-20261029-122759 22 --local-host-port=localhost:2222 --zone us-central1-a`); port 22 is closed to cloud sessions. The compose file, Caddyfile and the laptop's OpenCode config and workspace `AGENTS.md` are in `deploy/vm/`; the env files and `code-token` are not. |
 | Search and models (brain) | The Brave search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`), the brain's `search_*` tools with `search.results` events, turn attachments ("Add to Emrys"), and Groq `qwen/qwen3.8-27b` as a per-session model choice (`model.set`). Tested with fakes; each search route was probed once live against Brave through a local brain (all 200, 2026-10-29), and the streamed answers with citations once more (200 in 2.4 s, 11 citations, 2026-10-29). Deployed on `rivet-assistant` with the four `BRAVE_*` keys and `GROQ_API_KEY` set (2026-10-29); every search, suggest and spellcheck route answered 200 live there, and 401 without the device token. Groq has run only against fakes, never live, and switching models mid-session is covered by fakes only. |
-| Tests | Brain: 403 pass (`-m "not live"`), ruff, format and mypy clean. Android: 278 pass and 1 is skipped (the live test, run with `EMRYS_LIVE=1`); lint has 0 errors. Both run without the gitignored `android/emrys.local.properties`, as CI does. |
+| Tests | Brain: 403 pass (`-m "not live"`), ruff and format clean, and mypy at its strictest (strict plus every optional error code it documents, no global `ignore_missing_imports`). Android: 265 pass and 1 is skipped on `design/facelift` (255 on 0.4.5; the skipped one is the live test, run with `EMRYS_LIVE=1`); Kotlin compiles with warnings as errors, extra warnings, progressive mode and `-Xjsr305=strict`; `robot/bridge.js` type-checks under TypeScript 7.0.2's strictest settings inside `build_robot_asset.py --check`; lint has 0 errors. The stage layer (`android/stage-ui`): `npm run verify:components` (the ElevenLabs files byte-identical) and 8 Playwright tests on the built page. Both run without the gitignored `android/emrys.local.properties`, as CI does. |
 | Telnyx | The answering number +17608769757 is routed to the Emrys call-answering assistant. Live-call features need the owner to re-run call answering setup once (the brain is already redeployed); it asks for approval. |
-| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents (checked live against `rivet-assistant`). No full conversation has run on a phone yet. On by default for voice and text; Settings › "Use ElevenLabs agents" off sends everything to Emrys's own brain. The owner attached the 7 search client tools to both agents (q, count 1–20 default 10, freshness; 20 s timeout). The 18 phone tools are not attached to either agent yet, the old Cato demo tools still are, and the voice agent's LLM reads `claude-sonnet-4-5` (read 2026-10-29); those are the owner's to change in ElevenLabs. Both agents also have `enable_auth` off and carry webhook tools that use the owner's ElevenLabs key (read 2026-10-29; `docs/scaling.md` §2). The agents' `place_search` sends no location and the phone adds none, so Brave searches without a location unless `q` names the place ("coffee in austin tx"); whether Brave reads a place out of `q` is unverified. The conversation carried into a new session (voice to text and back) is tested with fakes only. |
+| ElevenLabs | Voice and text agents are wired and the brain's session endpoint returns real credentials for both agents. On 2026-10-29 every voice session failed at start (the greeting used `{{customer_first_name}}`, which nothing supplied); with the owner's approval the greeting dropped the name and both agents moved to DeepSeek V4.1 Flash (`deepseek-v41-flash`) with non-Anthropic backups (Gemini 2.5 Flash, GPT-4o, Gemini 2.5 Flash Lite), and a text-only session on the voice agent then started and answered. No full voice conversation has run on a phone yet. On by default for voice and text; Settings › "Use ElevenLabs agents" off sends everything to Emrys's own brain. The owner attached the 7 search client tools to both agents (q, count 1–20 default 10, freshness; 20 s timeout). Both agents have the 18 phone tools (the owner's client tools in the ElevenLabs workspace, attached 2026-10-30) and the 7 search tools; a text-only session on the text agent called `device_status` and answered from its result (2026-10-30). The old Cato demo tools, tests, scoring and branch are still attached, which the owner chose (2026-10-29). Both agents also have `enable_auth` off and carry webhook tools that use the owner's ElevenLabs key (read 2026-10-29; `docs/scaling.md` §2). The agents' `place_search` sends no location and the phone adds none, so Brave searches without a location unless `q` names the place ("coffee in austin tx"); whether Brave reads a place out of `q` is unverified. The conversation carried into a new session (voice to text and back) is tested with fakes only. |
 | Search (app) | The app side of the Brave search UI is built and tested under Robolectric with MockWebServer: client tools, result cards, results page, map, image viewer, inline YouTube, suggestions, Spellcheck and "Add to Emrys". It needs the brain's search proxy (`/v1/search/*`, `/v1/suggest`, `/v1/spellcheck`, `search.results`, `model` events), which is deployed. Not checked on a phone: the WebGL map, YouTube playback and its Referer, sharing into real apps, and the widget sheet's keyboard. |
-| Email | Built and tested against fake TLS servers. Off until the owner sets `EMRYS_EMAIL_ADDRESS` and `EMRYS_EMAIL_PASSWORD` (an app password) as Fly secrets. |
-| Workspace VM | Google Cloud `instance-20261029-122759` (zone `us-central1-a`, c4-standard-8: 8 vCPU, 30 GB, Debian 13, 10 GB boot disk), provided by the owner on 2026-10-29 for task 2. **Not yet hardened or used.** It runs as the Compute Engine default service account with "Allow full access to all Cloud APIs", so any code on it can take that account's token; its `http-server` and `https-server` tags allow HTTP and HTTPS (the firewall rules themselves weren't listed), its IP is ephemeral and its disk is deleted with it. Cloud sessions have no access to it: the hardening commands in `docs/scaling.md` §5.1 are the owner's to run. |
+| Email | Built and tested against fake TLS servers. Off until the owner sets `EMRYS_EMAIL_ADDRESS` and `EMRYS_EMAIL_PASSWORD` (an app password) in the VM's `/opt/emrys/brain.env` (before the migration in the addendum: `RIVET_*` in `/opt/rivet/brain.env`). |
+| Workspace VM | Google Cloud `instance-20261029-122759` (zone `us-central1-a`, c4-standard-8: 8 vCPU, 30 GB, Debian 13, 50 GB disk, static IP 136.113.136.145, no service account, Secure Boot, deletion protection). It runs the brain (above) and Emrys's laptop: a browser desktop at https://desktop.rivet.ron-ai.dev (linuxserver webtop, Debian XFCE, its own login) and OpenVSCode at https://code.rivet.ron-ai.dev (connection token), sharing one workspace, with OpenCode on the desktop limited to Mistral's `zai-glm-5-3`, `zai-glm-5-3-flash` and `deepseek-v4-1-flash-1017` (Mistral key in `/opt/rivet/laptop.env`, mode 600); OpenCode sees and drives the desktop with screenshots and xdotool. Both sites refuse without credentials and only Caddy publishes ports. Emrys itself can't hand tasks to the laptop yet. |
 
 ## Rules that always apply
 
@@ -39,7 +39,7 @@ changes or deletes waits for the user's approval. Its face is the Emrys robot (`
   - `./gradlew testDebugUnitTest lintDebug assembleRelease`;
   - review the screenshots in `android/build/screens/`;
   - verify the APK (`apksigner verify`, `aapt2 dump badging`);
-  - run the live test against Fly.
+  - run the live test against the brain.
 
 ## Repository map
 
@@ -67,7 +67,7 @@ EMRYS_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.emrys.core.LiveBrain
 - **Agent** (`factory.py`): `create_harness()` on `PerplexityAgentModel` (`models/perplexity.py`), or on `GroqModel` (`models/groq.py`, `qwen/qwen3.8-27b`, a Groq Preview model, stateless) when the session's model is Groq.
   - Native search runs server-side on Perplexity: web, URL fetch, image, finance, people. Groq has none, so its instructions leave that out.
   - `EMRYS_MODEL_PROVIDER` sets the default; a provider is offered only when its key is set. The phone picks per session with `model.set`, stored in `session/<id>/emrys/model.json`; the agent is rebuilt on the new provider and the conversation carries over. Refused while a turn or task runs or an approval waits; work that arrives during the switch, such as a call follow-up, waits for the new agent.
-  - Memory, todos, an auto context manager and snapshot sessions on fenced storage.
+  - Memory on the plain storage backend; todos, an auto context manager and snapshot sessions on fenced storage.
   - No shell, file or subagent tools.
   - Instructions follow the tools actually registered.
 - **Supervisor** (`supervisor.py`):
@@ -108,7 +108,7 @@ EMRYS_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.emrys.core.LiveBrain
 ### Android app (`android/app/src/main/java/com/hiron/emrys/`)
 - **Interface (`ui/`)**: the Noir design system (`docs/design/EMRYS_DESIGN.md`) — near-black paper, porcelain ink, one pale-periwinkle halo accent, glacier/sage/honey/coral status; Instrument Serif for editorial moments, Geist for interface text, Geist Mono for figures; porcelain primary pills, glass cards, hairlines, status as a dot plus a sentence. The shared kit is in `Theme.kt`, `Kit.kt`, `Keys.kt`, `Surfaces.kt`, `Chrome.kt` and `Meters.kt`; the brand mark is the dot-matrix sigil (`res/drawable/emrys_sigil.xml`, from `docs/design/emrys-sigil.json`).
   - **Power-on screen** on first run (`Onboarding.kt`): four steps, starting with "Use recommended settings", "Set up step by step" and "Not now"; the second step has the "ElevenLabs agents" and "Talk key" switches.
-  - **Recommended settings** (`ui/Recommended.kt`, `core/Recommended.kt`): a sheet from the power-on screen and from Settings listing only what would change (connect automatically, a quiet overlay, offer replies, answer only missed calls, the missing permissions in one prompt, the default assistant screen, and "Stop asking" for prompts this user declined 3 times in 30 days and never approved), each with a switch and its value now and after; Apply changes only what is chosen, and Settings can undo it.
+  - **Recommended settings** (`ui/Recommended.kt`, `core/Recommended.kt`): a sheet from the power-on screen and from Settings listing only what would change (connect automatically, a quiet overlay, the missing permissions in one prompt, the default assistant screen, and "Stop asking" for prompts this user declined 3 times in 30 days and never approved), each with a switch and its value now and after; Apply changes only what is chosen, and Settings can undo it.
   - **Home** (`HomeScreen.kt`):
     - a masthead (the sigil and a serif "Emrys") with one quiet status line, and the robot stage, which glows by state;
     - a serif greeting, and a transcript sheet you drag over the robot;
@@ -124,7 +124,7 @@ EMRYS_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.emrys.core.LiveBrain
     - results stay in memory only. Built and tested under Robolectric with synthetic results; the map, the player and sharing are not yet checked on a phone.
   - **Live call plate** (`LiveCallCard.kt`): live transcript lines, Take over, and the summary when the call ends.
   - **Approval sheet** (`ApprovalSheet.kt`): the plain headline with contact names in place of numbers, why Emrys is asking, a risk meter, the message as a quote, Emrys's notes formatted, technical details folded away, and "Don't ask again" (Always allow / Always deny). Biometrics for high-risk actions and for every always-allow.
-  - **Activity** (`ActivityScreen.kt`): today's counters, then the activity trace grouped by day.
+  - **Activity** (`ActivityScreen.kt`): pending reminders, then the activity trace grouped by day.
   - **Settings** (`SettingsScreen.kt`): numbered plates for:
     - link and connection details;
     - behaviour toggles, with "Use recommended settings" and its undo, reading replies aloud in the overlay, the ElevenLabs agents and search suggestions (with Brave's 90-day log retention said plainly);
@@ -135,13 +135,13 @@ EMRYS_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.emrys.core.LiveBrain
     - the unit plate.
 - **Robot** (`ui/RobotView.kt`, `android/robot/bridge.js`, built into assets by `tools/build_robot_asset.py`):
   - the bundled page runs offline;
-  - moves, the trace HUD and the email and text cards follow what Emrys is doing;
+  - moves follow what Emrys is doing;
   - lip sync follows text-to-speech, and the stage glow follows Emrys's mood;
-  - the figure (`android/robot/Emrys_the_Robot.html`): a porcelain hero with a smoked visor, a midnight cape and a dot-matrix emblem; armor slots for the Matrix (chest, visor voice band, gauntlets) and a light floor, each with a native fallback (`docs/design/EMRYS_MATRIX.md` §3);
-  - the ElevenLabs UI layer (`android/stage-ui`, bundled into `assets/emrys/vendor/`): the `matrix`, `orb` and `shimmering-text` components installed verbatim with the official registry and checked by `npm run verify:components`. The Matrix is Emrys's light language (a glyph per state, viseme mouth shapes, the boot show, beat-locked dance floors); the Orb is a soft mood backlight; the caption names the work in progress. Real signals only: states, TTS word timing and the ElevenLabs agent's audio level. Verified with Playwright on the real page; not yet on a phone;
-  - the robot stays in view: the big stage on Home and a short band on Activity, Settings and the voice setup, sharing one page, so its moves, mood and mouth carry across screens. Built and tested in Robolectric only; not yet checked on a phone.
+  - the figure (`android/robot/Emrys_the_Robot.html`): a porcelain hero with a smoked visor, a midnight cape and a dot-matrix emblem; armor slots for the Matrix (chest, visor voice band, gauntlets) and a light floor, each with a native fallback (`docs/design/EMRYS_MATRIX.md` §3), reported by `window.emrys.slots()`;
+  - the ElevenLabs UI layer (`android/stage-ui`, bundled into `assets/emrys/vendor/` and loaded after the bridge): the `matrix`, `orb` and `shimmering-text` components installed verbatim from elevenlabs/ui@`3a28ebab` and checked by `npm run verify:components`. The Matrix is Emrys's light language (a glyph per state, viseme mouth shapes, the boot show); the Orb is a soft mood backlight that follows the ElevenLabs agent's turn and audio level; the caption names the work in progress. Only real signals drive it: states, TTS word timing and what the ElevenLabs SDK reports (`voice/EmrysAgent.kt` forwards the turn and every audio level as given). The Orb's noise texture is served offline by `RobotView.kt`. `lowFx` and a squeezed stage drop the Orb, floor and gauntlets;
+  - the robot stays in view: the big stage on Home and a short band on Activity and Settings. Each slot has its own page, which picks up Emrys's state when it loads; a page that fails to load or start, or keeps crashing (3 times), says why in a plain sentence with Retry. Built and tested in Robolectric only; not yet checked on a phone.
 - **Launcher** (`res/`, `widget/EmrysWidgets.kt`):
-  - an adaptive icon with a themed monochrome layer (`tools/build_icon.py`);
+  - an adaptive icon with a themed monochrome layer, both the dot-matrix sigil, and the same sigil as the splash and notification icon (`tools/build_icon.py`);
   - long-press shortcuts: Talk, Ask, Catch me up, My day;
   - two widgets: the search bar (4×1) and the panel (4×2).
   - the bar's "Search or ask Emrys" opens the search sheet (`ACTION_SEARCH`): the results page with the field focused, Brave suggestions and "Did you mean", and Web results on Enter. Widgets can't take typing, so the field is in the app. The engine is Brave through the brain; the other engines of task 5 are not built.
@@ -149,10 +149,10 @@ EMRYS_LIVE=1 ./gradlew testDebugUnitTest --tests 'com.hiron.emrys.core.LiveBrain
 - **Voice**: speech input through `RecognizerIntent` / `SpeechRecognizer`, and replies spoken with Android TextToSpeech (`voice/Speaker.kt`).
 - **ElevenLabs agents** (`voice/EmrysAgent.kt`), Settings › "Use ElevenLabs agents" (on by default; off talks to Emrys's own brain):
   - the talk key starts or stops a voice session, asking for the microphone first when it isn't allowed; the composer sends text to the text agent;
-  - the agents call the 18 phone tools as client tools; sends, calls, message replies, calendar writes and commit-point taps follow the brain's standing rules (a read-only copy on the phone) or wait for the approval sheet, and a deny or a 20-second timeout refuses; reading texts, the calendar, notifications or the screen suspends always-allows until the user speaks again;
+  - the agents call the 18 phone tools as client tools; sends, calls, message replies, calendar writes and commit-point taps follow the brain's standing rules (a read-only copy on the phone) or wait for the approval sheet, and a deny refuses; the ElevenLabs Android SDK 0.13.0 ends every client tool call at 30 seconds (`ClientToolRegistry.executeTool`), which withdraws an unanswered approval; reading texts, the calendar, notifications or the screen suspends always-allows until the user speaks again;
   - agent speech moves the robot's mouth, and messages land in the transcript;
   - 7 search client tools (`voice/SearchTools.kt`: `web_search`, `news_search`, `image_search`, `video_search`, `place_search`, `answers`, `llm_context`) call the brain's search proxy, show the cards, mark the turn untrusted, and tell the agent what is on screen in at most 8,000 characters: snippets for web and news, the image file, thumbnail, size and page for images, URL, length and creator for videos, address, coordinates and rating for places, page text for context, and the answer with its citations. `count` defaults to 10 and is held to 1 to 20 (for `llm_context` it is the number of pages); a `freshness` other than `pd`, `pw`, `pm` or `py` is ignored; `place_search` works with `q` alone, as the agents send no location;
-  - a search tool answers within 17 s (the phone's call to the brain allows 15 s), before the agents cut a tool at 20 s; the phone tools keep their own 27 s budget;
+  - a search tool answers when the brain does (the phone's call to the brain allows 15 s);
   - a new session (starting, or switching between voice and text) first gets a contextual update with the conversation so far: the last 10 things the user and the agent said, at most 2,000 characters, labelled as the earlier conversation and the mode it was in. A session with nothing else to send is in use at once and gets it when the SDK reports the connection, or not at all if that takes over 15 s; release builds strip debug logging, which in the SDK echoes every contextual update;
   - built and unit-tested only, not verified against a live agent or on a phone.
 - **Service**: a foreground WebSocket client with resume and an offline queue (`service/EmrysService.kt`, `core/GatewayClient.kt`).
@@ -174,7 +174,7 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   agent design: two platform agents (voice `agent_2901m620nzwrev2r7ekqpydcxe25`, text
   `agent_9601m623qa72ffs9cyy3ezc0p6tb`) with the phone tools as client tools. Approvals for those tools run on the
   phone, not in the brain. Which model the agents run on is the owner's call in the ElevenLabs platform settings
-  (never an Anthropic model). The persistent robot stage is built (one shared page, a mini-stage off Home) but not yet checked on a phone.
+  (never an Anthropic model). The persistent robot stage is built (a page per slot, a mini-stage off Home) but not yet checked on a phone.
 - **Design notes:**
   - Keep the brain as the single decision-maker and keep approvals intact. The ElevenLabs agent should call the brain as a custom LLM or through server or client tools, never act on its own.
   - Get private-agent conversation tokens from the brain; the ElevenLabs API key never goes on the phone.
@@ -244,7 +244,7 @@ documents, not from memory. Record anything that can't be verified as a blocker 
   - Material writing guidance: https://m3.material.io/foundations/content-design/style-guide/ux-writing-best-practices
 
 ### 4. Recommended settings (built in 0.4.0)
-- **Status:** built and tested (Robolectric). The default assistant cannot be requested by an app (the role is not
+- **Status:** built and tested (Robolectric). "Offer replies" and "answer only missed calls" are not offered: one brain task per message notification took the brain down on 2026-10-29, and the call answering mode alone changes no carrier forwarding. The default assistant cannot be requested by an app (the role is not
   requestable), so the recommendation opens Android's default apps screen. Changing the call answering mode does not
   change carrier forwarding. A fresh install has no "Stop asking" suggestions until the user has declined something
   three times.
@@ -404,7 +404,7 @@ built but unverified on a real phone or live service, say so.
 - **Android app build and on-device checklist:** `android/README.md`
 - **Brain configuration:** `brain/.env.example`. Deploy with `brain/scripts/deploy_fly.sh`; set up call answering with `brain/scripts/setup_call_answering.py`.
 
-## Addendum, 2026-10-29: the Emrys rename and the Noir facelift (branch `design/facelift`)
+## Addendum, 2026-10-29 and 2026-10-30: the Emrys rename and the Noir facelift (branch `design/facelift`)
 
 ### What this work was
 The owner asked for three things: a new name for Rivet (a human name, two syllables, confirmed available); a drastic,
@@ -425,70 +425,72 @@ This is not a legal trademark clearance.
 ### Done
 - **Design system:** `docs/design/EMRYS_DESIGN.md` ("Noir": near-black, porcelain, one halo accent, Instrument
   Serif, Geist and Geist Mono) and `docs/design/EMRYS_MATRIX.md` (the Matrix's light language, armor slots and light
-  shows). The tokens are in `ui/Theme.kt`, the OFL fonts in `res/font` and `assets/emrys/fonts` (`FONTS-OFL.txt`), and
-  the sigil in `docs/design/emrys-sigil.json` and `res/drawable/emrys_sigil.xml`.
+  shows). The tokens are in `ui/Theme.kt`, the OFL fonts in `res/font` and `assets/emrys/fonts` (`FONTS-OFL.txt`; the
+  old Big Shoulders and IBM Plex files are gone), and the sigil in `docs/design/emrys-sigil.json` and
+  `res/drawable/emrys_sigil.xml`.
 - **Compose app:** the shared kit (`Kit`, `Keys`, `Surfaces`, `Chrome`, `Meters`, `StageFrame`, `MiniStage`) and the
-  tab shell, plus every screen: Home, onboarding, recommended settings, voice setup, the approval sheet, the live call
-  card, the assistant overlay, search results and their page, the image viewer, video, the map page, Settings and
-  Activity. Copy is in sentence case, and every test tag, role and content description is kept.
-- **Robot** (`android/robot/Emrys_the_Robot.html`): a porcelain hero with a smoked visor, a crest, a midnight cape
-  that sways without clipping, and a dark-glass emblem. All 42 moves and 14 states are kept. Noir stage cards, a
-  spotlight floor, Matrix armor slots with native fallbacks, `emrys.slots()` and `emrys.scene()`. It costs the same
-  per frame as before.
+  tab shell, plus every screen: Home, onboarding, recommended settings, the approval sheet, the live call card, the
+  assistant overlay, search results and their page, the image viewer, video, the map page, Settings and Activity.
+  Copy is in sentence case, and every test tag, role and content description is kept. Kit pieces no screen uses were
+  removed, as upstream did.
+- **Upstream merged (2026-10-30):** `origin/ccr-22d59ed7-dzijhh` at `fd8ffc4` (0.4.5) was merged with history kept.
+  Every behaviour change from upstream stays: one page per robot slot with Retry, the simulations removed (the voice
+  setup, the robot's cards, scenes, showreel and music moves, the Activity counters, "Offer replies", the summon
+  choice), the approval sheet for the agents, warnings as errors in Kotlin, the type-checked bridge, mypy at its
+  strictest and the brain on the VM. Our layer is visuals and names on top. The version is 0.5.0 (versionCode 13).
+- **Robot** (`android/robot/Emrys_the_Robot.html`, on upstream's pruned page): a porcelain hero with a smoked visor,
+  a crest, a midnight cape that sways without clipping, and a dark-glass emblem; the moves and states upstream still
+  reaches, restyled. Matrix armor slots and a light floor, each with a native fallback, and `emrys.slots()` (typed in
+  `robot/page.d.ts`). It costs the same per frame as upstream's page.
 - **ElevenLabs UI** (`android/stage-ui`, bundled into `assets/emrys/vendor/`):
   - Components: `matrix`, `orb` and `shimmering-text`, installed with the official shadcn registry items from
-    elevenlabs/ui@`3a28ebab` (the `ui.elevenlabs.io` registry answers bots with a challenge, so they were fetched from
-    GitHub). They are byte-identical to upstream, and `npm run verify:components` checks that in CI.
+    elevenlabs/ui@`3a28ebab` and byte-identical to it (`npm run verify:components`).
   - The Matrix sits in the chest emblem, a voice band on the visor, the gauntlets, a light floor and the mini band:
-    a glyph per state, viseme mouth shapes, the boot show and beat-locked dance floors.
+    a glyph per state, viseme mouth shapes and the boot show.
   - The Orb is a soft mood backlight; ShimmeringText is the work caption.
-  - Only real signals drive them. The Orb's noise texture is served offline by `RobotView.kt`.
-- **Rename, everywhere in code:**
-  - app ID `com.hiron.emrys` and the Kotlin packages and classes;
-  - the bridge (`window.emrys`, `EmrysHost`), `assets/emrys/` and resources;
-  - the brain package `emrys_brain`, `EMRYS_*` settings, storage paths, the persona prompt, and the call assistant's
-    name, tag and call-ID variable;
-  - CI and docs.
-- **Compatibility with live data:**
-  - `brain/src/emrys_brain/legacy.py` reads `RIVET_*` secrets as `EMRYS_*`, reads `session/<id>/rivet/` files, and
-    copies `memory/rivet/` memories over once;
-  - `calls.py` finds and renames the old Telnyx assistant and still answers `rivet_call_id`;
-  - `deploy_fly.sh` keeps an existing `RIVET_DEVICE_TOKEN`, so the phone stays paired;
-  - Gradle still reads an old `rivet.local.properties`.
-- **Pre-existing bug fixed:** the robot never drew on a real device. Its WebView had `WRAP_CONTENT` height, which gives
-  the page a 0 px layout viewport. It was reproduced with the untouched 0.4.0 Rivet build on an Android 15 emulator,
-  `RobotView.kt` now gives the WebView `MATCH_PARENT`, and `AppFlowTest` guards it.
-- **Verification on this branch:**
-  - Android unit and screen tests and lint, the brain's pytest, ruff and mypy (counts in the commit message);
-  - stage Playwright: 9 of 9;
-  - `build_robot_asset.py --check` and `build_icon.py --check`;
-  - a signed release APK (`com.hiron.emrys`, label "Emrys");
-  - the release APK walked through on an emulator: onboarding, Home, Activity and Settings, with the robot and the
-    Matrix drawing.
+  - Only real signals drive them: states, TTS word timing, and the ElevenLabs agent's turn and audio level exactly as
+    the SDK reports them. No casts or lint suppressions in our TypeScript.
+- **Launcher:** the icon (adaptive and themed), splash and notification icon are the dot-matrix sigil; both widgets,
+  the shortcuts and the notification accent are in Noir (`tools/build_icon.py`, `res/`, `widget/EmrysWidgets.kt`,
+  `service/Notifications.kt`).
+- **Rename, everywhere in code, with no compatibility layer:** app ID `com.hiron.emrys`, the Kotlin packages and
+  classes, the bridge (`window.emrys`, `EmrysHost`), `assets/emrys/`, resources, the brain package `emrys_brain`,
+  `EMRYS_*` settings, storage paths, the persona prompt, the call assistant's name, tag and call-ID variable, CI and
+  docs. The earlier fallbacks (`legacy.py`, `rivet_call_id`, `RIVET_*` reads, `rivet.local.properties`) are deleted;
+  `deploy/vm/migrate-to-emrys.sh` moves the live VM over once instead. The phone and the brain don't exchange the
+  assistant's name, so Emrys 0.5.0 works against the brain the VM runs today.
+- **The robot draws on real devices:** a WebView with `WRAP_CONTENT` height collapses the robot page. On an Android 15
+  emulator, upstream 0.4.5 shows an empty stage (the page's `#stage` is 372×0 px); with the WebView at `MATCH_PARENT`
+  (`ui/RobotView.kt`, checked on `RobotHost` itself in `StageAssetTest`) Emrys's stage is 372×224 and the robot,
+  the emblem's Matrix and the floor draw.
+- **Verification (2026-10-30, on the merged branch):**
+  - Android: 265 unit and screen tests pass and 1 is skipped (the live test), lint has 0 errors, and the release
+    build passes with warnings as errors;
+  - brain on Python 3.12: 403 tests pass, ruff, format and mypy strict are clean, and `uv.lock` is current;
+  - `build_robot_asset.py --check` (with the strict `tsc` pass) and `build_icon.py --check`;
+  - stage layer: `npm ci`, `verify:components`, `oxlint`, a build that reproduces the committed bundle byte for byte,
+    and 8 of 8 Playwright tests on the real page;
+  - the release APK verifies (APK Signature Scheme v2) as `com.hiron.emrys`, "Emrys", 0.5.0 (13);
+  - on the emulator: onboarding, Home, Activity and Settings, with the page read over DevTools (stage 372×224, the
+    chest and mouth slots filled by the Matrix). The emulator renders in software, so the page drops to `lowFx`,
+    which turns off the Orb, floor and gauntlets by design.
 
 ### Left to do
-1. **Merge upstream.** `origin/ccr-22d59ed7-dzijhh` moved on while this was built (0.4.2 to 0.4.5: one page per robot
-   slot, the simulations removed, warnings as errors, a type-checked bridge). Merge it into this branch, keeping every
-   one of its behaviour changes, then rerun everything.
-2. **Launcher art.** The launcher agent's icon, widgets, shortcuts and notification copy were still running in
-   `/Users/tims-stuff/rivet-facelift-wt/launcher`. Integrate them through `rename_android.py` (the identifiers there are
-   still the old ones). Until then the icon and widgets are the old drawings in Noir colours. The old fonts (Big
-   Shoulders, IBM Plex) stay bundled until the widgets stop using them.
-3. **Device checks still open:**
-   - the approval sheet against a live brain, the voice setup, the search sheet, the overlay over another app, widgets
-     and notifications;
-   - the full stage on a real phone: the emulator dropped to `lowFx`, which turns off the Orb, floor and gauntlets by
-     design;
-   - the onboarding stage hint covers the robot's feet;
-   - the CI Playwright step is unproven on Linux.
-4. **Owner's live renames:**
-   - the Fly app `rivet-assistant`, its URL and the volume `rivet_data`;
-   - the repository `ImRonAI/rivet-assistant`;
-   - the ElevenLabs agents' prompts, which still say Rivet;
-   - the live Telnyx assistant, which is renamed on the next call answering setup;
-   - a brain redeploy, so it says "Emrys";
-   - optionally, renaming the Fly secrets to `EMRYS_*`.
-5. **Installing:** `com.hiron.emrys` installs as a new app next to Rivet. Enter the brain settings once, then remove
-   Rivet.
-6. **Choices to confirm:** the light floor is 17×17, not the 25×25 in the spec, because of performance. "Don't ask
-   again" stays a switch.
+1. **Move the VM to the Emrys names** (needs the owner's `gcloud auth login` on this Mac; the token expired). On the
+   VM: `sudo bash migrate-to-emrys.sh <ref>` prints every step without changing anything; `--apply` runs them. It
+   stops the stack, moves `/opt/rivet` to `/opt/emrys`, renames `RIVET_*` keys, moves the brain's
+   `session/<id>/rivet` and `memory/rivet` files, copies the Caddy and laptop volumes (Compose names them after the
+   folder), builds `emrys-brain:<sha>` from `<ref>` and starts it. Don't deploy this branch's brain before that.
+2. **Then call answering setup once from the phone.** It creates the Emrys call-answering assistant; removing the old
+   Rivet one is a Telnyx write, so it goes through the approval sheet.
+3. **On a real phone:** the full stage (Orb, floor, gauntlets) outside `lowFx`, the approval sheet against the live
+   brain, the overlay over another app, the widgets and notifications, and the search sheet.
+4. **Owner's live renames:** the DNS names `rivet.ron-ai.dev`, `desktop.` and `code.`; the repository
+   `ImRonAI/rivet-assistant`; the stopped Fly apps `rivet-assistant` and `rivet-brain-hiron`; and the ElevenLabs
+   agents' prompts, which still say Rivet.
+5. **Installing:** `com.hiron.emrys` installs next to Rivet. Enter the server and device token once in Settings, then
+   remove Rivet. The APK built on this Mac is signed with the debug key, because no release key is configured here.
+6. **Choices to confirm:** the light floor is 17×17, not the 25×25 in the spec, for performance. The bridge reads
+   `stageInfo` four times a second because the anchor moves with Emrys. One React Compiler lint warning remains in
+   our Matrix panel (it reads the last painted frame in an effect), plus the ElevenLabs components' own warnings,
+   which stay because the files are kept verbatim.

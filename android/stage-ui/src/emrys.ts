@@ -1,49 +1,43 @@
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 
-/** Where Emrys stands, in stage pixels (bridge.js `anchor`). */
+/* The robot page's bridge (android/robot/bridge.js, typed in robot/page.d.ts) publishes these shapes. */
+export type Mood = "cy" | "amb" | "ok" | "rec"
+export type Turn = "listening" | "speaking" | "none"
+
+/** Where Emrys stands, in stage pixels. */
 export type Anchor = { x: number; y: number; feetX: number; feetY: number }
 
-/** What the bridge publishes for this layer (bridge.js `stageInfo`). */
+/** What Emrys is doing and where (bridge.js `stageInfo`). */
 export type StageInfo = {
   state: string
-  mood: "cy" | "amb" | "ok" | "rec" | null
+  mood: Mood | null
   talking: boolean
-  turn: "listening" | "speaking" | null
-  hud: boolean
+  /** Whose turn it is in an ElevenLabs voice session. */
+  turn: Turn
+  /** Whether the session has reported the agent's audio level. */
+  voiced: boolean
   lowFx: boolean
-  move: string | null
   width: number
   height: number
   short: boolean
   anchor: Anchor | null
 }
 
-/** What is being said right now (bridge.js `speech`); levels are real ones from the app, or null. */
-export type Speech = {
-  key: string
-  weight: number
-  at: number
-  talking: boolean
-  turn: "listening" | "speaking" | null
-  output: number | null
-  input: number | null
-  levelAt: number
-}
+/** What is being said now (bridge.js `speech`): the viseme and its weight, and the agent's audio level. */
+export type Speech = { viseme: string; weight: number; talking: boolean; level: number | null }
 
-/** The robot page's armor slots and music (the slot contract in docs/design/EMRYS_MATRIX.md §3). */
+/** The robot page's view of an armor slot (docs/design/EMRYS_MATRIX.md §3). */
 export type SlotState = { visible: boolean; facing: number }
-export type Scene = { move: string; beat: { bpm: number; phase: number } | null }
 
-type Emrys = {
+type Bridge = {
   stageInfo?: () => StageInfo
   speech?: () => Speech
   slots?: () => Partial<Record<string, SlotState>>
-  scene?: () => Scene
 }
 
 declare global {
   interface Window {
-    emrys?: Emrys
+    emrys?: Bridge
   }
 }
 
@@ -51,127 +45,67 @@ const RESTING: StageInfo = {
   state: "idle",
   mood: null,
   talking: false,
-  turn: null,
-  hud: false,
+  turn: "none",
+  voiced: false,
   lowFx: false,
-  move: null,
   width: 0,
   height: 0,
   short: false,
   anchor: null,
 }
 
-const SILENT: Speech = {
-  key: "sil",
-  weight: 0,
-  at: 0,
-  talking: false,
-  turn: null,
-  output: null,
-  input: null,
-  levelAt: 0,
-}
-
-let info: StageInfo = RESTING
+const SILENT: Speech = { viseme: "sil", weight: 0, talking: false, level: null }
 
 function subscribeInfo(changed: () => void) {
-  const heard = (event: Event) => {
-    const detail = (event as CustomEvent<StageInfo>).detail
-    if (detail) {
-      info = detail
-      changed()
-    }
-  }
-  document.addEventListener("emrys:stage", heard)
-  return () => document.removeEventListener("emrys:stage", heard)
+  document.addEventListener("emrys:stage", changed)
+  return () => document.removeEventListener("emrys:stage", changed)
 }
 
-/** The bridge's latest stage info, re-rendering when it publishes a new one. */
+/** The bridge's latest stage info (one object until it publishes a new one), re-rendering when it does. */
 export function useStageInfo(): StageInfo {
-  return useSyncExternalStore(subscribeInfo, () => {
-    if (info === RESTING) info = window.emrys?.stageInfo?.() ?? RESTING
-    return info
-  })
+  return useSyncExternalStore(subscribeInfo, () => window.emrys?.stageInfo?.() ?? RESTING)
 }
 
 export function readSpeech(): Speech {
   return window.emrys?.speech?.() ?? SILENT
 }
 
-export function readSlots(): Partial<Record<string, SlotState>> | null {
-  try {
-    return window.emrys?.slots?.() ?? null
-  } catch {
-    return null
-  }
-}
-
-export function readScene(): Scene | null {
-  try {
-    return window.emrys?.scene?.() ?? null
-  } catch {
-    return null
-  }
+export function readSlots(): Partial<Record<string, SlotState>> {
+  return window.emrys?.slots?.() ?? {}
 }
 
 function useMedia(query: string): boolean {
-  const [matches, setMatches] = useState(() => matchMedia(query).matches)
-  useEffect(() => {
-    const list = matchMedia(query)
-    const changed = () => setMatches(list.matches)
-    list.addEventListener("change", changed)
-    changed()
-    return () => list.removeEventListener("change", changed)
-  }, [query])
-  return matches
+  return useSyncExternalStore(
+    (changed) => {
+      const list = matchMedia(query)
+      list.addEventListener("change", changed)
+      return () => list.removeEventListener("change", changed)
+    },
+    () => matchMedia(query).matches
+  )
 }
 
 export const useReducedMotion = () => useMedia("(prefers-reduced-motion: reduce)")
 
 /** False while the page is hidden (app in the background, screen off). */
 export function usePageVisible(): boolean {
-  const [visible, setVisible] = useState(() => !document.hidden)
-  useEffect(() => {
-    const changed = () => setVisible(!document.hidden)
-    document.addEventListener("visibilitychange", changed)
-    return () => document.removeEventListener("visibilitychange", changed)
-  }, [])
-  return visible
-}
-
-/** True once `key` has stayed the same for `ms`; false at once when it changes. */
-export function useSettled(key: string, ms: number): boolean {
-  const [settled, setSettled] = useState<string | null>(null)
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(key), ms)
-    return () => clearTimeout(timer)
-  }, [key, ms])
-  return settled === key
-}
-
-/** True once the value has held for `ms`; false at once when it goes. */
-export function useHeld(value: boolean, ms: number): boolean {
-  const [held, setHeld] = useState(value)
-  useEffect(() => {
-    if (!value) {
-      setHeld(false)
-      return
-    }
-    const timer = setTimeout(() => setHeld(true), ms)
-    return () => clearTimeout(timer)
-  }, [value, ms])
-  return held
+  return useSyncExternalStore(
+    (changed) => {
+      document.addEventListener("visibilitychange", changed)
+      return () => document.removeEventListener("visibilitychange", changed)
+    },
+    () => !document.hidden
+  )
 }
 
 /** The activities that read as working, with the caption the stage shows for each. */
-export const WORKING: Record<string, string> = {
+export const WORKING: Partial<Record<string, string>> = {
   thinking: "Thinking",
   searching: "Searching",
   working: "Working",
   texting: "Writing a text",
   emailing: "Writing an email",
   calling: "On a call",
-  video: "On a video call",
 }
 
 function darkTheme(): boolean {

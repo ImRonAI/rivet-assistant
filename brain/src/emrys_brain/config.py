@@ -73,7 +73,6 @@ class BrainSettings:
     telnyx_mcp_url: str = DEFAULT_TELNYX_MCP_URL
     session_dir: str = "./.emrys/sessions"
     skills_dir: str = "./.emrys/skills"
-    telnyx_schema_path: str | None = None
     max_restarts: int = 4
     restart_window: float = 600.0
     retry_attempts: int = 6
@@ -105,7 +104,6 @@ class BrainSettings:
             telnyx_mcp_url=os.environ.get("TELNYX_MCP_URL", DEFAULT_TELNYX_MCP_URL),
             session_dir=os.environ.get("EMRYS_SESSION_DIR", "./.emrys/sessions"),
             skills_dir=os.environ.get("EMRYS_SKILLS_DIR", "./.emrys/skills"),
-            telnyx_schema_path=os.environ.get("EMRYS_TELNYX_SCHEMA"),
             max_restarts=_env_int("EMRYS_MAX_RESTARTS", 4),
             restart_window=_env_float("EMRYS_RESTART_WINDOW", 600.0),
             retry_attempts=_env_int("EMRYS_RETRY_ATTEMPTS", 6),

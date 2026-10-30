@@ -13,15 +13,14 @@ import com.hiron.emrys.core.WebItem
 import io.elevenlabs.ClientTool
 import io.elevenlabs.ClientToolResult
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
 /**
- * The agents' seven search tools as client tools (the definitions are in emrys-search-client-tools.json): each
- * runs through the brain's search proxy, shows its results on screen, and tells the agent what is shown. These are
- * reads, so nothing asks first; their web text marks the turn untrusted, like [AgentTools.UNTRUSTED].
+ * The agents' seven search tools as client tools: each runs through the brain's search proxy, shows its results on
+ * screen, and tells the agent what is shown. These are reads, so nothing asks first; their web text marks the turn
+ * untrusted, like [AgentTools.UNTRUSTED].
  */
 object SearchTools {
     val NAMES = mapOf(
@@ -34,17 +33,10 @@ object SearchTools {
     const val DEFAULT_COUNT = 10
     const val MAX_COUNT = 20
 
-    /**
-     * How long a search tool waits for the brain before answering [TOO_LONG]: inside the 20 seconds the agents give
-     * a tool ([com.hiron.emrys.core.SearchClient.SEARCH_TIMEOUT_S] is shorter still, so the client's own error usually comes first).
-     */
-    const val BUDGET_MS = 17_000L
-
     fun build(
         search: suspend (SearchQuery) -> Result<SearchResults>,
         update: ((EmrysState) -> EmrysState) -> Unit,
         taint: AgentTaint,
-        budgetMs: Long = BUDGET_MS,
     ): Map<String, ClientTool> = NAMES.mapValues { (_, kind) ->
         object : ClientTool {
             override suspend fun execute(parameters: Map<String, Any>): ClientToolResult {
@@ -52,7 +44,7 @@ object SearchTools {
                 val id = "agent-search:" + UUID.randomUUID().toString().take(12)
                 update { EmrysStore.searchStarted(it, id, kind) }
                 val result = try {
-                    withTimeoutOrNull(budgetMs) { search(query) } ?: Result.failure(IllegalStateException(TOO_LONG))
+                    search(query)
                 } catch (e: CancellationException) {
                     update { EmrysStore.searchFailed(it, id, null) }
                     throw e
@@ -64,7 +56,7 @@ object SearchTools {
                         ClientToolResult.success(SearchSummary.forAgent(results))
                     },
                     onFailure = { error ->
-                        val said = error.message ?: TOO_LONG
+                        val said = error.message ?: FAILED
                         update { EmrysStore.searchFailed(it, id, "Search didn't work: $said") }
                         ClientToolResult.failure(said)
                     },
@@ -73,7 +65,7 @@ object SearchTools {
         }
     }
 
-    private const val TOO_LONG = "Search took too long. Try again."
+    private const val FAILED = "Search failed. Try again."
 
     /**
      * The agent's parameters (Gson numbers and strings) as a query; null when there is nothing to search for. A

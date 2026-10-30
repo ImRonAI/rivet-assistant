@@ -6,6 +6,7 @@ import type { Frame } from "@/components/ui/matrix"
  * cached (the component restarts an animation whenever the frames array changes).
  */
 export type Program = {
+  kind: "program"
   key: string
   frames: Frame[]
   fps: number
@@ -13,35 +14,29 @@ export type Program = {
   then?: Program
 }
 
-/** Real time the live shows read, sampled by the ticker (see ticker.ts). */
+/** What the live shows read from the ticker (ticker.ts): Emrys's speech as it happens. */
 export type Tick = {
-  now: number
-  /** The speech envelope, 0..1: the real output level when the app sends one, else the visemes' openness. */
+  /** The speech envelope, 0..1: the agent's audio level while it speaks, else how open the viseme is. */
   env: number
-  /** The current viseme and its weight; weight 0 between letters. */
+  /** The viseme on the mouth and its weight; weight 0 between letters. */
   viseme: string
   weight: number
   talking: boolean
-  /** The real input level (the user's voice activity), null when the app sends none. */
-  input: number | null
-  /** Beats since the music started, from the page's beat when it gives one. */
-  beats: number
 }
 
-/** A show driven by real time: speech, levels or the music's beat. `pattern` is called on every tick. */
+/** A show driven by speech as it happens; `pattern` gives its frame for each tick. */
 export type Live = {
+  kind: "live"
   key: string
-  live: true
   pattern: (tick: Tick) => Frame
 }
 
 export type Show = Program | Live
 
-export const isLive = (show: Show): show is Live => "live" in show
-
-export const still = (key: string, frame: Frame): Program => ({ key, frames: [frame], fps: 1, loop: true })
-export const anim = (key: string, frames: Frame[], fps: number): Program => ({ key, frames, fps, loop: true })
+export const still = (key: string, frame: Frame): Program => ({ kind: "program", key, frames: [frame], fps: 1, loop: true })
+export const anim = (key: string, frames: Frame[], fps: number): Program => ({ kind: "program", key, frames, fps, loop: true })
 export const once = (key: string, frames: Frame[], fps: number, then: Program): Program => ({
+  kind: "program",
   key,
   frames,
   fps,
@@ -49,9 +44,14 @@ export const once = (key: string, frames: Frame[], fps: number, then: Program): 
   then,
 })
 
-const cache = new Map<string, unknown>()
-/** Builds a value once per key. */
-export function memo<T>(key: string, build: () => T): T {
-  if (!cache.has(key)) cache.set(key, build())
-  return cache.get(key) as T
+/** A store that builds each value once per key. */
+export function cache<T>(): (key: string, build: () => T) => T {
+  const values = new Map<string, T>()
+  return (key, build) => {
+    const known = values.get(key)
+    if (known !== undefined) return known
+    const value = build()
+    values.set(key, value)
+    return value
+  }
 }

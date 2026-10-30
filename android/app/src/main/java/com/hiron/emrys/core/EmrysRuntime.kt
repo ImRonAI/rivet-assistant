@@ -9,7 +9,6 @@ import com.hiron.emrys.device.ReminderStore
 import com.hiron.emrys.device.ReminderStoreFile
 import com.hiron.emrys.device.Reminders
 import com.hiron.emrys.device.EmrysCallScreening
-import com.hiron.emrys.device.EmrysNotificationListener
 import com.hiron.emrys.service.CallNote
 import com.hiron.emrys.service.Notifications
 import com.hiron.emrys.service.EmrysService
@@ -31,9 +30,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
-import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -137,7 +134,6 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
     )
 
     init {
-        EmrysNotificationListener.onMessage = ::onMessageNotification
         EmrysCallScreening.onIncoming = { number -> note("call", "Incoming call from ${number.ifBlank { "unknown number" }}") }
     }
 
@@ -203,10 +199,10 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
         waiting.forEach(agent::addContext)
     }
 
-    /** Starts a goal-driven background task on its own lane; [reason] is why, in plain words, for its approvals. */
-    fun startTask(goal: String, reason: String? = null): String {
+    /** Starts a goal-driven background task on its own lane. */
+    fun startTask(goal: String): String {
         val taskId = UUID.randomUUID().toString().take(12)
-        gateway.send(Protocol.task(goal, taskId, reason))
+        gateway.send(Protocol.task(goal, taskId))
         note("task", "Task queued: $goal")
         return taskId
     }
@@ -227,14 +223,14 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
         }
         gateway.send(Protocol.approvalResponse(lane, answers))
         Notifications.clearApprovals(app, answers.keys)
-        update { s -> lines.fold(EmrysStore.answered(s, answers.keys)) { acc, line -> EmrysStore.note(acc, now(), "approval", line) } }
+        update { s -> lines.fold(EmrysStore.answered(s, answers.keys, lane)) { acc, line -> EmrysStore.note(acc, now(), "approval", line) } }
     }
 
     /**
      * Shows [request] on the approval sheet (and as a notification while Emrys is in the background) and waits for
-     * the user. No answer within [timeoutMs] is a no.
+     * the user. When the agent stops waiting first, the request leaves the sheet.
      */
-    suspend fun approveOnPhone(request: ApprovalRequest, timeoutMs: Long = AgentTools.APPROVAL_TIMEOUT_MS): Protocol.Answer {
+    suspend fun approveOnPhone(request: ApprovalRequest): Protocol.Answer {
         val answer = CompletableDeferred<Protocol.Answer>()
         localApprovals[request.id] = answer
         var answered = false
@@ -242,9 +238,7 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
             withContext(Dispatchers.IO) { learnNames(listOf(request)) }
             update { it.copy(approvals = it.approvals + request, activity = Activity.Waiting) }
             if (!visible) Notifications.approval(app, request, names = state.value.names)
-            val given = withTimeoutOrNull(timeoutMs) { answer.await() }
-            answered = given != null
-            given ?: Protocol.Answer(false)
+            answer.await().also { answered = true }
         } finally {
             localApprovals.remove(request.id)
             Notifications.clearApproval(app, request.id)
@@ -262,7 +256,7 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
      * Permissions and the assistant screen are the caller's.
      */
     fun applyRecommended(chosen: List<Recommendation>) {
-        Recommended.apply(chosen, settings, now())
+        Recommended.apply(chosen, settings)
         chosen.filterIsInstance<Recommendation.StopAsking>().forEach { setRule(Decision.Deny, it.candidate.target) }
         note("settings", "Applied recommended settings: ${chosen.joinToString(", ") { it.title }}")
     }
@@ -421,26 +415,12 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
     }
 
     private fun runDevice(call: ServerEvent.DeviceCall) {
-        RobotDirector.forDeviceCall(call.tool, call.input).forEach { _robot.tryEmit(it) }
         scope.launch {
             val result = ledger.run(call.actionId, call.tool) { tools.run(call.tool, call.input).toJson() } ?: return@launch
             gateway.send(Protocol.deviceResult(call.actionId, result))
             val ok = result.optBoolean("ok")
             note("device", "${call.tool}: ${if (ok) "done" else result.optString("data").take(120)}")
         }
-    }
-
-    private fun onMessageNotification(record: JSONObject) {
-        if (!settings.offerReplies || state.value.connection != Connection.Online) return
-        // The message text stays out of the goal: the task reads it with notifications_list, which marks the
-        // turn untrusted, so any reply it drafts needs the user's approval.
-        val source = record.optString("app")
-        startTask(
-            "A new $source message notification arrived (key ${record.optString("key")}). Read it with " +
-                "notifications_list. If it needs a reply, draft a short one in the user's voice and send it with " +
-                "notification_reply; the user approves before anything is sent. If it needs no reply, do nothing.",
-            reason = if (source.isBlank()) "A new message arrived." else "A new $source message arrived.",
-        )
     }
 
     private fun note(kind: String, text: String) = update { EmrysStore.note(it, now(), kind, text) }
