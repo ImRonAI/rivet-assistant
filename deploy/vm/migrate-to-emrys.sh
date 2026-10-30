@@ -95,11 +95,13 @@ for name in "${VOLUMES[@]}"; do
   run docker run --rm -v "rivet_$name:/from:ro" -v "emrys_$name:/to" --entrypoint sh caddy:2.11.7 -c 'cp -a /from/. /to/'
 done
 
-# 6: build the brain from <git-ref>.
-run git -C "$root/src" fetch origin "$ref"
-run git -C "$root/src" checkout --detach FETCH_HEAD
+# 6: build the brain from <git-ref>. Git runs as the checkout's owner, which keeps .git's ownership and is the only
+# user git trusts there.
+owner="$(stat -c %U "$root/src")"
+run sudo -u "$owner" git -C "$root/src" fetch origin "$ref"
+run sudo -u "$owner" git -C "$root/src" checkout --detach FETCH_HEAD
 if [ "$apply" = 1 ]; then
-  sha="$(git -C "$root/src" rev-parse --short HEAD)"
+  sha="$(sudo -u "$owner" git -C "$root/src" rev-parse --short HEAD)"
 else
   sha="<sha of $ref>"
 fi
