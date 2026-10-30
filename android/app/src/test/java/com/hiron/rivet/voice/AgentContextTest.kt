@@ -8,9 +8,7 @@ import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.ContextItem
 import com.hiron.rivet.core.GatewayConfig
 import com.hiron.rivet.core.ImageItem
-import com.hiron.rivet.core.Protocol
 import com.hiron.rivet.core.RivetState
-import com.hiron.rivet.core.RuleSet
 import com.hiron.rivet.core.SearchKind
 import com.hiron.rivet.core.WebItem
 import com.hiron.rivet.device.ToolResult
@@ -125,7 +123,7 @@ class AgentContextTest {
         var connects = 0
         val agent = RivetAgent(
             ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
-            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            run = { _, _ -> ToolResult.ok("") },
             update = { change -> state = change(state) }, robot = {}, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             search = { Result.failure(IllegalStateException("unused")) },
             connect = { config, _ ->
@@ -144,7 +142,6 @@ class AgentContextTest {
         }
         assertEquals(listOf("update:" + AgentContext.update(video), "message:Is this one any good?"), session.sent)
         assertEquals(1, connects)
-        assertTrue(agent.tainted)
         assertEquals("/v1/agent/session?mode=text", server.takeRequest().path)
         assertTrue(state.messages.any { it.system && it.text == "Added to Rivet: How to pick trail shoes" })
 
@@ -190,7 +187,7 @@ class AgentContextTest {
         var state = RivetState(messages = listOf(said(1, true, "Find coffee near the park"), said(2, false, "Summit Coffee is open until 7.")))
         val agent = RivetAgent(
             ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
-            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            run = { _, _ -> ToolResult.ok("") },
             update = { change -> state = change(state) }, robot = {}, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             search = { Result.failure(IllegalStateException("unused")) }, transcript = { state.messages },
             connect = { config, _ ->
@@ -209,7 +206,6 @@ class AgentContextTest {
         await(2)
         val first = AgentHistory.recap(listOf(said(1, true, "Find coffee near the park"), said(2, false, "Summit Coffee is open until 7.")))
         assertEquals(listOf("update:$first", "message:And tomorrow?"), session.sent)
-        assertFalse(agent.tainted)
 
         // The next session, after a stop, knows the last one was by text and hears the newest line too.
         agent.stop()
@@ -232,7 +228,7 @@ class AgentContextTest {
         var config: ConversationConfig? = null
         val agent = RivetAgent(
             ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
-            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            run = { _, _ -> ToolResult.ok("") },
             update = { change -> state = change(state) }, robot = {}, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
             search = { Result.failure(IllegalStateException("unused")) }, transcript = { state.messages },
             connect = { c, _ ->

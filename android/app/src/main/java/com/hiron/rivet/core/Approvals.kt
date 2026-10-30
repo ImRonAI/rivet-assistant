@@ -40,7 +40,7 @@ enum class NoAllow(val wire: String) {
     }
 }
 
-/** Action + recipient: what a standing rule is about. [scope] values are normalized ([RuleScope]). */
+/** Action + recipient: what a standing rule is about. */
 data class RuleTarget(val tool: String, val scope: Map<String, String>)
 
 /** The "don't ask again" choices an approval offers. */

@@ -14,11 +14,9 @@ import com.hiron.rivet.service.Notifications
 import com.hiron.rivet.service.RivetService
 import com.hiron.rivet.ui.ImageLoader
 import com.hiron.rivet.ui.Plain
-import com.hiron.rivet.voice.AgentTools
 import com.hiron.rivet.voice.RivetAgent
 import com.hiron.rivet.voice.Speaker
 import com.hiron.rivet.widget.RivetWidgets
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,7 +28,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.UUID
@@ -115,13 +112,10 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
     /** Result thumbnails and images, cached in memory only. */
     val images = ImageLoader(http)
 
-    /** Approvals the ElevenLabs agents are waiting on, answered on this phone instead of by the brain. */
-    private val localApprovals = ConcurrentHashMap<String, CompletableDeferred<Protocol.Answer>>()
-
     /** The ElevenLabs agents, used instead of the brain's turns when [Settings.elevenLabsAgents] is on. */
     val agent = RivetAgent(
-        app, http, settings::gateway, tools::run, { approveOnPhone(it) }, { ruleBook.state.value }, ::setRule, ::update,
-        { _robot.tryEmit(it) }, scope, search::search, transcript = { state.value.messages },
+        app, http, settings::gateway, tools::run, ::update, { _robot.tryEmit(it) }, scope, search::search,
+        transcript = { state.value.messages },
     )
 
     /** Turns sent but not yet acknowledged with `turn.accepted`; re-sent on reconnect (the brain dedups by id). */
@@ -217,41 +211,9 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
             if (offer.deny) decisions.record(offer.target, offer.label, answer.approved)
         }
         val lines = requests.mapNotNull { r -> answers[r.id]?.let { RivetStore.answer(r, it) } }
-        if (lane == AgentTools.LANE) {
-            answers.forEach { (id, answer) -> localApprovals[id]?.complete(answer) }
-            update { s -> lines.fold(s) { acc, line -> RivetStore.note(acc, now(), "approval", line) } }
-            return
-        }
         gateway.send(Protocol.approvalResponse(lane, answers))
         Notifications.clearApprovals(app, answers.keys)
         update { s -> lines.fold(RivetStore.answered(s, answers.keys, lane)) { acc, line -> RivetStore.note(acc, now(), "approval", line) } }
-    }
-
-    /**
-     * Shows [request] on the approval sheet (and as a notification while Rivet is in the background) and waits for
-     * the user. No answer within [timeoutMs] is a no.
-     */
-    suspend fun approveOnPhone(request: ApprovalRequest, timeoutMs: Long = AgentTools.APPROVAL_TIMEOUT_MS): Protocol.Answer {
-        val answer = CompletableDeferred<Protocol.Answer>()
-        localApprovals[request.id] = answer
-        var answered = false
-        return try {
-            withContext(Dispatchers.IO) { learnNames(listOf(request)) }
-            update { it.copy(approvals = it.approvals + request, activity = Activity.Waiting) }
-            if (!visible) Notifications.approval(app, request, names = state.value.names)
-            val given = withTimeoutOrNull(timeoutMs) { answer.await() }
-            answered = given != null
-            given ?: Protocol.Answer(false)
-        } finally {
-            localApprovals.remove(request.id)
-            Notifications.clearApproval(app, request.id)
-            update { s ->
-                val approvals = s.approvals.filterNot { it.id == request.id }
-                val activity = if (s.activity == Activity.Waiting && approvals.isEmpty()) Activity.Working else s.activity
-                val next = s.copy(approvals = approvals, activity = activity)
-                if (answered) next else RivetStore.note(next, now(), "approval", RivetStore.EXPIRED)
-            }
-        }
     }
 
     /**

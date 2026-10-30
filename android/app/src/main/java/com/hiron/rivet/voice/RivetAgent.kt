@@ -5,24 +5,17 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.hiron.rivet.core.Activity
-import com.hiron.rivet.core.ApprovalRequest
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.ContextItem
-import com.hiron.rivet.core.Decision
 import com.hiron.rivet.core.GatewayConfig
-import com.hiron.rivet.core.Protocol
 import com.hiron.rivet.core.RivetState
 import com.hiron.rivet.core.RivetStore
 import com.hiron.rivet.core.RobotCommand
-import com.hiron.rivet.core.RuleScope
-import com.hiron.rivet.core.RuleSet
-import com.hiron.rivet.core.RuleTarget
 import com.hiron.rivet.core.SearchClient
 import com.hiron.rivet.core.SearchError
 import com.hiron.rivet.core.SearchKind
 import com.hiron.rivet.core.SearchQuery
 import com.hiron.rivet.core.SearchResults
-import com.hiron.rivet.core.Tier
 import com.hiron.rivet.device.ToolResult
 import io.elevenlabs.ClientTool
 import io.elevenlabs.ClientToolResult
@@ -37,7 +30,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -59,10 +51,9 @@ data class AgentCredential(val mode: AgentMode, val credential: String)
 
 /**
  * Rivet's ElevenLabs agents (brain/src/rivet_brain/gateway.py `ELEVENLABS_AGENTS`): [start] a voice or text
- * session, [sendText], [switchMode], [stop]. The agents call the phone tools as client tools; anything the brain
- * would ask about first follows the brain's standing rules ([rules]) or waits for the user's OK on the approval
- * sheet here. A "don't ask again" on that sheet asks the brain for the rule ([setRule]). Their search tools run
- * through [search] and show their results on screen ([SearchTools]). A new session hears the last of the
+ * session, [sendText], [switchMode], [stop]. The agents call the phone tools as client tools, which run on the
+ * phone as they are called ([AgentTools]). Their search tools run through [search] and show their results on screen
+ * ([SearchTools]). A new session hears the last of the
  * conversation so far ([transcript], [AgentHistory]), so switching between voice and text keeps the thread.
  */
 class RivetAgent(
@@ -70,9 +61,6 @@ class RivetAgent(
     http: OkHttpClient,
     private val gateway: () -> GatewayConfig,
     private val run: suspend (String, JSONObject) -> ToolResult,
-    private val approve: suspend (ApprovalRequest) -> Protocol.Answer,
-    private val rules: () -> RuleSet,
-    private val setRule: (Decision, RuleTarget) -> Unit,
     private val update: ((RivetState) -> RivetState) -> Unit,
     private val robot: (RobotCommand) -> Unit,
     private val scope: CoroutineScope,
@@ -81,10 +69,6 @@ class RivetAgent(
     private val connect: suspend (ConversationConfig, Context) -> ConversationSession = { config, context -> ConversationClient.startSession(config, context) },
 ) {
     private val http = http.newBuilder().readTimeout(20, TimeUnit.SECONDS).build()
-    private val taint = AgentTaint()
-
-    /** Whether the conversation has read web or phone content since the user last spoke. */
-    internal val tainted: Boolean get() = taint.tainted
 
     // Main thread only. Every start and stop moves [generation] on, so a stale start or callback can tell.
     private var generation = 0
@@ -103,7 +87,6 @@ class RivetAgent(
 
     fun start(mode: AgentMode, firstMessage: String? = null, firstUpdate: String? = null) {
         stop()
-        taint.reset()
         val earlier = AgentHistory.recap(transcript(), pending = firstMessage, mode = lastMode)
         lastMode = mode
         val gen = generation
@@ -128,7 +111,6 @@ class RivetAgent(
                     checkNotNull(withTimeoutOrNull(AgentTools.CONNECT_TIMEOUT_MS) { connected.await() }) { "the agent did not connect" }
                     // The conversation so far, then what the user added, so the first message can refer to both.
                     earlier?.let(started::sendContextualUpdate)
-                    if (added.isNotEmpty()) taint.mark()
                     added.forEach(started::sendContextualUpdate)
                     added.clear()
                     messages.forEach(started::sendUserMessage)
@@ -164,8 +146,7 @@ class RivetAgent(
 
     /**
      * Passes a result the user added to the agent without asking it to answer ([ConversationSession.sendContextualUpdate]).
-     * With no session yet, a text session starts and gets it as soon as it connects. It is web content, so the turn is
-     * untrusted from here.
+     * With no session yet, a text session starts and gets it as soon as it connects.
      */
     fun addContext(item: ContextItem) {
         val text = AgentContext.update(item)
@@ -177,7 +158,6 @@ class RivetAgent(
         val live = session ?: return start(AgentMode.Text, firstUpdate = text)
         try {
             live.sendContextualUpdate(text)
-            taint.mark()
         } catch (e: IllegalStateException) {
             start(AgentMode.Text, firstUpdate = text)
         }
@@ -218,8 +198,7 @@ class RivetAgent(
             conversationToken = credential.credential.takeIf { voice },
             signedUrl = credential.credential.takeUnless { voice },
             textOnly = !voice,
-            clientTools = AgentTools.build(::runOnPhone, approve, rules, setRule, taint, scope, noted = { note(it, kind = "approval") }) +
-                SearchTools.build(search, update, taint),
+            clientTools = AgentTools.build(::runOnPhone) + SearchTools.build(search, update),
             onConnect = { connected.complete(Unit) },
             onDisconnect = {
                 connected.completeExceptionally(IllegalStateException("the agent ended the session"))
@@ -287,7 +266,6 @@ class RivetAgent(
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun say(fromUser: Boolean, text: String) = update {
-        if (fromUser) taint.asked(text)
         val message = ChatMessage("agent:" + UUID.randomUUID().toString().take(12), fromUser, text)
         it.copy(messages = it.messages + message, activity = if (fromUser) Activity.Thinking else Activity.Done)
     }
@@ -384,62 +362,20 @@ internal suspend fun fetchAgentCredential(http: OkHttpClient, config: GatewayCon
         }
     }
 
-/** The phone tools as ElevenLabs client tools, gated the way the brain gates them (device_tools.py `SPECS`). */
+/** The phone tools as ElevenLabs client tools: each call runs the tool on the phone and answers with its result. */
 object AgentTools {
-    /** Every phone tool the agents call; `call_answering_number` stays the brain's. */
+    /** Every phone tool the agents call (brain/src/rivet_brain/device_tools.py `SPECS`); `call_answering_number` stays the brain's. */
     val NAMES = listOf(
         "sms_send", "sms_list", "contacts_search", "calls_recent", "phone_call", "calendar_list", "calendar_create",
         "notifications_list", "notification_reply", "reminder_create", "reminders_list", "reminder_cancel", "email_draft",
         "apps_list", "app_open", "device_status", "screen_read", "screen_act",
     )
-    const val LANE = "agent"
-
-    /** The SDK gives a client tool 30 seconds in all; the action itself needs the rest. */
-    const val APPROVAL_TIMEOUT_MS = 20_000L
-
-    /** How long a tool waits for its action before answering [STILL_RUNNING], inside the SDK's 30 seconds. */
-    const val TOOL_BUDGET_MS = 27_000L
     const val CONNECT_TIMEOUT_MS = 15_000L
-    const val DECLINED = "The user declined, so it was not done."
 
-    /** brain/src/rivet_brain/approvals.py `STANDING_DENY`, the same words. */
-    fun standingDeny(label: String): String =
-        "The user set Rivet to always decline this ($label), so it was not done. Don't try it again or offer it. If the " +
-            "user asks for it, tell them it's blocked by a rule they can remove in Rivet › Settings › Approval rules."
-
-    /** Tools whose results carry third-party text; mirrors `untrusted_output=True` in brain/src/rivet_brain/device_tools.py. */
-    val UNTRUSTED = setOf("sms_list", "calendar_list", "notifications_list", "screen_read")
-    const val STILL_RUNNING = "This is still running on the phone and may already have happened. Do not do it again; " +
-        "Rivet shows the outcome in its activity log."
-    /**
-     * The action runs in [scope], so it finishes even when the agent has stopped waiting for it. Before it runs, a
-     * standing deny refuses it and a standing allow skips the question (never for a high tier, a deny-only kind of
-     * action, or while [taint] holds); otherwise [approve] asks, and a ticked "don't ask again" goes to [setRule].
-     * [noted] gets the activity line when a rule decided.
-     */
-    fun build(
-        run: suspend (String, JSONObject) -> ToolResult,
-        approve: suspend (ApprovalRequest) -> Protocol.Answer,
-        rules: () -> RuleSet,
-        setRule: (Decision, RuleTarget) -> Unit,
-        taint: AgentTaint,
-        scope: CoroutineScope,
-        budgetMs: Long = TOOL_BUDGET_MS,
-        noted: (String) -> Unit = {},
-    ): Map<String, ClientTool> = NAMES.associateWith { name ->
+    fun build(run: suspend (String, JSONObject) -> ToolResult): Map<String, ClientTool> = NAMES.associateWith { name ->
         object : ClientTool {
             override suspend fun execute(parameters: Map<String, Any>): ClientToolResult = try {
-                val deadline = System.currentTimeMillis() + budgetMs
-                val input = json(parameters)
-                val refusal = gate(name, input, approve, rules, setRule, taint, noted)
-                if (refusal != null) {
-                    ClientToolResult.failure(refusal)
-                } else {
-                    val action = scope.async { run(name, input) }
-                    val done = withTimeoutOrNull(deadline - System.currentTimeMillis()) { result(action.await()) }
-                    if (name in UNTRUSTED) taint.mark()
-                    done ?: ClientToolResult.success(STILL_RUNNING)
-                }
+                result(run(name, json(parameters)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -447,83 +383,6 @@ object AgentTools {
             }
         }
     }
-
-    /** Null when the call may run; otherwise what the agent is told about why it didn't. */
-    private suspend fun gate(
-        name: String,
-        input: JSONObject,
-        approve: suspend (ApprovalRequest) -> Protocol.Answer,
-        rules: () -> RuleSet,
-        setRule: (Decision, RuleTarget) -> Unit,
-        taint: AgentTaint,
-        noted: (String) -> Unit,
-    ): String? {
-        val request = AgentAlerts.request(name, input, taint.tainted, taint.lastAsked) ?: return null
-        val target = request.offer?.target ?: RuleScope.target(name, input)
-        val rule = target?.let { rules().match(it) }
-        if (rule?.decision == Decision.Deny) {
-            noted(RivetStore.byRule(Decision.Deny, rule.label))
-            return standingDeny(rule.label)
-        }
-        if (rule?.decision == Decision.Allow && !request.tier.high && name in AgentAlerts.ALLOWS && !taint.tainted) {
-            noted(RivetStore.byRule(Decision.Allow, rule.label))
-            return null
-        }
-        val answer = approve(request)
-        val offer = request.offer
-        val standing = answer.standing
-        if (standing != null && offer != null) setRule(standing, offer.target)
-        return when {
-            answer.approved -> null
-            standing == Decision.Deny && offer != null -> standingDeny(offer.label)
-            else -> DECLINED
-        }
-    }
-
-    /** The risk tier the brain gives this call (device_tools.py policies). */
-    internal fun tier(name: String, input: JSONObject): Tier = when (name) {
-        "sms_send", "phone_call", "notification_reply" -> Tier.Send
-        "calendar_create" -> Tier.Write
-        "screen_act" -> screenActTier(input)
-        else -> Tier.Read
-    }
-
-    // Word lists from brain/src/rivet_brain/device_tools.py; the phone and the brain must agree.
-    val PURCHASE_WORDS = listOf(
-        "pay", "buy", "purchase", "checkout", "check out", "place order", "order now", "subscribe", "transfer",
-        "send money", "donate", "book now", "rent", "upgrade",
-    )
-    val DESTRUCTIVE_WORDS = listOf(
-        "delete", "remove", "erase", "uninstall", "unsubscribe", "block", "report", "discard", "reset", "clear all",
-        "clear data", "clear history", "sign out", "log out", "deactivate", "close account", "cancel subscription",
-        "cancel order", "cancel booking", "cancel reservation", "cancel membership", "cancel plan", "cancel ride",
-        "cancel trip", "cancel appointment",
-    )
-    val SEND_WORDS = listOf("send", "post", "reply", "share", "tweet", "publish", "comment", "submit", "invite", "call", "forward")
-    val COMMIT_WORDS = listOf(
-        "confirm", "ok", "yes", "accept", "allow", "agree", "done", "finish", "save", "apply", "sign", "approve",
-        "grant", "continue to payment",
-    )
-    val NAVIGATION = setOf("back", "home", "recents", "notifications", "scroll_down", "scroll_up")
-
-    /** device_tools.screen_act_tier: navigation and typing run freely; a tap asks when its label reads like a commit point. */
-    internal fun screenActTier(input: JSONObject): Tier {
-        val action = if (input.isNull("action")) "" else input.optString("action")
-        val label = (if (input.isNull("label")) "" else input.optString("label")).trim()
-        if (action in NAVIGATION || action == "type") return Tier.Read
-        if (action != "tap" || label.isEmpty()) return Tier.Unknown
-        val lowered = label.lowercase()
-        return when {
-            mentions(lowered, PURCHASE_WORDS) -> Tier.Purchase
-            mentions(lowered, DESTRUCTIVE_WORDS) -> Tier.Destructive
-            mentions(lowered, SEND_WORDS) -> Tier.Send
-            mentions(lowered, COMMIT_WORDS) -> Tier.Write
-            else -> Tier.Read
-        }
-    }
-
-    private fun mentions(label: String, words: List<String>) =
-        words.any { Regex("(?<![a-z])${Regex.escape(it)}(?![a-z])").containsMatchIn(label) }
 
     fun result(result: ToolResult): ClientToolResult {
         val text = when (val data = result.data) {

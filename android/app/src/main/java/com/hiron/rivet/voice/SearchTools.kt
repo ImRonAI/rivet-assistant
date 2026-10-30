@@ -20,8 +20,7 @@ import java.util.UUID
 
 /**
  * The agents' seven search tools as client tools: each runs through the brain's search proxy, shows its results on
- * screen, and tells the agent what is shown. These are reads, so nothing asks first; their web text marks the turn
- * untrusted, like [AgentTools.UNTRUSTED].
+ * screen, and tells the agent what is shown.
  */
 object SearchTools {
     val NAMES = mapOf(
@@ -43,7 +42,6 @@ object SearchTools {
     fun build(
         search: suspend (SearchQuery) -> Result<SearchResults>,
         update: ((RivetState) -> RivetState) -> Unit,
-        taint: AgentTaint,
         budgetMs: Long = BUDGET_MS,
     ): Map<String, ClientTool> = NAMES.mapValues { (_, kind) ->
         object : ClientTool {
@@ -60,7 +58,6 @@ object SearchTools {
                 return result.fold(
                     onSuccess = { results ->
                         update { RivetStore.searchShown(it, id, results) }
-                        taint.mark()
                         ClientToolResult.success(SearchSummary.forAgent(results))
                     },
                     onFailure = { error ->

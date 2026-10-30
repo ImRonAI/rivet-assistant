@@ -12,7 +12,6 @@ import com.hiron.rivet.core.NameLookup
 import com.hiron.rivet.core.Protocol
 import com.hiron.rivet.core.RivetRuntime
 import com.hiron.rivet.testing.textApproval
-import com.hiron.rivet.voice.AgentTools
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
@@ -110,24 +109,5 @@ class NotificationsTest {
         assertEquals("Text Dana: “Friday at 9 works!”", text(n, Notification.EXTRA_TITLE))
         assertEquals("Sends a message · you can't undo it", text(n, Notification.EXTRA_TEXT))
         assertEquals("To: Dana · +1 801-555-0100\nMessage: Friday at 9 works!", text(n, Notification.EXTRA_BIG_TEXT))
-    }
-
-    @Test
-    fun theRuntimeNamesThePersonAndClearsApprovalsWhenTheAppShowsThem() = runBlocking {
-        val runtime = RivetRuntime(app, names = NameLookup { if (it == "+18015550100") "Dana" else null })
-        runtime.visible = false
-        val request = textApproval("agent:1", lane = AgentTools.LANE)
-        coroutineScope {
-            val waiting = async { runtime.approveOnPhone(request, timeoutMs = 10_000) }
-            withTimeout(5_000) { while (active().none { it.id == Notifications.approvalId("agent:1") }) yield() }
-            val posted = active().single { it.id == Notifications.approvalId("agent:1") }.notification
-            assertEquals("Text Dana: “Friday at 9 works!”", text(posted, Notification.EXTRA_TITLE))
-            assertEquals(mapOf("+18015550100" to "Dana"), runtime.state.value.names)
-
-            runtime.visible = true
-            assertTrue(active().none { it.id == Notifications.approvalId("agent:1") })
-            runtime.answer(AgentTools.LANE, mapOf("agent:1" to Protocol.Answer(true)))
-            assertTrue(waiting.await().approved)
-        }
     }
 }
