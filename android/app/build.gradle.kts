@@ -14,6 +14,8 @@ android {
         applicationId = "com.hiron.emrys"
         minSdk = 29
         targetSdk = 36
+        // Phones only: the ElevenLabs SDK's WebRTC library is ~12 MB per ABI, and the x86/armv7 copies were 34 MB.
+        ndk { abiFilters += "arm64-v8a" }
         versionCode = 13
         versionName = "0.5.0"
         // Ready-to-use defaults from emrys.local.properties (never committed); they stay editable in Settings.

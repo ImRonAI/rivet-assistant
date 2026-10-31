@@ -179,7 +179,7 @@ class EmrysAgent(
             onInterruption = { onMain(gen) { hush() } },
             onAudioAlignment = { alignment -> onMain(gen) { lipSync(alignment) } },
             onUserTranscriptEvent = { text, _ -> if (voice && text.isNotBlank()) say(fromUser = true, text) },
-            onAgentResponseEvent = { text, _ -> if (text.isNotBlank()) say(fromUser = false, text) },
+            onAgentResponseEvent = { text, _ -> AgentTools.withoutAudioTags(text).let { if (it.isNotBlank()) say(fromUser = false, it) } },
             onError = { code, message -> note("ElevenLabs error $code${message?.let { ": $it" }.orEmpty()}") },
         )
     }
@@ -316,6 +316,14 @@ object AgentTools {
         is Iterable<*> -> JSONArray().apply { v.forEach { put(value(it)) } }
         else -> v.toString()
     }
+
+    /**
+     * The agent's text without the expressive audio tags (`[warmly]`, `[clears throat]`) its voice performs, as the
+     * ElevenLabs widget shows it (convai-widget-core `stripAudioTags`); markdown links like `[docs](url)` stay.
+     */
+    fun withoutAudioTags(text: String): String = AUDIO_TAG.replace(text, "").trim()
+
+    private val AUDIO_TAG = Regex("""\[[\w\s]+\](?!\()\s*""")
 
     data class Spoken(val text: String, val startMs: Double, val seconds: Double)
 

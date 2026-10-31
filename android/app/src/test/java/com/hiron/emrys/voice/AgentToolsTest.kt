@@ -62,6 +62,15 @@ class AgentToolsTest {
     }
 
     @Test
+    fun audioTagsAreSpokenButNotShown() {
+        assertEquals("What's up,", AgentTools.withoutAudioTags("[warmly] [surprised]What's up,"))
+        assertEquals("Hey, you there?", AgentTools.withoutAudioTags("[surprised]Hey, you there?"))
+        assertEquals("Hello world", AgentTools.withoutAudioTags("Hello [clears throat] world"))
+        assertEquals("Hello [docs](https://example.com)", AgentTools.withoutAudioTags("[happy] Hello [docs](https://example.com)"))
+        assertEquals("", AgentTools.withoutAudioTags("[laughs]"))
+    }
+
+    @Test
     fun alignmentBecomesTimedWords() {
         val alignment = mapOf(
             "event_id" to 19.0,
