@@ -54,7 +54,6 @@ import androidx.compose.material.icons.outlined.GppGood
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PowerSettingsNew
-import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.ScreenSearchDesktop
 import androidx.compose.material.icons.outlined.Shield
@@ -183,7 +182,7 @@ fun Onboarding(runtime: EmrysRuntime, onFinish: () -> Unit) {
         }
         AnimatedContent(step, Modifier.weight(1f).fillMaxWidth(), transitionSpec = { stepMotion(slide, reduce) }, label = "step") { shown ->
             when (shown) {
-                1 -> MeetStep(runtime, next = { step = 2 }, onFinish = onFinish)
+                1 -> MeetStep(next = { step = 2 }, onFinish = onFinish)
                 2 -> ModelsStep(runtime, next = { step = 3 })
                 3 -> AssistantStep(next = { step = 4 })
                 else -> AccessStep(onFinish)
@@ -209,7 +208,7 @@ private fun stepCopy(step: Int): Pair<AnnotatedString, String> = when (step) {
         withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append("Emrys") }
         appendHaloStop()
     } to "An AI assistant you can see, with an honest heart."
-    2 -> headline("Talk or type") to "Emrys's ElevenLabs agents answer you, or Emrys's own brain when they're off."
+    2 -> headline("Talk or type") to "Emrys's ElevenLabs agents answer you, out loud or in text."
     3 -> headline("Default assistant") to "Set Emrys as your phone's assistant so it's always one press away."
     else -> headline("System access") to "Strictly opt-in. Revocable anytime in Android Settings."
 }
@@ -346,18 +345,10 @@ private fun SetupRow(
 }
 
 @Composable
-private fun MeetStep(runtime: EmrysRuntime, next: () -> Unit, onFinish: () -> Unit) {
-    var recommending by rememberSaveable { mutableStateOf(false) }
-    if (recommending) {
-        RecommendedFlow(runtime) { applied ->
-            recommending = false
-            if (applied) onFinish()
-        }
-    }
+private fun MeetStep(next: () -> Unit, onFinish: () -> Unit) {
     StepScaffold(
         keys = {
-            StepKey("Use recommended settings") { recommending = true }
-            SecondaryKey("Set up step by step", next, height = 52.dp)
+            StepKey("Set up", next)
             FooterLink("Not now", onFinish)
         },
     ) {
@@ -379,12 +370,7 @@ private fun MeetStep(runtime: EmrysRuntime, next: () -> Unit, onFinish: () -> Un
 @Composable
 private fun ModelsStep(runtime: EmrysRuntime, next: () -> Unit) {
     val settings = runtime.settings
-    var agents by remember { mutableStateOf(settings.elevenLabsAgents) }
     var voice by remember { mutableStateOf(settings.voiceModel) }
-    val setAgents = { on: Boolean ->
-        agents = on
-        runtime.useAgents(on)
-    }
     val setVoice = { on: Boolean ->
         voice = on
         settings.voiceModel = on
@@ -393,15 +379,9 @@ private fun ModelsStep(runtime: EmrysRuntime, next: () -> Unit) {
         keys = { StepKey("Save & continue", next) },
     ) {
         Ruled(0) {
-            SetupRow(
-                Icons.Outlined.RecordVoiceOver, "ElevenLabs agents", "Talk and type with Emrys's ElevenLabs agents. Off: Emrys's own brain answers.",
-                checked = agents, onToggle = { setAgents(!agents) }, trailing = { EmrysToggle(agents, null) },
-            )
+            SetupRow(Icons.Outlined.RecordVoiceOver, "ElevenLabs agents", "Talk and type with Emrys's ElevenLabs agents.")
         }
-        Ruled(1) {
-            SetupRow(Icons.Outlined.Psychology, "Emrys's own brain", "Answers when the ElevenLabs agents are off, runs background tasks, and asks before it acts.")
-        }
-        Ruled(2, last = true) {
+        Ruled(1, last = true) {
             SetupRow(
                 Icons.Outlined.GraphicEq, "Talk key", "Shows the mic key, so you can talk to Emrys out loud.",
                 note = "When you talk" to Tone.Accent,

@@ -12,16 +12,19 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import com.hiron.emrys.MainActivity
-import com.hiron.emrys.core.Connection
+import com.hiron.emrys.core.ApprovalAnswer
 import com.hiron.emrys.core.emrys
-import com.hiron.emrys.testing.FakeAndroidKeyStore
+import com.hiron.emrys.testing.textApproval
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import com.hiron.emrys.testing.shot
 import com.hiron.emrys.testing.windowRoots
 import com.hiron.emrys.ui.COMPOSER_TAG
@@ -30,13 +33,6 @@ import com.hiron.emrys.ui.MINI_STAGE_TAG
 import com.hiron.emrys.ui.STAGE_TAG
 import com.hiron.emrys.ui.TAB_TAG_PREFIX
 import androidx.webkit.WebViewFeature
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
-import org.json.JSONObject
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
@@ -50,17 +46,12 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
 
 private const val ROBOT_PAGE = "https://appassets.androidplatform.net/assets/emrys/index.html"
 private const val CRASHING = "Emrys's robot keeps crashing on this phone."
 private const val NOT_LOADED = "Emrys's robot didn't load (error 404)."
 
-/**
- * Drives the real app (MainActivity, runtime, gateway client, screens) against a stand-in brain over a real
- * WebSocket, and saves a screenshot of every screen to build/screens for review.
- */
+/** Drives the real app (MainActivity, runtime, screens) and saves a screenshot of every screen to build/screens for review. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -68,29 +59,7 @@ class AppFlowTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
 
-    private val server = MockWebServer()
-    private val received = LinkedBlockingQueue<JSONObject>()
-    private val sockets = LinkedBlockingQueue<WebSocket>()
-
-    @After
-    fun tearDown() {
-        compose.activity.emrys.disconnect()
-        sockets.forEach { it.close(1000, null) }
-        brainSockets.forEach { it.close(1000, null) }
-        Thread.sleep(200)
-        runCatching { server.close() }
-    }
-
-    private val brainSockets = mutableListOf<WebSocket>()
-
     private fun shot(name: String) = shot(compose, compose.activity, name)
-
-    private fun next(type: String): JSONObject {
-        while (true) {
-            val m = received.poll(10, TimeUnit.SECONDS) ?: error("brain never got $type")
-            if (m.optString("type") == type) return m
-        }
-    }
 
     private fun until(timeoutMs: Long = 10_000, check: () -> Boolean) {
         val end = System.currentTimeMillis() + timeoutMs
@@ -102,155 +71,40 @@ class AppFlowTest {
         }
     }
 
-    private fun brain(socket: WebSocket, vararg events: String) = events.forEach { socket.send(it) }
-
     @Test
-    fun theWholeAppWorksAgainstABrain() {
-        // First run: the power-on screen, then straight into the app.
-        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
+    fun anAgentsApprovalShowsTheSheetAndDenyAnswersIt() {
+        compose.onNodeWithText("Set up").assertIsDisplayed()
         shot("00-onboarding")
-        compose.onNodeWithText("Not now").performClick()
-        compose.waitForIdle()
-        assertTrue(compose.activity.emrys.settings.onboarded)
+        skipOnboarding()
         shot("01-home-start")
 
-        // Point the runtime at the stand-in brain and connect, as the baked-in config does with the real one.
-        server.enqueue(
-            MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-                override fun onOpen(webSocket: WebSocket, response: Response) {
-                    brainSockets += webSocket
-                    sockets.put(webSocket)
-                }
-
-                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                    webSocket.close(1000, null)
-                }
-
-                override fun onMessage(webSocket: WebSocket, text: String) {
-                    received.put(JSONObject(text))
-                }
-            }),
-        )
-        server.start()
+        // The text agent called request_approval: the sheet asks, and Deny goes back as the tool's result.
         val runtime = compose.activity.emrys
-        runtime.settings.gatewayUrl = server.url("/").toString()
-        runtime.settings.sessionId = "flow-test"
-        // This flow is Emrys's own brain; the ElevenLabs agents are the default, and suggestions would call the brain too.
-        runtime.settings.elevenLabsAgents = false
-        runtime.settings.searchSuggestions = false
-        // The token is sealed with the Android keystore, as on a phone; no baked-in build config is needed.
-        FakeAndroidKeyStore.install()
-        runtime.settings.deviceToken = "flow-test-device-token"
-        assertEquals("flow-test-device-token", runtime.settings.deviceToken)
-        runtime.connect()
-        val socket = sockets.poll(10, TimeUnit.SECONDS)!!
-        assertEquals("resume", next("resume").getString("type"))
-        until { runtime.state.value.connection == Connection.Online }
-        // Without a baked-in config the app opened on Settings; back to Emrys now that it is connected.
-        compose.onNodeWithTag(TAB_TAG_PREFIX + "emrys").performClick()
-        shot("02-home-online")
+        val request = textApproval()
+        val answer = CompletableDeferred<ApprovalAnswer>()
+        CoroutineScope(Dispatchers.Default).launch { answer.complete(runtime.approve(request)) }
+        until { compose.onAllNodesWithTextCount(request.details) > 0 }
+        shot("02-approval-sheet")
+        compose.onNodeWithText("Deny").performClick()
+        until { answer.isCompleted }
+        assertEquals(ApprovalAnswer(false), runBlocking { answer.await() })
+        assertTrue(runtime.state.value.approvals.isEmpty())
 
-        // Chat: type, send, stream a reply.
-        compose.onNodeWithTag(COMPOSER_TAG).performTextInput("What's on my calendar tomorrow?")
-        compose.onNodeWithContentDescription("Send").performClick()
-        val turn = next("turn")
-        assertEquals("What's on my calendar tomorrow?", turn.getString("text"))
-        val id = turn.getString("turn_id")
-        brain(
-            socket,
-            """{"type":"turn.accepted","turn_id":"$id"}""",
-            """{"type":"turn.started","turn_id":"$id","lane":"default"}""",
-            """{"type":"tool","id":"c1","name":"calendar_list","lane":"default"}""",
-        )
-        // The brain asks the phone for its calendar; the app runs the tool and answers.
-        brain(socket, """{"type":"device.call","action_id":"c1","tool":"device_status","input":{}}""")
-        val result = next("device.result")
-        assertEquals("c1", result.getString("action_id"))
-        assertTrue(result.getJSONObject("result").getBoolean("ok"))
-        brain(
-            socket,
-            """{"type":"text","delta":"Tomorrow you have ","lane":"default"}""",
-            """{"type":"text","delta":"a **dentist cleaning** at 9 AM.","lane":"default"}""",
-            """{"type":"turn.completed","turn_id":"$id","lane":"default","text":"Tomorrow you have a **dentist cleaning** at 9 AM.","restarts":0}""",
-        )
-        until { compose.onAllNodesWithTextCount("dentist cleaning") > 0 }
-        compose.onNodeWithText("Tomorrow you have a dentist cleaning at 9 AM.").assertIsDisplayed()
-        shot("03-home-conversation")
+        tab("activity")
+        until { compose.onAllNodesWithTextCount("Declined: ${request.details}") > 0 }
+        shot("03-activity")
 
-        // The transcript sheet pulls up over the stage and back down.
-        compose.onNodeWithContentDescription("Expand transcript").performClick()
-        until { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Show Emrys")).fetchSemanticsNodes().isNotEmpty() }
-        compose.mainClock.advanceTimeBy(600)
-        shot("03b-home-transcript-expanded")
-        compose.onNodeWithContentDescription("Show Emrys").performClick()
-        compose.mainClock.advanceTimeBy(600)
-
-        // An approval pops the review sheet; "don't ask again" with Deny answers the brain with a standing deny.
-        brain(
-            socket,
-            """{"type":"approval.request","turn_id":"$id","lane":"default","expires_at":9999999999,
-               "approvals":[{"id":"emrys-approval:a1","name":"emrys-approval","because":"You asked: “Text Dana that Friday at 9 works”",
-               "request":{"v":2,"tool":"sms_send","tier":"send","high":false,"headline":"Text +18015550123: “Friday at 9 works!”",
-               "blocks":[{"kind":"field","label":"To","value":"+18015550123"},{"kind":"quote","label":"Message","text":"Friday at 9 works!"}],
-               "preview":"{\"to\": \"+18015550123\", \"body\": \"Friday at 9 works!\"}",
-               "offer":{"key":"sms_send?to=%2B18015550123","tool":"sms_send","scope":{"to":"+18015550123"},"label":"Texts to +18015550123",
-               "allow":true,"deny":true}}}]}""",
-        )
-        until { compose.onAllNodesWithTextCount("Text +1 801-555-0123: “Friday at 9 works!”") > 0 }
-        shot("04-approval-sheet")
-        compose.onNodeWithText("Don't ask again about Texts to +1 801-555-0123").performClick()
-        compose.onNodeWithText("Always deny").performClick()
-        val answer = next("approval.response").getJSONObject("answers").getJSONObject("emrys-approval:a1")
-        assertFalse(answer.getBoolean("approved"))
-        assertEquals("deny", answer.getString("standing"))
-
-        // A call Emrys is answering: the lines come in live, the user takes it over, then Emrys's summary.
-        runtime.settings.ownNumber = "+18015550100"
-        val started = System.currentTimeMillis() / 1000.0 - 42
-        brain(
-            socket,
-            """{"type":"call.live","call_id":"c-1","from":"+18015550123","verified":true,"started_at":$started,"status":"answering",
-               "lines":[{"speaker":"emrys","text":"Hi, this is Emrys, Tim's assistant. How can I help?"},
-               {"speaker":"caller","text":"Hi, it's Dana from Wasatch Dental, confirming Friday at 9."}],"snapshot":true}""",
-        )
-        until { compose.onAllNodesWithTextCount("confirming Friday at 9") > 0 }
-        shot("04b-live-call")
-        compose.onNodeWithText("Take over").performClick()
-        val takeOver = next("call.take_over")
-        assertEquals("c-1", takeOver.getString("call_id"))
-        assertEquals("+18015550100", takeOver.getString("to"))
-        brain(
-            socket,
-            """{"type":"call.ended","call_id":"c-1","from":"+18015550123","caller_name":"Dana from Wasatch Dental","started_at":$started,
-               "ended_at":${started + 95},"duration":95,"summary":"Dana confirmed Friday at 9 for the cleaning.","outcome":"message_taken",
-               "taken_over":true}""",
-        )
-        until { compose.onAllNodesWithTextCount("Dismiss") > 0 }
-        shot("04c-call-ended")
-        compose.onNodeWithText("Dismiss").performClick()
-
-        // A call message arrives.
-        brain(
-            socket,
-            """{"type":"call.message","caller_name":"Dana from Wasatch Dental","callback_number":"+18015550123",
-               "message":"Confirming Friday at 9.","urgent":false,"hung_up_early":false,"at":1793080062.0}""",
-        )
-        compose.onNodeWithTag(TAB_TAG_PREFIX + "activity").performClick()
-        until { compose.onAllNodesWithTextCount("Dana from Wasatch Dental") > 0 }
-        shot("05-activity")
-
-        compose.onNodeWithTag(TAB_TAG_PREFIX + "settings").performClick()
-        compose.waitForIdle()
-        shot("06-settings-top")
+        tab("settings")
+        shot("04-settings-top")
         compose.onNode(hasText("Turn on")).performScrollTo()
-        shot("07-settings-call-answering")
+        shot("05-settings-call-answering")
         compose.onNode(hasText("Open Emrys's app info")).performScrollTo().assertIsDisplayed()
-        shot("08-settings-bottom")
+        shot("06-settings-bottom")
     }
 
     @Test
     fun firstRunWalksEveryStep() {
-        compose.onNodeWithText("Set up step by step").performClick()
+        compose.onNodeWithText("Set up").performClick()
         compose.onNodeWithText("Save & continue").assertIsDisplayed()
         compose.onNodeWithText("Save & continue").performClick()
         compose.onNodeWithText("Skip for now").performClick()
@@ -259,18 +113,15 @@ class AppFlowTest {
         assertTrue(compose.activity.emrys.settings.onboarded)
     }
 
-    /**
-     * Skips the power-on screens. The app then opens on [landing]: Home with a complete brain config (one baked in from
-     * `emrys.local.properties` counts), Settings without one.
-     */
+    /** Skips the power-on screens; the app then opens on Home. */
     private fun skipOnboarding() {
         compose.onNodeWithText("Not now").performClick()
         compose.waitForIdle()
         assertTrue(compose.activity.emrys.settings.onboarded)
     }
 
-    /** The slot showing Emrys on the screen the app opens on after onboarding. */
-    private fun landing(): Slot = if (compose.activity.emrys.settings.gateway().complete) Slot.Stage else Slot.Band
+    /** The slot showing Emrys on the screen the app opens on after onboarding: Home's stage. */
+    private fun landing(): Slot = Slot.Stage
 
     private fun tab(name: String) {
         compose.onNodeWithTag(TAB_TAG_PREFIX + name).performClick()

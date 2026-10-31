@@ -3,7 +3,6 @@ package com.hiron.emrys.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
@@ -37,34 +36,5 @@ class ChatScrollTest {
         compose.onNodeWithText("msg-39", substring = true).assertIsDisplayed()
         compose.onNodeWithTag(CHAT_TAG).performScrollToNode(hasText("msg-00", substring = true))
         compose.onNodeWithText("msg-00", substring = true).assertIsDisplayed()
-    }
-
-    @Test
-    fun streamingTextDoesNotPullYouBackDownWhileReadingHistory() {
-        val messages = mutableStateOf(conversation(40))
-        compose.setContent {
-            EmrysTheme { Box(Modifier.size(360.dp, 320.dp)) { Chat(messages.value, null, Modifier.fillMaxSize()) } }
-        }
-        compose.onNodeWithTag(CHAT_TAG).performScrollToNode(hasText("msg-05", substring = true))
-        repeat(5) { step ->
-            val last = messages.value.last()
-            messages.value = messages.value.dropLast(1) + last.copy(text = last.text + " more$step", streaming = true)
-            compose.waitForIdle()
-        }
-        compose.onNodeWithText("msg-05", substring = true).assertIsDisplayed()
-    }
-
-    @Test
-    fun streamingTextStaysInViewAtTheBottom() {
-        val messages = mutableStateOf(conversation(10))
-        compose.setContent {
-            EmrysTheme { Box(Modifier.size(360.dp, 320.dp)) { Chat(messages.value, null, Modifier.fillMaxSize()) } }
-        }
-        repeat(8) { step ->
-            val last = messages.value.last()
-            messages.value = messages.value.dropLast(1) + last.copy(text = last.text + " streamed$step".repeat(3), streaming = true)
-            compose.waitForIdle()
-        }
-        compose.onNodeWithText("streamed7", substring = true).assertIsDisplayed()
     }
 }

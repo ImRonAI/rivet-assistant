@@ -2,7 +2,6 @@ package com.hiron.emrys.voice
 
 import android.speech.SpeechRecognizer
 import com.hiron.emrys.core.Activity
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysState
 import com.hiron.emrys.ui.AssistPhase
 import com.hiron.emrys.ui.AssistUi
@@ -15,8 +14,8 @@ data class AssistLocal(
     val listening: Boolean = false,
     /** The words heard so far. */
     val partial: String = "",
-    /** The turn this overlay sent, once it has sent one. */
-    val turnId: String? = null,
+    /** The id of the message this overlay sent, once it has sent one. */
+    val messageId: String? = null,
     val asked: String = "",
     /** A nudge to try again, with nothing wrong. */
     val hint: String? = null,
@@ -33,7 +32,6 @@ data class AssistLocal(
 object AssistModel {
     const val DIDNT_CATCH = "I didn't catch that. Tap the mic and try again."
     const val NO_RECOGNIZER = "This phone has no speech recognizer Emrys can use. Type instead."
-    const val SET_UP_FIRST = "Emrys isn't connected to its brain yet. Open Emrys and finish setup in Settings."
     const val MIC_NOTE = "Emrys needs the microphone to hear you here. Allow it once in the app, or type instead."
     const val LOCKED_NOTE = "Unlock your phone to talk to Emrys. It can read and send your messages, so it waits until the phone is yours."
 
@@ -44,38 +42,31 @@ object AssistModel {
             local.needsMic -> base.copy(phase = AssistPhase.NeedsMic, status = "MIC OFF", note = MIC_NOTE)
             local.listening -> base.copy(phase = AssistPhase.Listening, heard = local.partial, status = "LISTENING", level = local.level)
             local.problem != null -> base.copy(phase = AssistPhase.Failed, heard = local.asked.ifBlank { local.partial }, status = "DIDN'T FINISH", note = local.problem)
-            local.turnId == null -> base.copy(note = local.hint)
-            else -> turn(local.turnId, local.asked, state, base)
+            local.messageId == null -> base.copy(note = local.hint)
+            else -> turn(local.messageId, local.asked, state, base)
         }
     }
 
-    private fun turn(turnId: String, asked: String, state: EmrysState, base: AssistUi): AssistUi {
-        val at = state.messages.indexOfFirst { it.id == "$turnId:user" }
-        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser && it.spoken }
-        val waiting = state.approvals.count { it.turnId == turnId }
-        val finished = state.activeTurn != turnId
+    private fun turn(messageId: String, asked: String, state: EmrysState, base: AssistUi): AssistUi {
+        val at = state.messages.indexOfFirst { it.id == messageId }
+        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser && !it.system }
+        val waiting = state.approvals.size
         val shown = base.copy(heard = asked, reply = reply?.text.orEmpty(), waiting = waiting)
         return when {
-            reply?.failed == true -> shown.copy(phase = AssistPhase.Failed, reply = "", status = "DIDN'T FINISH", note = reply.text)
-            finished && state.activity == Activity.Failed ->
-                shown.copy(phase = AssistPhase.Failed, status = "DIDN'T FINISH", note = "I couldn't finish that: ${state.lastError ?: "the brain stopped"}")
+            reply == null && state.activity == Activity.Failed ->
+                shown.copy(phase = AssistPhase.Failed, status = "DIDN'T FINISH", note = state.lastError ?: "I couldn't finish that.")
             waiting > 0 -> shown.copy(phase = AssistPhase.Waiting, status = "NEEDS YOU")
-            reply?.streaming == true -> shown.copy(phase = AssistPhase.Replying, status = "REPLYING")
-            finished -> shown.copy(phase = AssistPhase.Done, status = "DONE")
+            reply != null -> shown.copy(phase = AssistPhase.Done, status = "DONE")
             else -> shown.copy(phase = AssistPhase.Working, status = working(state))
         }
     }
 
-    private fun working(state: EmrysState): String = when (state.connection) {
-        Connection.Offline -> "OFFLINE · QUEUED"
-        Connection.Connecting -> "CONNECTING"
-        Connection.Online -> when (state.activity) {
-            Activity.Searching -> "SEARCHING"
-            Activity.Working -> "WORKING"
-            Activity.Texting -> "TEXTING"
-            Activity.Emailing -> "EMAILING"
-            else -> "THINKING"
-        }
+    private fun working(state: EmrysState): String = when (state.activity) {
+        Activity.Searching -> "SEARCHING"
+        Activity.Working -> "WORKING"
+        Activity.Texting -> "TEXTING"
+        Activity.Emailing -> "EMAILING"
+        else -> "THINKING"
     }
 
     /** Keeps the last words heard when a partial result comes back empty. */

@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hiron.emrys.core.Activity
 import com.hiron.emrys.core.EmrysRuntime
 import com.hiron.emrys.core.EmrysState
 import com.hiron.emrys.core.LogEntry
@@ -110,12 +111,15 @@ fun ActivityScreen(runtime: EmrysRuntime, state: EmrysState) {
             itemsIndexed(entries) { i, e ->
                 TraceRow(
                     e, time.format(Date(e.at)), first = i == 0, last = i == entries.lastIndex,
-                    live = e === newest && state.activeTurn != null, gutter = gutter,
+                    live = e === newest && state.activity in WORKING, gutter = gutter,
                 )
             }
         }
     }
 }
+
+/** What Emrys is doing while an agent works on a request. */
+private val WORKING = setOf(Activity.Thinking, Activity.Working, Activity.Waiting)
 
 /** Screen gutters: 20dp, and 16dp on phones under 360dp wide. */
 @Composable

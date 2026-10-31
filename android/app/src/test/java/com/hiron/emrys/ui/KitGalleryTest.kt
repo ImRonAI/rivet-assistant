@@ -22,7 +22,6 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysState
 import com.hiron.emrys.testing.textApproval
 import com.hiron.emrys.testing.shot
@@ -55,7 +54,7 @@ class KitGalleryTest {
     fun cardsKeysAndChips() {
         page {
             Column(Modifier.fillMaxWidth()) {
-                HudHeader(EmrysState(connection = Connection.Online, activity = EmrysActivity.Waiting, approvals = listOf(approval, approval)), "Assistant")
+                HudHeader(EmrysState(activity = EmrysActivity.Waiting, approvals = listOf(approval, approval.copy(id = "a2"))), "Assistant")
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     StepIndicator(2, 4)
                     Eyebrow("Voice configuration")

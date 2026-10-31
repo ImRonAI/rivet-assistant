@@ -31,10 +31,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.hiron.emrys.MainActivity
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.emrys
 import com.hiron.emrys.service.Notifications
-import com.hiron.emrys.service.EmrysService
 import com.hiron.emrys.ui.AssistOverlay
 import com.hiron.emrys.ui.EmrysTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,8 +40,8 @@ import kotlinx.coroutines.flow.update
 
 /**
  * The assistant overlay in the session's own window, over whatever app is showing. It listens as soon as it
- * opens, shows the words as they are heard, sends the request with `emrys.send` and streams the reply from
- * `emrys.state`. A session window is not an activity, so the session owns the lifecycle, saved state and
+ * opens, shows the words as they are heard, sends the request to the text agent with `emrys.ask` and shows the
+ * reply from `emrys.state`. A session window is not an activity, so the session owns the lifecycle, saved state and
  * view-model store that Compose looks up from the view tree.
  */
 class EmrysSession(context: Context) :
@@ -128,12 +126,10 @@ class EmrysSession(context: Context) :
             handedOff = false
             knownApprovals = runtime.state.value.approvals.map { it.id }.toSet()
         }
-        // As with the app on screen: replies are read aloud, device tools may open apps directly, and approvals
-        // show here instead of as notifications.
+        // As with the app on screen: device tools may open apps directly, and approvals show here instead of as
+        // notifications.
         runtime.visible = true
-        runtime.overlayShowing = true
         registry.currentState = Lifecycle.State.RESUMED
-        if (runtime.settings.gateway().complete && runtime.state.value.connection == Connection.Offline) EmrysService.start(context)
         val locked = context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked == true
         local.value = AssistLocal(locked = locked)
         if (!locked) listen()
@@ -151,19 +147,15 @@ class EmrysSession(context: Context) :
         super.onDestroy()
     }
 
-    /** Stops listening and speaking, and gives `emrys.visible` back to whoever had it. */
+    /** Stops listening, and gives `emrys.visible` back to whoever had it. */
     private fun leave() {
         drop()
         if (!showing) return
         showing = false
-        runtime.overlayShowing = false
-        runtime.stopSpeaking()
         if (!handedOff) {
             runtime.visible = appWasVisible
             if (!appWasVisible) {
-                val waiting = runtime.state.value.approvals
-                waiting.filter { it.id !in knownApprovals }
-                    .forEach { Notifications.approval(context, it, reviewOnly = it.high || waiting.size > 1, names = runtime.state.value.names) }
+                runtime.state.value.approvals.filter { it.id !in knownApprovals }.forEach { Notifications.approval(context, it) }
             }
         }
         registry.currentState = Lifecycle.State.CREATED
@@ -175,7 +167,6 @@ class EmrysSession(context: Context) :
 
     private fun listen() {
         drop()
-        runtime.stopSpeaking()
         val typing = local.value.typing
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             local.value = AssistLocal(needsMic = true, typing = typing)
@@ -219,11 +210,7 @@ class EmrysSession(context: Context) :
     private fun ask(text: String) {
         val request = text.trim()
         if (request.isEmpty()) return
-        if (!runtime.settings.gateway().complete) {
-            local.value = AssistLocal(asked = request, problem = AssistModel.SET_UP_FIRST)
-            return
-        }
-        local.value = AssistLocal(turnId = runtime.send(request), asked = request)
+        local.value = AssistLocal(messageId = runtime.ask(request), asked = request)
     }
 
     /** Opens the full app (with [action], if any) and closes the overlay. */

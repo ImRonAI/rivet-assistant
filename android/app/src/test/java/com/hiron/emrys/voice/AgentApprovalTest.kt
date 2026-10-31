@@ -1,10 +1,11 @@
 package com.hiron.emrys.voice
 
-import com.hiron.emrys.core.Decision
-import com.hiron.emrys.core.Protocol
+import com.hiron.emrys.core.ApprovalAnswer
 import com.hiron.emrys.core.EmrysStore
+import com.hiron.emrys.core.PermAction
 import com.hiron.emrys.core.emrys
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -20,37 +21,54 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** The agents' approvals go through the same sheet state as the brain's, but are answered on the phone. */
+/** `request_approval`: the agent waits on the approval sheet and gets `{"approved", "remember_decision"}` back. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class AgentApprovalTest {
     private val runtime get() = RuntimeEnvironment.getApplication().emrys
+    private val tool get() = AgentTools.approval(runtime::approve)
+    private val details = "Text Dana at +1 801-555-0100: “hi”"
 
-    private fun request() = requireNotNull(AgentAlerts.request("sms_send", JSONObject().put("to", "+18015550100").put("body", "hi"), false, null))
-
-    private suspend fun answered(answer: Protocol.Answer): Protocol.Answer = kotlinx.coroutines.coroutineScope {
-        val request = request()
-        val waiting = async { runtime.approveOnPhone(request) }
-        withTimeout(5_000) { while (runtime.state.value.approvals.none { it.id == request.id }) yield() }
-        runtime.answer(AgentTools.LANE, mapOf(request.id to answer))
-        waiting.await()
+    private suspend fun answered(answer: ApprovalAnswer): JSONObject = coroutineScope {
+        val waiting = async { tool.execute(mapOf("action_type" to "send_messages", "details" to details)) }
+        withTimeout(5_000) { while (runtime.state.value.approvals.isEmpty()) yield() }
+        val request = runtime.state.value.approvals.single()
+        assertEquals(PermAction.SendMessages, request.action)
+        assertEquals(details, request.details)
+        runtime.answer(request.id, answer)
+        val result = requireNotNull(waiting.await())
+        assertTrue(result.success)
+        JSONObject(result.result)
     }
 
     @Test
-    fun approveRunsAndDenyRefuses() = runBlocking {
-        assertTrue(answered(Protocol.Answer(true)).approved)
-        assertEquals("Approved: Text +18015550100: “hi”", runtime.state.value.log.last().text)
-        assertFalse(answered(Protocol.Answer(false)).approved)
-        assertEquals("Declined: Text +18015550100: “hi”", runtime.state.value.log.last().text)
-        assertEquals(Protocol.Answer(false, Decision.Deny), answered(Protocol.Answer(false, Decision.Deny)))
-        assertEquals("Always declined: Texts to +18015550100", runtime.state.value.log.last().text)
+    fun approveDenyAndAlwaysAllowReachTheAgent() = runBlocking {
+        val approved = answered(ApprovalAnswer(true))
+        assertTrue(approved.getBoolean("approved"))
+        assertFalse(approved.getBoolean("remember_decision"))
+        assertEquals("Approved: $details", runtime.state.value.log.last().text)
+
+        assertFalse(answered(ApprovalAnswer(false)).getBoolean("approved"))
+        assertEquals("Declined: $details", runtime.state.value.log.last().text)
+        assertFalse(runtime.settings.granted(PermAction.SendMessages))
+
+        assertTrue(answered(ApprovalAnswer(true, remember = true)).getBoolean("remember_decision"))
+        assertTrue(runtime.settings.granted(PermAction.SendMessages))
+        assertEquals("granted", runtime.settings.permissionVariables()["perm_send_messages"])
+        assertTrue(runtime.state.value.approvals.isEmpty())
+    }
+
+    @Test
+    fun anUnknownActionTypeIsRefusedWithoutAsking() = runBlocking {
+        val result = requireNotNull(tool.execute(mapOf("action_type" to "launch_rockets", "details" to "x")))
+        assertFalse(result.success)
+        assertTrue(result.error.orEmpty().startsWith("Unknown action_type \"launch_rockets\""))
         assertTrue(runtime.state.value.approvals.isEmpty())
     }
 
     @Test
     fun aRequestTheAgentStopsWaitingForLeavesTheSheet() = runBlocking {
-        val request = request()
-        assertNull(withTimeoutOrNull(50) { runtime.approveOnPhone(request) })
+        assertNull(withTimeoutOrNull(50) { tool.execute(mapOf("action_type" to "purchases", "details" to "Buy it")) })
         assertTrue(runtime.state.value.approvals.isEmpty())
         assertEquals(EmrysStore.EXPIRED, runtime.state.value.log.last().text)
     }

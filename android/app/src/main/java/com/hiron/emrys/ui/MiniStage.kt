@@ -34,8 +34,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hiron.emrys.core.Activity
-import com.hiron.emrys.core.Connection
-import com.hiron.emrys.core.LiveCallStatus
 import com.hiron.emrys.core.EmrysRuntime
 import com.hiron.emrys.core.EmrysState
 
@@ -99,22 +97,15 @@ private fun bandHeight(window: Dp): Dp? = when {
 }
 
 /** What Emrys is doing, in one plain sentence for the band's screen reader label. */
-internal fun stageStatus(state: EmrysState): String = when (state.connection) {
-    Connection.Offline -> "Emrys is offline."
-    Connection.Connecting -> "Emrys is connecting."
-    Connection.Online -> when (state.liveCall?.status) {
-        LiveCallStatus.Answering, LiveCallStatus.Transferring -> "Emrys is answering a call."
-        LiveCallStatus.Ended, null -> when (state.activity) {
-            Activity.Idle -> "Emrys is ready."
-            Activity.Listening -> "Emrys is listening."
-            Activity.Thinking -> "Emrys is thinking."
-            Activity.Searching -> "Emrys is searching the web."
-            Activity.Working -> "Emrys is working on it."
-            Activity.Texting -> "Emrys is writing a text."
-            Activity.Emailing -> "Emrys is writing an email."
-            Activity.Waiting -> "Emrys needs your OK."
-            Activity.Done -> "Emrys is done."
-            Activity.Failed -> "Emrys didn't finish."
-        }
-    }
+internal fun stageStatus(state: EmrysState): String = when (state.activity) {
+    Activity.Idle -> "Emrys is ready."
+    Activity.Listening -> "Emrys is listening."
+    Activity.Thinking -> "Emrys is thinking."
+    Activity.Searching -> "Emrys is searching the web."
+    Activity.Working -> "Emrys is working on it."
+    Activity.Texting -> "Emrys is writing a text."
+    Activity.Emailing -> "Emrys is writing an email."
+    Activity.Waiting -> "Emrys needs your OK."
+    Activity.Done -> "Emrys is done."
+    Activity.Failed -> "Emrys didn't finish."
 }

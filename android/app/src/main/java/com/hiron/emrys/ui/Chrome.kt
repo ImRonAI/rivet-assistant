@@ -51,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hiron.emrys.R
 import com.hiron.emrys.core.Activity
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysState
 
 /** The name the user sees and hears. */
@@ -118,21 +117,17 @@ fun Capsule(text: String, color: Color, live: Boolean, modifier: Modifier = Modi
 
 private data class Status(val text: String, val color: Color, val live: Boolean = false)
 
-private fun status(state: EmrysState, p: Palette): Status = when (state.connection) {
-    Connection.Offline -> Status("Offline", p.rec)
-    Connection.Connecting -> Status("Connecting", p.amb)
-    Connection.Online -> when (state.activity) {
-        Activity.Idle -> Status("Ready", p.ok)
-        Activity.Listening -> Status("Listening", p.rec, live = true)
-        Activity.Thinking -> Status("Thinking", p.cy, live = true)
-        Activity.Searching -> Status("Searching", p.cy, live = true)
-        Activity.Working -> Status("Working", p.cy, live = true)
-        Activity.Texting -> Status("Texting", p.cy, live = true)
-        Activity.Emailing -> Status("Emailing", p.cy, live = true)
-        Activity.Waiting -> Status("Needs your OK", p.amb, live = true)
-        Activity.Done -> Status("Done", p.ok)
-        Activity.Failed -> Status("Didn't finish", p.rec)
-    }
+private fun status(state: EmrysState, p: Palette): Status = when (state.activity) {
+    Activity.Idle -> Status("Ready", p.ok)
+    Activity.Listening -> Status("Listening", p.rec, live = true)
+    Activity.Thinking -> Status("Thinking", p.cy, live = true)
+    Activity.Searching -> Status("Searching", p.cy, live = true)
+    Activity.Working -> Status("Working", p.cy, live = true)
+    Activity.Texting -> Status("Texting", p.cy, live = true)
+    Activity.Emailing -> Status("Emailing", p.cy, live = true)
+    Activity.Waiting -> Status("Needs your OK", p.amb, live = true)
+    Activity.Done -> Status("Done", p.ok)
+    Activity.Failed -> Status("Didn't finish", p.rec)
 }
 
 /** A tab: [tag] names its test tag (after [TAB_TAG_PREFIX]) and stays the same whatever the label says. */

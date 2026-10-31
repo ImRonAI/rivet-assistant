@@ -16,14 +16,11 @@ android {
         targetSdk = 36
         versionCode = 13
         versionName = "0.5.0"
-        // Ready-to-use defaults from emrys.local.properties (never committed); all stay editable in Settings.
+        // Ready-to-use defaults from emrys.local.properties (never committed); they stay editable in Settings.
         val local = Properties().apply {
             rootProject.file("emrys.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         fun baked(key: String) = "\"" + local.getProperty(key, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-        buildConfigField("String", "DEFAULT_BRAIN_URL", baked("brainUrl"))
-        buildConfigField("String", "DEFAULT_SESSION", baked("session"))
-        buildConfigField("String", "DEFAULT_DEVICE_TOKEN", baked("deviceToken"))
         buildConfigField("String", "DEFAULT_ANSWERING_NUMBER", baked("answeringNumber"))
     }
 
@@ -51,8 +48,6 @@ android {
             // Real rendering for the screen tests' screenshots.
             it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
             it.systemProperty("emrys.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
-            // EMRYS_LIVE=1 also runs LiveBrainTest against the deployed brain this build is configured for.
-            it.systemProperty("emrys.live", System.getenv("EMRYS_LIVE") ?: "0")
         }
     }
     lint {
@@ -85,7 +80,6 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
-    implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.elevenlabs.android)
     debugImplementation(libs.compose.ui.tooling)
@@ -94,7 +88,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)

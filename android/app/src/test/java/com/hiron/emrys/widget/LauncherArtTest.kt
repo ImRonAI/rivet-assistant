@@ -18,8 +18,6 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import com.hiron.emrys.MainActivity
 import com.hiron.emrys.R
-import com.hiron.emrys.core.Connection
-import com.hiron.emrys.service.CallNote
 import com.hiron.emrys.service.Notifications
 import com.hiron.emrys.testing.textApproval
 import com.hiron.emrys.ui.Quick
@@ -189,17 +187,14 @@ class LauncherArtTest {
         Notifications.createChannels(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.cancelAll()
-        Notifications.approval(context, textApproval("a1"), names = mapOf("+18015550100" to "Dana"))
-        Notifications.callAnswering(context, "c-0123456789ab", CallNote("Ada · +1 801-555-0100", "Lunch Friday?"))
+        Notifications.approval(context, textApproval("a1"))
         Notifications.reminder(context, "r1", "Stretch")
         val posted = manager.activeNotifications.map { it.notification }.filter { it.flags and Notification.FLAG_GROUP_SUMMARY == 0 }
-        assertEquals(3, posted.size)
+        assertEquals(2, posted.size)
         posted.forEach {
             assertEquals(context.getColor(R.color.emrys_accent), it.color)
             assertEquals(R.drawable.ic_emrys, it.smallIcon.resId)
         }
-        val service = Notifications.service(context, "Connected and listening for tasks")
-        assertEquals("Emrys", service.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
     }
 
     private fun adaptive(icon: AdaptiveIconDrawable, size: Int, theme: Pair<Int, Int>?): Bitmap {
@@ -221,13 +216,13 @@ class LauncherArtTest {
 
     @Test
     fun bothWidgetsInflateWithEveryControlWired() {
-        val snap = WidgetSnapshot(Connection.Online, "Tomorrow you have a dentist cleaning at 9 AM. I texted Dana that Friday works.", 0)
+        val snap = WidgetSnapshot("Tomorrow you have a dentist cleaning at 9 AM. I texted Dana that Friday works.", 0)
         render(EmrysWidgets.views(context, snap, panel = false), 360f, 72f, "widget-search").let { root ->
             listOf(R.id.ask, R.id.mic, R.id.head).forEach { assertTrue(root.findViewById<View>(it).hasOnClickListeners()) }
         }
         render(EmrysWidgets.views(context, snap, panel = true), 360f, 200f, "widget-panel").let { root ->
             assertEquals(snap.lastReply, root.findViewById<TextView>(R.id.last).text.toString())
-            assertEquals("Online", root.findViewById<TextView>(R.id.status_text).text.toString())
+            assertEquals("Ready", root.findViewById<TextView>(R.id.status_text).text.toString())
             listOf(R.id.ask, R.id.mic, R.id.last, R.id.key_catchup, R.id.key_myday, R.id.key_texts, R.id.key_calls)
                 .forEach { assertTrue(root.findViewById<View>(it).hasOnClickListeners()) }
         }
@@ -237,28 +232,26 @@ class LauncherArtTest {
     }
 
     @Test
-    fun theSearchBarOpensTheSearchSheet() {
-        val snap = WidgetSnapshot(Connection.Online, "", 0)
+    fun theAskBarOpensTheComposer() {
+        val snap = WidgetSnapshot("", 0)
         for (panel in listOf(false, true)) {
             val root = render(EmrysWidgets.views(context, snap, panel), 360f, if (panel) 200f else 72f, if (panel) "widget-panel" else "widget-search")
             assertEquals(context.getString(R.string.widget_ask), root.findViewById<TextView>(R.id.ask).text.toString())
             root.findViewById<View>(R.id.ask).performClick()
             val started = shadowOf(context as android.app.Application).nextStartedActivity
-            assertEquals(EmrysWidgets.ACTION_SEARCH, started.action)
+            assertEquals(EmrysWidgets.ACTION_TYPE, started.action)
             assertEquals(MainActivity::class.java.name, started.component?.className)
         }
-        assertEquals("Search or ask Emrys", context.getString(R.string.widget_ask))
+        assertEquals("Ask Emrys", context.getString(R.string.widget_ask))
     }
 
     @Test
     fun theSmallestSizesStillFitAndSayTheStatusPlainly() {
-        val snap = WidgetSnapshot(Connection.Connecting, "", 0)
+        val snap = WidgetSnapshot("", 0)
         render(EmrysWidgets.views(context, snap, panel = false), 250f, 64f, "widget-search-narrow")
         val panel = render(EmrysWidgets.views(context, snap, panel = true), 250f, 200f, "widget-panel-narrow")
-        assertEquals("Connecting…", panel.findViewById<TextView>(R.id.status_text).text.toString())
+        assertEquals("Ready", panel.findViewById<TextView>(R.id.status_text).text.toString())
         assertEquals(context.getString(R.string.widget_waiting), panel.findViewById<TextView>(R.id.last).text.toString())
-        val offline = render(EmrysWidgets.views(context, snap.copy(connection = Connection.Offline), panel = true), 250f, 200f, "widget-panel-offline")
-        assertEquals("Offline", offline.findViewById<TextView>(R.id.status_text).text.toString())
     }
 
     @Test

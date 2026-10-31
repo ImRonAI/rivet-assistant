@@ -10,7 +10,6 @@ import android.net.Uri
 import android.widget.RemoteViews
 import com.hiron.emrys.MainActivity
 import com.hiron.emrys.R
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysRuntime
 import com.hiron.emrys.core.EmrysState
 import com.hiron.emrys.core.emrys
@@ -23,28 +22,25 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** The 4x1 search bar: search or ask, or tap the voice key to talk. */
+/** The 4x1 bar: ask, or tap the voice key to talk. */
 class SearchWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = EmrysWidgets.render(context, manager, ids, panel = false)
 }
 
-/** The 4x2 panel: connection status, Emrys's latest reply, the search bar and quick keys. */
+/** The 4x2 panel: status, Emrys's latest reply, the ask bar and quick keys. */
 class PanelWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = EmrysWidgets.render(context, manager, ids, panel = true)
 }
 
 /** What the widgets show. */
-data class WidgetSnapshot(val connection: Connection, val lastReply: String, val waiting: Int)
+data class WidgetSnapshot(val lastReply: String, val waiting: Int)
 
 object EmrysWidgets {
     const val ACTION_LISTEN = "com.hiron.emrys.action.LISTEN"
     const val ACTION_TYPE = "com.hiron.emrys.action.TYPE"
     const val ACTION_QUICK = "com.hiron.emrys.action.QUICK"
 
-    /** Opens the search sheet: widgets can't take typing, so the field is in the app. */
-    const val ACTION_SEARCH = "com.hiron.emrys.action.SEARCH"
-
-    /** Keeps every placed widget in step with the runtime. Streaming text is skipped; finished replies count. */
+    /** Keeps every placed widget in step with the runtime. */
     fun follow(context: Context, runtime: EmrysRuntime) {
         val app = context.applicationContext
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
@@ -53,8 +49,7 @@ object EmrysWidgets {
     }
 
     fun snapshotOf(state: EmrysState) = WidgetSnapshot(
-        connection = state.connection,
-        lastReply = state.messages.lastOrNull { !it.fromUser && it.spoken && !it.streaming && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
+        lastReply = state.messages.lastOrNull { !it.fromUser && !it.system && it.text.isNotBlank() }?.text?.let(Rich::plain).orEmpty(),
         waiting = state.approvals.size,
     )
 
@@ -74,13 +69,12 @@ object EmrysWidgets {
         val views = RemoteViews(context.packageName, if (panel) R.layout.widget_panel else R.layout.widget_search)
         val (colour, label) = when {
             snap.waiting > 0 -> R.color.emrys_amber to "${snap.waiting} waiting"
-            snap.connection == Connection.Online -> R.color.emrys_ok to "Online"
-            snap.connection == Connection.Connecting -> R.color.emrys_amber to "Connecting…"
-            else -> R.color.emrys_crimson to "Offline"
+            else -> R.color.emrys_ok to "Ready"
         }
         val dot = context.getColor(colour)
         views.setInt(R.id.status, "setColorFilter", dot)
-        views.setOnClickPendingIntent(R.id.ask, open(context, ACTION_SEARCH, 1))
+        // Widgets can't take typing, so the bar opens the composer in the app.
+        views.setOnClickPendingIntent(R.id.ask, open(context, ACTION_TYPE, 1))
         views.setOnClickPendingIntent(R.id.head, open(context, null, 0))
         views.setOnClickPendingIntent(R.id.mic, open(context, ACTION_LISTEN, 2))
         if (panel) {

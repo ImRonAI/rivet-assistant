@@ -2,21 +2,13 @@ package com.hiron.emrys.core
 
 import android.app.Application
 import android.content.Context
-import com.hiron.emrys.device.ActionLedger
 import com.hiron.emrys.device.DeviceTools
-import com.hiron.emrys.device.ForwardMode
+import com.hiron.emrys.device.EmrysCallScreening
 import com.hiron.emrys.device.ReminderStore
 import com.hiron.emrys.device.ReminderStoreFile
 import com.hiron.emrys.device.Reminders
-import com.hiron.emrys.device.EmrysCallScreening
-import com.hiron.emrys.service.CallNote
 import com.hiron.emrys.service.Notifications
-import com.hiron.emrys.service.EmrysService
-import com.hiron.emrys.ui.ImageLoader
-import com.hiron.emrys.ui.Plain
-import com.hiron.emrys.voice.AgentTools
 import com.hiron.emrys.voice.EmrysAgent
-import com.hiron.emrys.voice.Speaker
 import com.hiron.emrys.widget.EmrysWidgets
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -28,13 +20,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import java.io.File
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 
 class EmrysApp : Application() {
     lateinit var runtime: EmrysRuntime
@@ -45,28 +32,21 @@ class EmrysApp : Application() {
         Notifications.createChannels(this)
         runtime = EmrysRuntime(this)
         EmrysWidgets.follow(this, runtime)
-        if (runtime.settings.autoConnect && runtime.settings.gateway().complete) EmrysService.start(this)
     }
 }
 
 val Context.emrys: EmrysRuntime get() = (applicationContext as EmrysApp).runtime
 
 /**
- * The app's single brain connection and everything hanging off it: the rendered [state], the robot's
- * command stream, device tool execution (through the [ActionLedger]), approvals and the brain's standing rules.
+ * The rendered [state], the robot's command stream, the phone tools, the ElevenLabs agents ([agent]) and the
+ * approvals they ask for with `request_approval`.
  */
-class EmrysRuntime(private val app: Context, private val names: NameLookup = ContactNames(app)) {
+class EmrysRuntime(private val app: Context) {
     val settings = Settings(app)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val lock = Any()
 
-    /** The phone's copy of the brain's standing rules. */
-    private val ruleBook = RuleBook(File(app.filesDir, "rules.json")).apply { load() }
-
-    /** The user's recent approval answers, for the recommended standing denies. */
-    val decisions = DecisionLog(File(app.filesDir, "decisions.json"))
-
-    private val _state = MutableStateFlow(EmrysState(rules = ruleBook.state.value))
+    private val _state = MutableStateFlow(EmrysState())
     val state: StateFlow<EmrysState> = _state.asStateFlow()
 
     private val _robot = MutableSharedFlow<RobotCommand>(extraBufferCapacity = 256)
@@ -87,160 +67,43 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
             if (appeared) Notifications.clearApprovals(app, state.value.approvals.map { it.id })
         }
 
-    /** Whether the assistant overlay is on screen (its replies are read aloud only with [Settings.speakInOverlay]). */
-    @Volatile
-    var overlayShowing = false
-
-    /** The next `rules` event is the brain's answer to a new connection's `resume`: the full list for this session. */
-    @Volatile
-    private var resync = true
-
-    /** Calls Emrys is answering that the brain hasn't reported live yet, by call id. */
-    private val answering = ConcurrentHashMap<String, CallNote>()
-
-    private val ledger = ActionLedger(File(app.filesDir, "actions.json"))
     val reminders = Reminders(app, ReminderStore(File(app.filesDir, ReminderStoreFile)))
-    val tools = DeviceTools(app, reminders, settings) { visible }
+    val tools = DeviceTools(app, reminders) { visible }
 
-    private val http = OkHttpClient.Builder()
-        .pingInterval(20, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .build()
-    private val gateway = GatewayClient(http, scope, ::onEvent, ::onConnection)
+    /** Approvals the agents are waiting on, by request id. */
+    private val pending = ConcurrentHashMap<String, CompletableDeferred<ApprovalAnswer>>()
 
-    /** The brain's Brave search proxy, for the agents' search tools, the results page and suggestions. */
-    val search = SearchClient(http, settings::gateway)
-
-    /** Result thumbnails and images, cached in memory only. */
-    val images = ImageLoader(http)
-
-    /** Approvals the ElevenLabs agents are waiting on, answered on this phone instead of by the brain. */
-    private val localApprovals = ConcurrentHashMap<String, CompletableDeferred<Protocol.Answer>>()
-
-    /** The ElevenLabs agents, used instead of the brain's turns when [Settings.elevenLabsAgents] is on. */
-    val agent = EmrysAgent(
-        app, http, settings::gateway, tools::run, { approveOnPhone(it) }, { ruleBook.state.value }, ::setRule, ::update,
-        { _robot.tryEmit(it) }, scope, search::search, transcript = { state.value.messages },
-    )
-
-    /** Turns sent but not yet acknowledged with `turn.accepted`; re-sent on reconnect (the brain dedups by id). */
-    private val unacked = LinkedHashMap<String, String>()
-
-    // Built here, on the main thread (the runtime is created in Application.onCreate), as TextToSpeech expects.
-    private val speaker = Speaker(
-        app,
-        onWord = { word, seconds -> _robot.tryEmit(RobotCommand("mouth", listOf(word, seconds))) },
-        onDone = { _robot.tryEmit(RobotCommand("quiet", emptyList())) },
-    )
+    val agent = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope)
 
     init {
         EmrysCallScreening.onIncoming = { number -> note("call", "Incoming call from ${number.ifBlank { "unknown number" }}") }
     }
 
-    fun connect() {
-        val config = settings.gateway()
-        if (!config.complete) {
-            update { it.copy(lastError = "Set the brain URL and device token in Settings first.") }
-            return
-        }
-        gateway.connect(config)
-    }
+    /** Sends [text] to the text agent; returns the id of the user's message. */
+    fun ask(text: String): String = agent.sendText(text)
 
-    fun disconnect() = gateway.disconnect()
-
-    /** Sends [text] to whoever the user talks to: the ElevenLabs text agent when it is on, otherwise the brain. */
-    fun ask(text: String) {
-        if (settings.elevenLabsAgents) agent.sendText(text) else send(text)
-    }
-
-    /** Sends a chat turn to the brain, with the results the user added ([EmrysState.chips]); returns its id. */
-    fun send(text: String): String {
-        val turnId = "t-" + UUID.randomUUID().toString().take(12)
-        val chips = state.value.chips
-        val message = Protocol.turn(text, turnId, chips)
-        synchronized(lock) { unacked[turnId] = message }
-        update { EmrysStore.userSent(it, turnId, text, chips) }
-        speaker.stop()
-        gateway.send(message)
-        return turnId
-    }
-
-    /**
-     * "Add to Emrys": the ElevenLabs agent gets [item] at once; for the brain it waits as a chip, at most
-     * [CHIP_LIMIT], for the next turn.
-     */
-    fun addContext(item: ContextItem) {
-        if (settings.elevenLabsAgents) return agent.addContext(item)
-        update { s -> if (s.chips.any { it.url == item.url }) s else s.copy(chips = (s.chips + item).takeLast(CHIP_LIMIT)) }
-    }
-
-    fun removeChip(item: ContextItem) = update { it.copy(chips = it.chips - item) }
-
-    /** Asks the brain to run [model]; false while offline. The brain's `model` event says when it has. */
-    fun setModel(model: BrainModel): Boolean {
-        if (state.value.connection != Connection.Online) return false
-        gateway.send(Protocol.modelSet(model))
-        update { it.copy(modelError = null) }
-        return true
-    }
-
-    /** Turns the ElevenLabs agents off, so the user talks to Emrys's own brain from now on. */
-    fun useOwnBrain() {
-        useAgents(false)
-        update { it.copy(agentDown = false, lastError = null) }
-    }
-
-    /** Switches between the ElevenLabs agents and Emrys's own brain; results waiting as chips go to the agent. */
-    fun useAgents(on: Boolean) {
-        settings.elevenLabsAgents = on
-        if (!on) return agent.stop()
-        val waiting = state.value.chips
-        update { it.copy(chips = emptyList()) }
-        waiting.forEach(agent::addContext)
-    }
-
-    /** Starts a goal-driven background task on its own lane. */
-    fun startTask(goal: String): String {
-        val taskId = UUID.randomUUID().toString().take(12)
-        gateway.send(Protocol.task(goal, taskId))
-        note("task", "Task queued: $goal")
-        return taskId
-    }
-
-    /** Answers every approval waiting in [lane]; anything not in [answers] is denied by the brain. */
-    fun answer(lane: String, answers: Map<String, Protocol.Answer>) {
-        val requests = state.value.approvals.filter { it.id in answers }
-        for (request in requests) {
-            val offer = request.offer ?: continue
-            val answer = answers[request.id] ?: continue
-            if (offer.deny) decisions.record(offer.target, offer.label, answer.approved)
-        }
-        val lines = requests.mapNotNull { r -> answers[r.id]?.let { EmrysStore.answer(r, it) } }
-        if (lane == AgentTools.LANE) {
-            answers.forEach { (id, answer) -> localApprovals[id]?.complete(answer) }
-            update { s -> lines.fold(s) { acc, line -> EmrysStore.note(acc, now(), "approval", line) } }
-            return
-        }
-        gateway.send(Protocol.approvalResponse(lane, answers))
-        Notifications.clearApprovals(app, answers.keys)
-        update { s -> lines.fold(EmrysStore.answered(s, answers.keys, lane)) { acc, line -> EmrysStore.note(acc, now(), "approval", line) } }
+    /** Answers a waiting approval; "Always allow" grants its action to every session from now on. */
+    fun answer(id: String, answer: ApprovalAnswer) {
+        val request = state.value.approvals.firstOrNull { it.id == id } ?: return
+        if (answer.approved && answer.remember) settings.grant(request.action, true)
+        pending[id]?.complete(answer)
+        note("approval", EmrysStore.answer(request, answer))
     }
 
     /**
      * Shows [request] on the approval sheet (and as a notification while Emrys is in the background) and waits for
      * the user. When the agent stops waiting first, the request leaves the sheet.
      */
-    suspend fun approveOnPhone(request: ApprovalRequest): Protocol.Answer {
-        val answer = CompletableDeferred<Protocol.Answer>()
-        localApprovals[request.id] = answer
+    suspend fun approve(request: ApprovalRequest): ApprovalAnswer {
+        val answer = CompletableDeferred<ApprovalAnswer>()
+        pending[request.id] = answer
         var answered = false
         return try {
-            withContext(Dispatchers.IO) { learnNames(listOf(request)) }
             update { it.copy(approvals = it.approvals + request, activity = Activity.Waiting) }
-            if (!visible) Notifications.approval(app, request, names = state.value.names)
+            if (!visible) Notifications.approval(app, request)
             answer.await().also { answered = true }
         } finally {
-            localApprovals.remove(request.id)
+            pending.remove(request.id)
             Notifications.clearApproval(app, request.id)
             update { s ->
                 val approvals = s.approvals.filterNot { it.id == request.id }
@@ -251,177 +114,10 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
         }
     }
 
-    /**
-     * Applies recommended settings (task 4): the settings at once, a standing deny per [Recommendation.StopAsking].
-     * Permissions and the assistant screen are the caller's.
-     */
-    fun applyRecommended(chosen: List<Recommendation>) {
-        Recommended.apply(chosen, settings)
-        chosen.filterIsInstance<Recommendation.StopAsking>().forEach { setRule(Decision.Deny, it.candidate.target) }
-        note("settings", "Applied recommended settings: ${chosen.joinToString(", ") { it.title }}")
-    }
-
-    /**
-     * Puts back what the last recommended settings changed and asks the brain to remove the rules they made, also
-     * ones this phone hasn't seen listed yet. False, changing nothing, when there is nothing to undo or when there
-     * are rules to remove while offline, since only the brain can remove them.
-     */
-    fun undoRecommended(): Boolean {
-        val pending = settings.recommendedUndo ?: return false
-        if (pending.ruleTargets.isNotEmpty() && state.value.connection != Connection.Online) return false
-        val undo = Recommended.undo(settings) ?: return false
-        for (target in undo.ruleTargets) {
-            val rule = state.value.rules.match(target)
-            if (rule == null || !revokeRule(rule)) gateway.send(Protocol.rulesRevoke(target))
-        }
-        note("settings", "Undid recommended settings")
-        return true
-    }
-
-    /** Asks the brain for a standing rule about [target]; the phone's copy changes when the brain says so. */
-    fun setRule(decision: Decision, target: RuleTarget) = gateway.send(Protocol.rulesSet(decision, target))
-
-    /** Asks the brain to remove [rule]; false while offline, since only the brain can change rules. */
-    fun revokeRule(rule: StandingRule): Boolean {
-        if (state.value.connection != Connection.Online) return false
-        gateway.send(Protocol.rulesRevoke(rule.key))
-        update { it.copy(removingRules = it.removingRules + rule.key, rulesError = null) }
-        return true
-    }
-
-    /** From a notification action: only offered when [id] is the lane's only pending approval. */
-    fun answerOne(lane: String, id: String, approved: Boolean) {
-        val pending = state.value.approvals.filter { it.lane == lane }
-        if (pending.size > 1 || (pending.isNotEmpty() && pending.single().id != id)) return
-        answer(lane, mapOf(id to Protocol.Answer(approved)))
-    }
-
-    /**
-     * Asks the brain to transfer the call Emrys is answering to the user's own number ([Settings.ownNumber]); the
-     * tap is the approval. Returns false, with the reason in [EmrysState.lastError], when it can't be sent.
-     */
-    fun takeOverCall(callId: String): Boolean {
-        val forwardsAllCalls = settings.answeringMode == ForwardMode.Always && settings.forwardedTo.isNotBlank()
-        val refusal = EmrysStore.takeOverRefusal(state.value, callId, settings.ownNumber, forwardsAllCalls)
-        if (refusal != null) {
-            update { EmrysStore.note(it.copy(lastError = refusal), now(), "call", refusal) }
-            state.value.liveCall?.let { Notifications.callLive(app, it, notice = refusal) }
-            return false
-        }
-        gateway.send(Protocol.takeOver(callId, settings.ownNumber))
-        note("call", "Taking over the call; your phone will ring")
-        return true
-    }
-
-    /** Clears a finished call from [EmrysState.liveCall]. */
-    fun dismissLiveCall() = update { EmrysStore.dismissCall(it) }
-
     fun listening(on: Boolean) = update { it.copy(activity = if (on) Activity.Listening else Activity.Idle) }
-
-    fun stopSpeaking() = speaker.stop()
 
     /** Replays the robot's full state (after the page loads). */
     fun robotSnapshot(): List<RobotCommand> = RobotDirector.diff(null, state.value)
-
-    private fun onEvent(event: ServerEvent) {
-        when (event) {
-            is ServerEvent.TurnAccepted -> event.turnId?.let { synchronized(lock) { unacked.remove(it) } }
-            is ServerEvent.DeviceCall -> runDevice(event)
-            is ServerEvent.ApprovalsRequested -> {
-                learnNames(event.approvals)
-                if (!visible) {
-                    val lone = event.approvals.size == 1
-                    event.approvals.forEach { Notifications.approval(app, it, reviewOnly = it.high || !lone, names = state.value.names) }
-                }
-            }
-            is ServerEvent.ApprovalExpired -> Notifications.clearApprovals(
-                app, state.value.approvals.filter { it.turnId == event.turnId && it.lane == event.lane }.map { it.id },
-            )
-            is ServerEvent.CallAnswering -> CallNote(event.from).let { note ->
-                if (event.callId.isNotBlank()) answering[event.callId] = note
-                Notifications.callAnswering(app, event.callId, note)
-            }
-            is ServerEvent.Rules -> {
-                ruleBook.replace(event.set, authoritative = resync)
-                resync = false
-                learnNames(event.set.rules.map { it.label })
-                update { it.copy(rules = ruleBook.state.value) }
-            }
-            is ServerEvent.TurnCompleted -> if (event.lane == "default" && speaksNow()) speaker.speak(event.text)
-            else -> Unit
-        }
-        update { EmrysStore.reduce(it, event, now()) }
-        if (event is ServerEvent.CallMessage) return callMessage(event)
-        // These render the reduced call (with every line so far), so they follow the update.
-        val call = state.value.liveCall?.takeIf { it.callId == callIdOf(event) } ?: return
-        when (event) {
-            is ServerEvent.CallLive -> Notifications.callLive(app, call.with(answering[call.callId]))
-            is ServerEvent.CallTakeOverFailed -> Notifications.callLive(app, call.with(answering[call.callId]), notice = event.error)
-            is ServerEvent.CallEnded -> Notifications.callEnded(app, call.with(answering.remove(call.callId)))
-            else -> Unit
-        }
-    }
-
-    /** A caller's message joins its call's notification; one for a call this phone doesn't know gets its own. */
-    private fun callMessage(event: ServerEvent.CallMessage) {
-        val live = state.value.liveCall?.takeIf { event.callId.isNotBlank() && it.callId == event.callId && it.status != LiveCallStatus.Ended }
-        val note = answering[event.callId]
-        when {
-            live != null -> Notifications.callLive(app, live, alert = event.urgent)
-            note != null -> note.copy(message = event.message, urgent = event.urgent).let {
-                answering[event.callId] = it
-                Notifications.callAnswering(app, event.callId, it, alert = event.urgent)
-            }
-            else -> Notifications.callMessage(app, event)
-        }
-    }
-
-    /** [this] call with the message its notification already showed while it was only answering. */
-    private fun LiveCall.with(note: CallNote?): LiveCall =
-        if (note == null || message.isNotBlank() || note.message.isBlank()) this else copy(message = note.message, urgent = note.urgent)
-
-    private fun speaksNow(): Boolean = settings.speakReplies && visible && !(overlayShowing && !settings.speakInOverlay)
-
-    /** Looks up contact names for the numbers in [requests] (off the main thread: it queries Contacts). */
-    private fun learnNames(requests: List<ApprovalRequest>) = learnNames(
-        requests.flatMap { r ->
-            listOfNotNull(r.headline, r.offer?.label) + r.blocks.filterIsInstance<AlertBlock.Field>().map { it.value }
-        },
-    )
-
-    @JvmName("learnNamesIn")
-    private fun learnNames(texts: List<String>) {
-        val known = state.value.names
-        val found = texts.flatMap(Plain::numbersIn).distinct().filter { it !in known }
-            .mapNotNull { number -> names.name(number)?.let { number to it } }
-        if (found.isNotEmpty()) update { it.copy(names = it.names + found) }
-    }
-
-    private fun callIdOf(event: ServerEvent): String? = when (event) {
-        is ServerEvent.CallLive -> event.callId
-        is ServerEvent.CallTakeOverFailed -> event.callId
-        is ServerEvent.CallEnded -> event.callId
-        else -> null
-    }
-
-    private fun onConnection(connection: Connection) {
-        if (connection == Connection.Connecting) resync = true
-        update { EmrysStore.connection(it, connection) }
-        EmrysService.status(app, connection)
-        if (connection == Connection.Online) {
-            val pending = synchronized(lock) { unacked.values.toList() }
-            pending.forEach(gateway::send)
-        }
-    }
-
-    private fun runDevice(call: ServerEvent.DeviceCall) {
-        scope.launch {
-            val result = ledger.run(call.actionId, call.tool) { tools.run(call.tool, call.input).toJson() } ?: return@launch
-            gateway.send(Protocol.deviceResult(call.actionId, result))
-            val ok = result.optBoolean("ok")
-            note("device", "${call.tool}: ${if (ok) "done" else result.optString("data").take(120)}")
-        }
-    }
 
     private fun note(kind: String, text: String) = update { EmrysStore.note(it, now(), kind, text) }
 
@@ -436,9 +132,4 @@ class EmrysRuntime(private val app: Context, private val names: NameLookup = Con
     }
 
     private fun now() = System.currentTimeMillis()
-
-    companion object {
-        /** gateway.py takes at most 5 attachments a turn. */
-        const val CHIP_LIMIT = 5
-    }
 }

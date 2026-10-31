@@ -2,12 +2,10 @@ package com.hiron.emrys
 
 import android.Manifest
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings as AndroidSettings
-import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,12 +27,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -43,16 +39,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysRuntime
 import com.hiron.emrys.core.EmrysState
 import com.hiron.emrys.core.emrys
-import com.hiron.emrys.service.EmrysService
 import com.hiron.emrys.ui.ActivityScreen
 import com.hiron.emrys.ui.ApprovalSheet
 import com.hiron.emrys.ui.HomeScreen
 import com.hiron.emrys.ui.HudHeader
-import com.hiron.emrys.ui.LocalImages
 import com.hiron.emrys.ui.LocalPalette
 import com.hiron.emrys.ui.MiniStage
 import com.hiron.emrys.ui.Onboarding
@@ -60,8 +53,6 @@ import com.hiron.emrys.ui.PendantTab
 import com.hiron.emrys.ui.PendantTabs
 import com.hiron.emrys.ui.EmrysTheme
 import com.hiron.emrys.ui.Quick
-import com.hiron.emrys.ui.ResultsRequest
-import com.hiron.emrys.ui.ResultsScreen
 import com.hiron.emrys.ui.SettingsScreen
 import com.hiron.emrys.voice.AgentMode
 import com.hiron.emrys.voice.EmrysVoiceService
@@ -71,7 +62,6 @@ class MainActivity : FragmentActivity() {
     private var listenRequests by mutableIntStateOf(0)
     private var focusRequests by mutableIntStateOf(0)
     private var homeRequests by mutableIntStateOf(0)
-    private var searchRequests by mutableIntStateOf(0)
 
     // Asked for from the assistant overlay, which has no activity to show the permission dialog itself.
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -93,9 +83,7 @@ class MainActivity : FragmentActivity() {
         )
         // A recreated activity (rotation, theme change) must not replay the request that first opened it.
         if (savedInstanceState == null) handle(intent)
-        // A ready-to-use build connects as soon as it opens; nothing to type first.
-        if (emrys.settings.gateway().complete && emrys.state.value.connection == Connection.Offline) EmrysService.start(this)
-        setContent { EmrysTheme { EmrysAppUi(emrys, listenRequests, focusRequests, homeRequests, searchRequests) } }
+        setContent { EmrysTheme { EmrysAppUi(emrys, listenRequests, focusRequests, homeRequests) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -110,7 +98,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         emrys.visible = false
-        emrys.stopSpeaking()
         if (emrys.agent.mode == AgentMode.Voice) emrys.agent.stop()
         super.onStop()
     }
@@ -124,7 +111,6 @@ class MainActivity : FragmentActivity() {
         when (intent?.action) {
             Intent.ACTION_ASSIST, Intent.ACTION_VOICE_COMMAND, EmrysWidgets.ACTION_LISTEN -> listenRequests++
             EmrysWidgets.ACTION_TYPE -> focusRequests++
-            EmrysWidgets.ACTION_SEARCH -> searchRequests++
             EmrysVoiceService.ACTION_ALLOW_MIC -> micPermission.launch(Manifest.permission.RECORD_AUDIO)
             EmrysWidgets.ACTION_QUICK -> Quick.of(intent.data?.lastPathSegment)?.let {
                 emrys.ask(it.prompt)
@@ -147,17 +133,12 @@ private enum class Tab(val label: String) {
 }
 
 @Composable
-private fun EmrysAppUi(runtime: EmrysRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int, searchRequests: Int) {
+private fun EmrysAppUi(runtime: EmrysRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int) {
     val state by runtime.state.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableStateOf(Tab.Emrys) }
     var reviewing by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
-    val voice = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        runtime.listening(false)
-        val heard = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (!heard.isNullOrBlank()) runtime.send(heard)
-    }
     // The voice agent starts once the microphone is allowed; denied for good, only the app's settings page can allow it.
     val agentMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val activity = context as? Activity
@@ -169,25 +150,12 @@ private fun EmrysAppUi(runtime: EmrysRuntime, listenRequests: Int, focusRequests
             else -> runtime.agent.switchMode(AgentMode.Voice)
         }
     }
-    val listen = listen@{
-        runtime.stopSpeaking()
-        if (runtime.settings.elevenLabsAgents) {
-            when {
-                runtime.agent.mode == AgentMode.Voice -> runtime.agent.stop()
-                !runtime.agent.hasMicrophone() -> agentMic.launch(Manifest.permission.RECORD_AUDIO)
-                else -> runtime.agent.switchMode(AgentMode.Voice)
-            }
-            return@listen
-        }
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask Emrys")
-        try {
-            runtime.listening(true)
-            voice.launch(intent)
-        } catch (e: ActivityNotFoundException) {
-            runtime.listening(false)
-            Toast.makeText(context, "No speech recognizer is installed", Toast.LENGTH_SHORT).show()
+    // The talk key starts the voice agent, or ends its session when one is running.
+    val listen = {
+        when {
+            runtime.agent.mode == AgentMode.Voice -> runtime.agent.stop()
+            !runtime.agent.hasMicrophone() -> agentMic.launch(Manifest.permission.RECORD_AUDIO)
+            else -> runtime.agent.switchMode(AgentMode.Voice)
         }
     }
     LaunchedEffect(focusRequests, homeRequests) {
@@ -199,44 +167,21 @@ private fun EmrysAppUi(runtime: EmrysRuntime, listenRequests: Int, focusRequests
             listen()
         }
     }
-    LaunchedEffect(state.connection) {
-        if (state.connection == Connection.Offline && !runtime.settings.gateway().complete) tab = Tab.Settings
-    }
     // First launch: the power-on screens ask for what Emrys uses, instead of making the user hunt through Settings.
     var onboarded by rememberSaveable { mutableStateOf(runtime.settings.onboarded) }
     val finish = {
         runtime.settings.onboarded = true
         onboarded = true
     }
-    // The results page; its results are in memory only, so it isn't saved across a recreate.
-    var results by remember { mutableStateOf<ResultsRequest?>(null) }
-    LaunchedEffect(searchRequests) {
-        if (searchRequests > 0) results = ResultsRequest.Sheet
-    }
-
-    CompositionLocalProvider(LocalImages provides runtime.images) {
-        Box(Modifier.fillMaxSize()) {
-            if (onboarded) {
-                MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests) { results = it }
-            } else {
-                Onboarding(runtime, onFinish = finish)
-            }
-            val page = results
-            if (onboarded && page != null) {
-                ResultsScreen(
-                    page, runtime.search::search, runtime.search, runtime.settings.searchSuggestions,
-                    onAsk = runtime::ask, onAdd = runtime::addContext, onClose = { results = null },
-                )
-            }
+    Box(Modifier.fillMaxSize()) {
+        if (onboarded) {
+            MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests)
+        } else {
+            Onboarding(runtime, onFinish = finish)
         }
     }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {
-        ApprovalSheet(
-            state.approvals,
-            onAnswer = { lane, answers -> runtime.answer(lane, answers) },
-            onDismiss = { reviewing = false },
-            names = state.names,
-        )
+        ApprovalSheet(state.approvals.first(), onAnswer = runtime::answer, onDismiss = { reviewing = false })
     }
     LaunchedEffect(state.approvals.size) {
         reviewing = state.approvals.isNotEmpty()
@@ -254,7 +199,6 @@ private fun MainUi(
     listen: () -> Unit,
     onReviewApprovals: () -> Unit,
     focusRequests: Int,
-    onOpenResults: (ResultsRequest) -> Unit,
 ) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxSize().background(p.bg).imePadding()) {
@@ -270,12 +214,9 @@ private fun MainUi(
         MiniStage(runtime, state, visible = tab != Tab.Emrys, onOpen = { onTab(Tab.Emrys) })
         Crossfade(tab, Modifier.weight(1f).fillMaxWidth(), animationSpec = tween(220), label = "tab") { shown ->
             when (shown) {
-                Tab.Emrys -> HomeScreen(
-                    runtime, state, onListen = listen, onReviewApprovals = onReviewApprovals, focusRequests = focusRequests,
-                    onOpenResults = onOpenResults,
-                )
+                Tab.Emrys -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = onReviewApprovals, focusRequests = focusRequests)
                 Tab.Activity -> ActivityScreen(runtime, state)
-                Tab.Settings -> SettingsScreen(runtime, state)
+                Tab.Settings -> SettingsScreen(runtime)
             }
         }
         if (!WindowInsets.isImeVisible) {

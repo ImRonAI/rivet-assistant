@@ -33,10 +33,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.hiron.emrys.testing.textApproval
-import com.hiron.emrys.core.Connection
+import com.hiron.emrys.core.Activity
+import com.hiron.emrys.core.ChatMessage
 import com.hiron.emrys.core.EmrysState
-import com.hiron.emrys.core.EmrysStore
-import com.hiron.emrys.core.ServerEvent
 import com.hiron.emrys.ui.ASSIST_FIELD_TAG
 import com.hiron.emrys.ui.ASSIST_PANEL_TAG
 import com.hiron.emrys.ui.ASSIST_SCRIM_TAG
@@ -66,12 +65,17 @@ class AssistOverlayTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val asked = "What's on my calendar tomorrow afternoon?"
-    private val mine = AssistLocal(turnId = "t1", asked = asked)
-    private val sent = EmrysStore.userSent(EmrysStore.connection(EmrysState(), Connection.Online), "t1", asked)
+    private val mine = AssistLocal(messageId = "m1", asked = asked)
+    private val sent = EmrysState(activity = Activity.Thinking, messages = listOf(ChatMessage("m1", true, asked)))
 
     private val speech = listOf(0.08f, 0.22f, 0.41f, 0.66f, 0.52f, 0.31f, 0.74f, 0.88f, 0.61f, 0.37f, 0.18f, 0.29f, 0.57f, 0.81f, 0.69f, 0.44f, 0.26f, 0.12f, 0.35f, 0.58f, 0.47f, 0.63f, 0.39f, 0.62f)
 
-    private fun EmrysState.then(vararg events: ServerEvent) = events.fold(this) { s, e -> EmrysStore.reduce(s, e, 1) }
+    /** Text Dana, waiting on the approval the text agent asked for. */
+    private val texting = EmrysState(
+        activity = Activity.Waiting,
+        messages = listOf(ChatMessage("m2", true, "Text Dana that Friday at 9 works")),
+        approvals = listOf(textApproval()),
+    )
 
     private fun shot(name: String) {
         compose.waitForIdle()
@@ -96,39 +100,27 @@ class AssistOverlayTest {
         compose.onNodeWithText("What's on my calendar tomorrow aft", substring = true).assertIsDisplayed()
         shot("assist-listening")
 
-        ui = AssistModel.ui(mine, sent.then(ServerEvent.Searching(listOf("calendar tomorrow"), "default")))
-        compose.onNodeWithText("Searching").assertIsDisplayed()
+        ui = AssistModel.ui(mine, sent)
+        compose.onNodeWithText("Thinking").assertIsDisplayed()
         shot("assist-working")
-
-        val streaming = sent.then(ServerEvent.TextDelta("Tomorrow afternoon you have a dentist cleaning at 2 PM, then ", "default"))
-        ui = AssistModel.ui(mine, streaming)
-        compose.onNodeWithText("dentist cleaning", substring = true).assertIsDisplayed()
-        shot("assist-replying")
 
         ui = AssistModel.ui(
             mine,
-            streaming.then(
-                ServerEvent.TurnCompleted(
-                    "t1", "default",
-                    "Tomorrow afternoon you have a dentist cleaning at 2 PM, then Maya's soccer practice at 5:30 PM at Liberty Park.",
-                    0, null,
+            sent.copy(
+                activity = Activity.Done,
+                messages = sent.messages + ChatMessage(
+                    "m9", false, "Tomorrow afternoon you have a dentist cleaning at 2 PM, then Maya's soccer practice at 5:30 PM at Liberty Park.",
                 ),
             ),
         )
         compose.onNodeWithText("Done").assertIsDisplayed()
         shot("assist-done")
 
-        ui = AssistModel.ui(mine, sent.then(ServerEvent.TurnFailed("t1", "default", "the brain is offline")))
-        compose.onNodeWithText("I couldn't finish that: the brain is offline").assertIsDisplayed()
+        ui = AssistModel.ui(mine, sent.copy(activity = Activity.Failed, lastError = EmrysAgent.COULD_NOT_START))
+        compose.onNodeWithText(EmrysAgent.COULD_NOT_START).assertIsDisplayed()
         shot("assist-error")
 
-        val approval = textApproval(turn = "t2")
-        val texting = EmrysStore.userSent(EmrysStore.connection(EmrysState(), Connection.Online), "t2", "Text Dana that Friday at 9 works")
-            .then(
-                ServerEvent.TextDelta("I'll text Dana: \"Friday at 9 works!\"", "default"),
-                ServerEvent.ApprovalsRequested("t2", "default", listOf(approval), false),
-            )
-        ui = AssistModel.ui(AssistLocal(turnId = "t2", asked = "Text Dana that Friday at 9 works"), texting)
+        ui = AssistModel.ui(AssistLocal(messageId = "m2", asked = "Text Dana that Friday at 9 works"), texting)
         compose.onNodeWithText("Review").assertIsDisplayed()
         shot("assist-waiting")
 
@@ -179,9 +171,6 @@ class AssistOverlayTest {
     @Config(qualifiers = "w360dp-h740dp-xxhdpi")
     fun nothingClipsOnANarrowPhoneWithLargeText() {
         RuntimeEnvironment.setFontScale(1.3f)
-        val approval = textApproval(turn = "t2")
-        val waiting = EmrysStore.userSent(EmrysStore.connection(EmrysState(), Connection.Offline), "t2", "Text Dana that Friday at 9 works")
-            .then(ServerEvent.ApprovalsRequested("t2", "default", listOf(approval), false))
         var ui by mutableStateOf(AssistModel.ui(AssistLocal(listening = true, partial = "Text Dana that Friday at 9", level = 0.5f), EmrysState()))
         compose.setContent { EmrysTheme { Box(Modifier.fillMaxSize()) { SomeOtherApp(); AssistOverlay(ui) } } }
         speech.forEach { level ->
@@ -191,7 +180,7 @@ class AssistOverlayTest {
         compose.onNodeWithText("Open Emrys").assertIsDisplayed()
         shot("assist-narrow-listening")
 
-        ui = AssistModel.ui(AssistLocal(turnId = "t2", asked = "Text Dana that Friday at 9 works"), waiting)
+        ui = AssistModel.ui(AssistLocal(messageId = "m2", asked = "Text Dana that Friday at 9 works"), texting)
         compose.onNodeWithText("Review").assertIsDisplayed()
         shot("assist-narrow-waiting")
 

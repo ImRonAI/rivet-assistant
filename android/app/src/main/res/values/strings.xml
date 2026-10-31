@@ -4,7 +4,7 @@
     <string name="operator_stop">■  Stop Emrys</string>
     <string name="operator_label">Emrys app operator</string>
     <string name="operator_description">Lets Emrys read the screen and tap, type and scroll in other apps when you ask it to. Emrys never reads or types passwords, shows a Stop button while it works, and asks you before anything that sends, pays or deletes.</string>
-    <string name="widget_ask">Search or ask Emrys</string>
+    <string name="widget_ask">Ask Emrys</string>
     <string name="widget_talk">Talk to Emrys</string>
     <string name="widget_mark">Emrys</string>
     <string name="widget_unit">Your assistant</string>
@@ -17,10 +17,10 @@
     <string name="widget_key_myday">My day</string>
     <string name="widget_key_texts">Texts</string>
     <string name="widget_key_calls">Calls</string>
-    <string name="widget_search_label">Emrys search</string>
-    <string name="widget_search_description">Search the web or ask Emrys, or tap the voice key to talk.</string>
+    <string name="widget_search_label">Emrys bar</string>
+    <string name="widget_search_description">Ask Emrys, or tap the voice key to talk.</string>
     <string name="widget_panel_label">Emrys panel</string>
-    <string name="widget_panel_description">Emrys\'s status and latest reply, the search bar and quick keys.</string>
+    <string name="widget_panel_description">Emrys\'s status and latest reply, the ask bar and quick keys.</string>
     <string name="shortcut_talk">Talk to Emrys</string>
     <string name="shortcut_type">Ask Emrys</string>
     <string name="shortcut_catchup">Catch me up</string>

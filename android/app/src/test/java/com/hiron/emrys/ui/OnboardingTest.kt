@@ -50,14 +50,14 @@ class OnboardingTest {
     fun walksThroughEveryStep() {
         show()
         compose.onNodeWithText("Meet Emrys.").assertIsDisplayed()
-        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
-        compose.onNodeWithText("Set up step by step").assertIsDisplayed()
+        compose.onNodeWithText("Set up").assertIsDisplayed()
+        compose.onNodeWithText("Not now").assertIsDisplayed()
         compose.onNodeWithText("You stay in control").assertIsDisplayed()
         shot("00a-onboarding-meet")
 
-        tap("Set up step by step")
+        tap("Set up")
         compose.onNodeWithText("Talk or type.").assertIsDisplayed()
-        compose.onNodeWithText("Emrys's own brain").assertExists()
+        compose.onNodeWithText("ElevenLabs agents").assertExists()
         shot("00b-onboarding-models")
 
         tap("Save & continue")
@@ -83,9 +83,9 @@ class OnboardingTest {
         RuntimeEnvironment.setFontScale(1.3f)
         show()
         compose.onNodeWithText("Meet Emrys.").assertIsDisplayed()
-        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
+        compose.onNodeWithText("Set up").assertIsDisplayed()
         shot("00an-onboarding-meet-narrow")
-        tap("Set up step by step")
+        tap("Set up")
         compose.onNodeWithText("Talk or type.").assertIsDisplayed()
         shot("00bn-onboarding-models-narrow")
         tap("Save & continue")
@@ -94,24 +94,6 @@ class OnboardingTest {
         tap("Skip for now")
         compose.onNodeWithText("System access.").assertIsDisplayed()
         shot("00dn-onboarding-access-narrow")
-    }
-
-    @Test
-    fun recommendedSettingsOpenFromTheFirstScreen() {
-        val settings = compose.activity.emrys.settings
-        settings.autoConnect = false
-        settings.speakInOverlay = true
-        show()
-        tap("Use recommended settings")
-        compose.onNodeWithText("Recommended").assertIsDisplayed()
-        compose.onNodeWithText("Connect automatically").assertIsDisplayed()
-        compose.mainClock.advanceTimeBy(600)
-        shot("onboarding-recommended")
-        // Dismissing the sheet stays on the first screen.
-        compose.onAllNodesWithText("Not now").onLast().performClick()
-        compose.waitForIdle()
-        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
-        assertEquals(0, finished)
     }
 
     @Test
@@ -125,15 +107,8 @@ class OnboardingTest {
     fun theModelsStepWritesSettings() {
         val settings = compose.activity.emrys.settings
         settings.voiceModel = true
-        settings.elevenLabsAgents = true
         show()
-        tap("Set up step by step")
-
-        val agents = compose.onNode(isToggleable() and hasText("ElevenLabs agents"))
-        agents.assertIsOn().performClick()
-        compose.waitForIdle()
-        agents.assertIsOff()
-        assertFalse(settings.elevenLabsAgents)
+        tap("Set up")
 
         val voice = compose.onNode(isToggleable() and hasText("Talk key"))
         voice.assertIsOn().performClick()
@@ -145,7 +120,7 @@ class OnboardingTest {
     @Test
     fun openAssistantSettingsGoesToAndroidAndMovesOn() {
         show()
-        tap("Set up step by step")
+        tap("Set up")
         tap("Save & continue")
         tap("Open assistant settings")
         assertEquals(AndroidSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS, shadowOf(compose.activity).nextStartedActivity.action)
@@ -158,7 +133,7 @@ class OnboardingTest {
             *ACCESS_GROUPS.flatMap { it.permissions }.toTypedArray(),
         )
         show()
-        tap("Set up step by step")
+        tap("Set up")
         tap("Save & continue")
         tap("Skip for now")
         compose.onNode(isToggleable() and hasText("Messages & actions")).assertIsOn()
@@ -171,7 +146,7 @@ class OnboardingTest {
     @Test
     fun customizeLaterFinishesWithoutAsking() {
         show()
-        tap("Set up step by step")
+        tap("Set up")
         tap("Save & continue")
         tap("Skip for now")
         compose.onNode(isToggleable() and hasText("Screen context")).performClick()

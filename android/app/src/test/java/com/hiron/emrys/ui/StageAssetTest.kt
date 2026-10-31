@@ -4,7 +4,6 @@ import android.content.Context
 import android.view.ViewGroup
 import androidx.test.core.app.ApplicationProvider
 import com.hiron.emrys.core.EmrysRuntime
-import com.hiron.emrys.core.NameLookup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -21,7 +20,7 @@ class StageAssetTest {
 
     @Test
     fun theRobotsWebViewFillsItsSlot() {
-        val host = RobotHost(context, EmrysRuntime(context, names = NameLookup { null }), dark = true, focus = RobotFocus.Stage) {}
+        val host = RobotHost(context, EmrysRuntime(context), dark = true, focus = RobotFocus.Stage) {}
         // A WebView that wraps its content gets a 0 px layout viewport, and the robot never draws.
         val params = checkNotNull(host.webView.layoutParams)
         assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, params.width)

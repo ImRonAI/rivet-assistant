@@ -37,17 +37,6 @@ class RobotDirectorTest {
     }
 
     @Test
-    fun theRobotTakesThePhoneWhileEmrysAnswersACall() {
-        val idle = EmrysState(activity = Activity.Idle)
-        val call = LiveCall("c-1", "Dana", "+18015550123", true, 0, LiveCallStatus.Answering)
-        val onCall = idle.copy(liveCall = call)
-        assertEquals(listOf("calling"), RobotDirector.diff(idle, onCall).map { it.args.single() })
-        assertTrue(RobotDirector.diff(onCall, onCall.copy(activity = Activity.Thinking)).isEmpty())
-        val ended = onCall.copy(liveCall = call.copy(status = LiveCallStatus.Ended))
-        assertEquals(listOf("idle"), RobotDirector.diff(onCall, ended).map { it.args.single() })
-    }
-
-    @Test
     fun theStageHearsWhoseTurnItIsAndTheAgentsLevel() {
         assertEquals("""window.emrys && window.emrys.voice("speaking");""", RobotDirector.voice(VoiceTurn.Speaking).script())
         assertEquals("""window.emrys && window.emrys.voice("listening");""", RobotDirector.voice(VoiceTurn.Listening).script())

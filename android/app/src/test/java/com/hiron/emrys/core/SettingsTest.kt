@@ -2,7 +2,7 @@ package com.hiron.emrys.core
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,17 +15,24 @@ class SettingsTest {
     private val app = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
-    fun aFreshInstallTalksToTheElevenLabsAgentsAndSuggests() {
-        val settings = Settings(app)
-        assertTrue(settings.elevenLabsAgents)
-        assertTrue(settings.searchSuggestions)
+    fun theUserIdIsMadeOnceAndKept() {
+        val first = Settings(app).userId
+        assertTrue(first.isNotBlank())
+        assertEquals(first, Settings(app).userId)
     }
 
     @Test
-    fun aStoredChoiceIsKept() {
-        app.getSharedPreferences("emrys", Context.MODE_PRIVATE).edit().putBoolean("elevenlabs_agents", false).putBoolean("search_suggestions", false).commit()
-        val settings = Settings(app)
-        assertFalse(settings.elevenLabsAgents)
-        assertFalse(settings.searchSuggestions)
+    fun everyPermissionAsksFirstOnAFreshInstall() {
+        val variables = Settings(app).permissionVariables()
+        assertEquals(PermAction.entries.map { "perm_${it.wire}" }.toSet(), variables.keys)
+        assertTrue(variables.values.all { it == Settings.PROMPT })
+    }
+
+    @Test
+    fun anAlwaysAllowIsKeptForEverySession() {
+        Settings(app).grant(PermAction.SendMessages, true)
+        val variables = Settings(app).permissionVariables()
+        assertEquals(Settings.GRANTED, variables["perm_send_messages"])
+        assertEquals(Settings.PROMPT, variables["perm_purchases"])
     }
 }

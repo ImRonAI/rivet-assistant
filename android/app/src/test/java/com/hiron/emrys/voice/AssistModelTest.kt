@@ -1,12 +1,10 @@
 package com.hiron.emrys.voice
 
 import android.speech.SpeechRecognizer
-import com.hiron.emrys.testing.textApproval
+import com.hiron.emrys.core.Activity
 import com.hiron.emrys.core.ChatMessage
-import com.hiron.emrys.core.Connection
 import com.hiron.emrys.core.EmrysState
-import com.hiron.emrys.core.EmrysStore
-import com.hiron.emrys.core.ServerEvent
+import com.hiron.emrys.testing.textApproval
 import com.hiron.emrys.ui.AssistPhase
 import com.hiron.emrys.ui.tail
 import org.junit.Assert.assertEquals
@@ -16,19 +14,15 @@ import org.junit.Test
 
 class AssistModelTest {
     private val asked = "What's on my calendar tomorrow?"
-    private val mine = AssistLocal(turnId = "t2", asked = asked)
+    private val mine = AssistLocal(messageId = "m3", asked = asked)
 
-    /** Online, with an earlier exchange in the chat, and this overlay's request just sent as turn t2. */
-    private fun sent(): EmrysState {
-        var s = EmrysStore.connection(EmrysState(), Connection.Online)
-        s = EmrysStore.userSent(s, "t1", "Hi")
-        s = EmrysStore.reduce(s, ServerEvent.TurnCompleted("t1", "default", "Hello! What can I do?", 0, null), 1)
-        return EmrysStore.userSent(s, "t2", asked)
-    }
+    /** An earlier exchange in the chat, and this overlay's request just sent to the text agent as message m3. */
+    private fun sent(): EmrysState = EmrysState(
+        activity = Activity.Thinking,
+        messages = listOf(ChatMessage("m1", true, "Hi"), ChatMessage("m2", false, "Hello! What can I do?"), ChatMessage("m3", true, asked)),
+    )
 
-    private fun EmrysState.then(vararg events: ServerEvent) = events.fold(this) { s, e -> EmrysStore.reduce(s, e, 2) }
-
-    private fun approval(turn: String) = textApproval("a-$turn", turn = turn)
+    private fun EmrysState.replied(text: String) = copy(messages = messages + ChatMessage("m4", false, text), activity = Activity.Done)
 
     @Test
     fun listeningShowsTheWordsAsTheyAreHeard() {
@@ -61,54 +55,32 @@ class AssistModelTest {
         // The reply to the earlier turn is not this overlay's.
         assertEquals("", thinking.reply)
 
-        val searching = AssistModel.ui(mine, sent().then(ServerEvent.Searching(listOf("calendar"), "default")))
-        assertEquals("SEARCHING", searching.status)
-        assertEquals("OFFLINE · QUEUED", AssistModel.ui(mine, EmrysStore.connection(sent(), Connection.Offline)).status)
-        assertEquals("CONNECTING", AssistModel.ui(mine, EmrysStore.connection(sent(), Connection.Connecting)).status)
+        assertEquals("WORKING", AssistModel.ui(mine, sent().copy(activity = Activity.Working)).status)
     }
 
     @Test
-    fun theReplyStreamsThenFinishes() {
-        val streaming = sent().then(ServerEvent.TextDelta("Tomorrow you have ", "default"))
-        val replying = AssistModel.ui(mine, streaming)
-        assertEquals(AssistPhase.Replying, replying.phase)
-        assertEquals("Tomorrow you have ", replying.reply)
-
-        val done = AssistModel.ui(
-            mine,
-            streaming.then(ServerEvent.TurnCompleted("t2", "default", "Tomorrow you have a dentist cleaning at 9 AM.", 0, null)),
-        )
+    fun theAgentsReplyFinishesIt() {
+        val done = AssistModel.ui(mine, sent().replied("Tomorrow you have a dentist cleaning at 9 AM."))
         assertEquals(AssistPhase.Done, done.phase)
         assertEquals("Tomorrow you have a dentist cleaning at 9 AM.", done.reply)
         assertEquals("DONE", done.status)
     }
 
     @Test
-    fun anApprovalForThisRequestWaitsOnTheUser() {
-        val other = AssistModel.ui(mine, sent().then(ServerEvent.ApprovalsRequested("t9", "task-1", listOf(approval("t9")), false)))
-        assertEquals(AssistPhase.Working, other.phase)
-
-        val ui = AssistModel.ui(mine, sent().then(ServerEvent.ApprovalsRequested("t2", "default", listOf(approval("t2")), false)))
+    fun anApprovalWaitsOnTheUser() {
+        val ui = AssistModel.ui(mine, sent().copy(activity = Activity.Waiting, approvals = listOf(textApproval())))
         assertEquals(AssistPhase.Waiting, ui.phase)
         assertEquals(1, ui.waiting)
         assertEquals("NEEDS YOU", ui.status)
     }
 
     @Test
-    fun aFailedTurnSaysWhy() {
-        val before = AssistModel.ui(mine, sent().then(ServerEvent.TurnFailed("t2", "default", "the brain is offline")))
-        assertEquals(AssistPhase.Failed, before.phase)
-        assertEquals("I couldn't finish that: the brain is offline", before.note)
-        assertEquals("", before.reply)
-        assertEquals("DIDN'T FINISH", before.status)
-
-        val midway = AssistModel.ui(
-            mine,
-            sent().then(ServerEvent.TextDelta("Checking your", "default"), ServerEvent.TurnFailed("t2", "default", "model overloaded")),
-        )
-        assertEquals(AssistPhase.Failed, midway.phase)
-        assertEquals("Checking your", midway.reply)
-        assertEquals("I couldn't finish that: model overloaded", midway.note)
+    fun anAgentThatCouldNotStartSaysWhy() {
+        val failed = AssistModel.ui(mine, sent().copy(activity = Activity.Failed, lastError = EmrysAgent.COULD_NOT_START))
+        assertEquals(AssistPhase.Failed, failed.phase)
+        assertEquals(EmrysAgent.COULD_NOT_START, failed.note)
+        assertEquals("", failed.reply)
+        assertEquals("DIDN'T FINISH", failed.status)
     }
 
     @Test
@@ -137,17 +109,8 @@ class AssistModelTest {
     }
 
     @Test
-    fun setupProblemsKeepTheRequestInView() {
-        val ui = AssistModel.ui(AssistLocal(asked = "Text Dana", problem = AssistModel.SET_UP_FIRST), EmrysState())
-        assertEquals(AssistPhase.Failed, ui.phase)
-        assertEquals("Text Dana", ui.heard)
-        assertEquals(AssistModel.SET_UP_FIRST, ui.note)
-        assertEquals("DIDN'T FINISH", ui.status)
-    }
-
-    @Test
     fun aRequestWithNoMessageYetIsStillWorking() {
-        val ui = AssistModel.ui(AssistLocal(turnId = "t5", asked = "hi"), EmrysState(activeTurn = "t5", messages = listOf(ChatMessage("x", false, "old"))))
+        val ui = AssistModel.ui(AssistLocal(messageId = "m5", asked = "hi"), EmrysState(activity = Activity.Thinking, messages = listOf(ChatMessage("x", false, "old"))))
         assertEquals(AssistPhase.Working, ui.phase)
         assertNull(ui.note)
     }

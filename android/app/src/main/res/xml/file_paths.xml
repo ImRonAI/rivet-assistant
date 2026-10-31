@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- What the FileProvider may hand out: only images being shared, under cacheDir/shared/. -->
-<paths>
-    <cache-path name="shared" path="shared/" />
-</paths>

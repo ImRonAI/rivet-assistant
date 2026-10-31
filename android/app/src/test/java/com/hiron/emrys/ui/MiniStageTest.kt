@@ -18,9 +18,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hiron.emrys.core.Activity
-import com.hiron.emrys.core.Connection
-import com.hiron.emrys.core.LiveCall
-import com.hiron.emrys.core.LiveCallStatus
 import com.hiron.emrys.core.EmrysState
 import com.hiron.emrys.core.emrys
 import com.hiron.emrys.testing.shot
@@ -41,7 +38,7 @@ class MiniStageTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val online = EmrysState(connection = Connection.Online)
+    private val online = EmrysState()
 
     private fun band(state: EmrysState = online, visible: MutableState<Boolean> = mutableStateOf(true), onOpen: () -> Unit = {}) {
         val runtime = compose.activity.emrys
@@ -75,7 +72,6 @@ class MiniStageTest {
 
     @Test
     fun statusCopy() {
-        val call = LiveCall("c1", "Dana", "+18015550123", true, 0L, LiveCallStatus.Answering)
         val expected = mapOf(
             Activity.Idle to "Emrys is ready.",
             Activity.Listening to "Emrys is listening.",
@@ -90,11 +86,6 @@ class MiniStageTest {
         )
         assertEquals(Activity.entries.toSet(), expected.keys)
         expected.forEach { (activity, text) -> assertEquals(text, stageStatus(online.copy(activity = activity))) }
-        assertEquals("Emrys is offline.", stageStatus(EmrysState(connection = Connection.Offline, activity = Activity.Working)))
-        assertEquals("Emrys is connecting.", stageStatus(EmrysState(connection = Connection.Connecting, activity = Activity.Working)))
-        assertEquals("Emrys is answering a call.", stageStatus(online.copy(activity = Activity.Working, liveCall = call)))
-        assertEquals("Emrys is answering a call.", stageStatus(online.copy(liveCall = call.copy(status = LiveCallStatus.Transferring))))
-        assertEquals("Emrys is working on it.", stageStatus(online.copy(activity = Activity.Working, liveCall = call.copy(status = LiveCallStatus.Ended))))
     }
 
     @Test
