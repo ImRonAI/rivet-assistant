@@ -45,11 +45,11 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 
 | Area | State |
 |---|---|
-| App | **0.5.0** (versionCode 13, `com.hiron.emrys`). PR #4 (`design/facelift`) merged into `ccr-22d59ed7-dzijhh` at `fd621d2`; `design/facelift` is one commit ahead (`3440e8b`, the brain off the VM). The release build ships arm64-v8a only (19.2 MB; the WebRTC library in the SDK is about 12 MB per ABI); that change, the voice-token keep rule and the audio-tag filter are in the working tree, not committed. |
+| App | **0.5.0** (versionCode 13, `com.hiron.emrys`). PR #4 (`design/facelift`) merged into `ccr-22d59ed7-dzijhh` at `fd621d2`; `design/facelift` is ahead of it with the brain off the VM (`3440e8b`) and the voice-token keep rule, the audio-tag filter and the arm64-only build (`11b5b98`). The release build ships arm64-v8a only (19.2 MB; the WebRTC library in the SDK is about 12 MB per ABI). |
 | Verified | 109 unit and screen tests pass, Kotlin compiles with warnings as errors, lint has 0 errors. On the Android 15 emulator (2026-10-31) a typed question opened a session straight to the text agent (`conv_2801m68vtz0te2natfxrg5cyc6gp`): `user_id` and all eight `perm_*` arrived, the agent called `device_status`, the phone returned real data and the agent answered with the battery level. The arm64-only release APK, with the keep rule and the tag filter, installed on the emulator and opened a voice session with the voice agent ("Listening"; the agent's greeting appeared without its audio tags). |
 | Not verified | Talking to the voice agent through a real microphone (the emulator runs without audio, so only the connection and the agent's greeting were checked); `request_approval` from a live agent (the handler is registered, but on 2026-10-31 the tool was not attached to either agent — attaching it is the owner's call); anything on a physical phone. |
 | Attachments | Images and PDFs are not built: SDK 0.13.0 has no way to send files (`OutgoingEvent` has no multimodal message). The WebSocket protocol's `multimodal_message` with `file_input` exists only in the JS SDK and raw API. |
-| Workspace VM | Google Cloud `instance-20261029-122759` (us-central1-a, c4-standard-8, Debian 13, 50 GB, static IP 136.113.136.145). `/opt/emrys` runs Caddy 2.11.7, the laptop (linuxserver webtop, https://desktop.rivet.ron-ai.dev), OpenVSCode (https://code.rivet.ron-ai.dev) and the `computer` container (Desktop Commander 0.3.1 behind FastMCP's proxy at `/computer/mcp`, reachable only with `EMRYS_COMPUTER_TOKEN`). OpenCode on the laptop runs Mistral `zai-glm-5-3` at `reasoningEffort: max`. The repository's `deploy/vm` no longer runs the brain, but the VM itself still does (`emrys-brain:14bcf2b`): the deploy that copies the new `compose.yaml` and `Caddyfile` and runs `docker compose -p emrys up -d --remove-orphans` was not run yet. Reach it with `gcloud compute ssh instance-20261029-122759 --project fair-expanse-493212-h8 --zone us-central1-a --tunnel-through-iap`. Env files (`brain.env`, `laptop.env`, `computer.env`, `code-token`) live only on the VM. |
+| Workspace VM | Google Cloud `instance-20261029-122759` (us-central1-a, c4-standard-8, Debian 13, 50 GB, static IP 136.113.136.145). `/opt/emrys` runs Caddy 2.11.7, the laptop (linuxserver webtop, https://desktop.rivet.ron-ai.dev), OpenVSCode (https://code.rivet.ron-ai.dev) and the `computer` container (Desktop Commander 0.3.1 behind FastMCP's proxy at `/computer/mcp`, reachable only with `EMRYS_COMPUTER_TOKEN`). OpenCode on the laptop runs Mistral `zai-glm-5-3` at `reasoningEffort: max`. The brain is off the VM (deployed 2026-10-31 from `deploy/vm`: `docker compose -p emrys up -d --remove-orphans` removed `emrys-brain-1`); `https://rivet.ron-ai.dev/` answers 404, `/computer/mcp` 401 without the token and Desktop Commander's `initialize` with it. The previous files are kept as `compose.yaml.before-brain-removal-*` and `conf/Caddyfile.before-brain-removal-*`, and `data/`, `src/` and `brain.env` are still on disk. Reach it with `gcloud compute ssh instance-20261029-122759 --project fair-expanse-493212-h8 --zone us-central1-a --tunnel-through-iap`. Env files (`brain.env`, `laptop.env`, `computer.env`, `code-token`) live only on the VM. |
 | Telnyx | The answering number +17608769757 forwards to a Telnyx call-answering assistant set up earlier by the brain. The live-call transcript, Take over and summaries went with the brain; the app keeps the number, mode and carrier forwarding codes in Settings. |
 
 ## Rules that always apply
@@ -127,14 +127,12 @@ cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs fi
 
 ## Remaining work
 
-1. **Run the VM deploy** that takes the brain off: copy `deploy/vm/compose.yaml` and `Caddyfile` from the repository
-   into `/opt/emrys` (Caddyfile into `conf/`), `docker compose -p emrys up -d --remove-orphans`, reload Caddy, and
-   check that `/computer/mcp` still answers with the token and 401s without it. Keep `/opt/emrys/data` and
-   `brain.env` until the owner removes them.
-2. **Live checks on a phone:** a voice conversation, `request_approval` end to end (once the owner attaches the tool),
+1. **Live checks on a phone:** a voice conversation, `request_approval` end to end (once the owner attaches the tool),
    each phone tool, the overlay, widgets and notifications.
-3. **Image and PDF input:** blocked on the Android SDK (see Status). Don't build an upload path around it.
-4. **Docs:** `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the brain.
+2. **Image and PDF input:** blocked on the Android SDK (see Status). Don't build an upload path around it.
+3. **Docs:** `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the brain.
+4. **VM leftovers:** `/opt/emrys/data`, `src/`, `brain.env` and the `emrys-brain:14bcf2b` image stay until the owner
+   removes them.
 5. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 
