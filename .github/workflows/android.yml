@@ -3,9 +3,9 @@ name: android
 on:
   push:
     branches: [main]
-    paths: ["android/**", "brain/src/emrys_brain/device_tools.py", ".github/workflows/android.yml"]
+    paths: ["android/**", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", "brain/src/emrys_brain/device_tools.py", ".github/workflows/android.yml"]
+    paths: ["android/**", ".github/workflows/android.yml"]
 
 permissions:
   contents: read

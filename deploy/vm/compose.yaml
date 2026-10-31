@@ -1,11 +1,4 @@
 services:
-  brain:
-    image: emrys-brain:bf9190b
-    restart: unless-stopped
-    env_file: brain.env
-    volumes:
-      - ./data:/data
-
   caddy:
     image: caddy:2.11.7
     restart: unless-stopped

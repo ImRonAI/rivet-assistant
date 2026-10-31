@@ -7,7 +7,7 @@ rivet.ron-ai.dev {
 		}
 		respond 401
 	}
-	reverse_proxy brain:8080
+	respond 404
 }
 
 desktop.rivet.ron-ai.dev {
