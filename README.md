@@ -1,20 +1,20 @@
-# Rivet
+# Emrys
 
-Rivet is an Android phone assistant: email, texts, calls, apps, reminders and tasks, with a human
-approval before anything that sends, buys, changes or deletes. The face is the Rivet robot (SVG); the
+Emrys is an Android phone assistant: email, texts, calls, apps, reminders and tasks, with a human
+approval before anything that sends, buys, changes or deletes. The face is the Emrys robot (SVG); the
 brain is a [Strands harness](https://strandsagents.com/docs/user-guide/harness/) agent on Perplexity's
 Agent API, connected to the Telnyx MCP server on Prefect Horizon.
 
 ```
-Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
+Android app (Kotlin/Compose)                   Emrys brain (this repo: brain/)
 ┌──────────────────────────────┐   WSS   ┌────────────────────────────────────────────────┐
-│ Rivet robot (WebView)        │◄───────►│ gateway: /v1/sessions/{id}, device token        │
+│ Emrys robot (WebView)        │◄───────►│ gateway: /v1/sessions/{id}, device token        │
 │ approval sheet, notifications│ events  │  └ SessionSupervisor (one per session)          │
 │ device tool executors + ledger│approvals│     └ lanes: conversation, GoalLoop tasks      │
 └──────────────────────────────┘ device  │        └ generation N: create_harness(...)     │
                                          │           model: Perplexity Agent API          │
                                          │           tools: Telnyx MCP, device proxies    │
-                                         │           interventions: RivetApprovals        │
+                                         │           interventions: EmrysApprovals        │
                                          └───────────┬──────────────────────┬─────────────┘
                                          Perplexity Agent API        Telnyx MCP (Horizon)
                                          (web/people/image/finance   1,371 Telnyx operations
@@ -30,7 +30,7 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
 | 2 | Android app: robot WebView, gateway client, chat, voice, approvals, activity, settings | **Built**: APK, JVM tests and lint green; needs an on-device pass (no emulator here) |
 | 3 | Device tools: SMS, replies in any messaging app, contacts, calendar, calls, reminders, email drafts; email over IMAP/SMTP | **Built** on both sides; phone tools verified live through the brain with a scripted phone; email tested against local TLS mail servers (not yet against a real mailbox) |
 | 4 | App operator (Accessibility): read screen, tap/type/scroll, Stop overlay, approval at commit points | **Built**; needs an on-device pass |
-| 5 | Calls: screening, and Rivet answering calls to the user's own number | **Built**: setup verified live up to the first Telnyx write; turning it on needs a Telnyx number Rivet may use (moving one that's in use, or buying one, needs your OK) |
+| 5 | Calls: screening, and Emrys answering calls to the user's own number | **Built**: setup verified live up to the first Telnyx write; turning it on needs a Telnyx number Emrys may use (moving one that's in use, or buying one, needs your OK) |
 
 ## How the brain works
 
@@ -43,7 +43,7 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
   tools) handles memory extraction, summaries and the GoalLoop judge.
 - **Agent** (`factory.py`): `create_harness()` with no shell/file/code/subagent tools, todos, the auto
   context manager, file memory, snapshot sessions on fenced storage, the Telnyx `MCPClient` (Horizon
-  bearer read per request, `telnyx_` prefix, failure is fatal) and `RivetApprovals`.
+  bearer read per request, `telnyx_` prefix, failure is fatal) and `EmrysApprovals`.
 - **Approvals** (`approvals.py`): deterministic and fail-closed. Telnyx `execute` code is parsed and every
   `call_tool` target is looked up in a catalog generated from OubliTelnyxMCP's own tool construction
   (`scripts/gen_telnyx_ops.py`): GET runs, anything else asks; purchases and deletes are high tier. Each
@@ -66,47 +66,47 @@ Android app (Kotlin/Compose)                   Rivet brain (this repo: brain/)
   (a standing rule is per recipient), calendar writes ask, and the app operator asks when a tap's label reads
   like a commit point (send, pay, delete, confirm). The phone refuses a tap whose label changed.
 
-## Answering your calls (`brain/src/rivet_brain/calls.py`)
+## Answering your calls (`brain/src/emrys_brain/calls.py`)
 
 Callers keep dialing your own number. Android doesn't let an ordinary app speak on a cellular call, so when
-you turn call answering on, Rivet dials your carrier's forwarding code (calls you don't pick up, or all calls)
-to a Telnyx number where a Telnyx AI Assistant answers as Rivet and takes a message.
+you turn call answering on, Emrys dials your carrier's forwarding code (calls you don't pick up, or all calls)
+to a Telnyx number where a Telnyx AI Assistant answers as Emrys and takes a message.
 
-1. Ask Rivet to "set up call answering" with a Telnyx number on your account. `call_answering_setup` creates
-   (or updates) the *Rivet call answering* assistant (a non-Anthropic Telnyx model; `RIVET_CALL_MODEL`) and
+1. Ask Emrys to "set up call answering" with a Telnyx number on your account. `call_answering_setup` creates
+   (or updates) the *Emrys call answering* assistant (a non-Anthropic Telnyx model; `EMRYS_CALL_MODEL`) and
    routes the number to it, after your approval. A number already used by another connection is only moved
    if you say so (biometric approval). The number is saved on the phone.
-2. Turn it on in Rivet › Settings › Call answering. That dials `**004*` / `**21*` (most carriers) or `*71` /
+2. Turn it on in Emrys › Settings › Call answering. That dials `**004*` / `**21*` (most carriers) or `*71` /
    `*72` (Verizon); turning off dials `##002#` / `*73`.
-3. When the assistant picks up, the phone shows "Rivet is answering a call from …" and the conversation as it
-   happens (`call.live`). The brain reads the call's Telnyx AI conversation every `RIVET_CALL_POLL` seconds
+3. When the assistant picks up, the phone shows "Emrys is answering a call from …" and the conversation as it
+   happens (`call.live`). The brain reads the call's Telnyx AI conversation every `EMRYS_CALL_POLL` seconds
    (default 2; read-only).
 4. **Take over** on the phone transfers the call to your own number (Settings › your number, E.164) with Telnyx
    `TransferCall`. Your tap is the approval. It needs "unanswered calls" forwarding, since with "all calls" the
-   transfer would come straight back to Rivet.
+   transfer would come straight back to Emrys.
 5. The message the caller leaves arrives as a notification and in `call_messages`. When the call ends, the
    assistant sends a short summary (who, what they wanted, how it ended), which replaces the live notification
    and lands in the activity log.
-6. Rivet then follows up on its own: a background task reads the message, checks what it needs (contacts,
+6. Emrys then follows up on its own: a background task reads the message, checks what it needs (contacts,
    calendar) and proposes the next step, such as a text back, a calendar hold or a reminder. Every send or
-   change waits for your approval, flagged as prompted by outside content. `RIVET_CALL_FOLLOW_UP=0` turns this off.
+   change waits for your approval, flagged as prompted by outside content. `EMRYS_CALL_FOLLOW_UP=0` turns this off.
 
-The assistant reaches the brain at `RIVET_PUBLIC_URL/v1/calls/{session}/{token}/start|message|summary`, where the
+The assistant reaches the brain at `EMRYS_PUBLIC_URL/v1/calls/{session}/{token}/start|message|summary`, where the
 token is an HMAC of the session id under the device token. The schema evidence for the live transcript,
 take-over and summary, and what is still unverified live, is in [`docs/calls-live.md`](docs/calls-live.md).
 An assistant set up before these existed needs call answering set up again to get the summary tool.
 
-## Email (`brain/src/rivet_brain/email_tools.py`)
+## Email (`brain/src/emrys_brain/email_tools.py`)
 
-Without a mailbox, Rivet reads email previews from the phone's notifications and opens drafts for you to send
+Without a mailbox, Emrys reads email previews from the phone's notifications and opens drafts for you to send
 (`email_draft`). Give the brain your mailbox and it searches, reads, sends and replies itself, over IMAP and SMTP:
 
 | Variable | |
 |---|---|
-| `RIVET_EMAIL_ADDRESS` | Your email address |
-| `RIVET_EMAIL_PASSWORD` | An app password for it, never your account password |
-| `RIVET_EMAIL_IMAP_HOST`, `RIVET_EMAIL_IMAP_PORT` | Filled in for Gmail, iCloud and Fastmail addresses; the port is 993 |
-| `RIVET_EMAIL_SMTP_HOST`, `RIVET_EMAIL_SMTP_PORT` | Likewise; 465 (TLS) or 587 (STARTTLS) |
+| `EMRYS_EMAIL_ADDRESS` | Your email address |
+| `EMRYS_EMAIL_PASSWORD` | An app password for it, never your account password |
+| `EMRYS_EMAIL_IMAP_HOST`, `EMRYS_EMAIL_IMAP_PORT` | Filled in for Gmail, iCloud and Fastmail addresses; the port is 993 |
+| `EMRYS_EMAIL_SMTP_HOST`, `EMRYS_EMAIL_SMTP_PORT` | Likewise; 465 (TLS) or 587 (STARTTLS) |
 
 The email tools exist only when the address and password are set. Every connection is TLS: the brain refuses to
 start with any other port, and sends nothing to a 587 server that offers no STARTTLS.
@@ -119,16 +119,16 @@ start with any other port, and sends nothing to a 587 server that offers no STAR
 - `email_mark` (read, unread, archive) asks too. Archive moves the email to the folder marked `\Archive`, or Gmail's
   All Mail. Nothing deletes mail.
 
-On Fly (`deploy_fly.sh` also stages any `RIVET_EMAIL_*` set in its environment):
+On Fly (`deploy_fly.sh` also stages any `EMRYS_EMAIL_*` set in its environment):
 
 ```bash
-read -rs RIVET_EMAIL_PASSWORD   # paste the app password; it stays out of your shell history
-fly secrets set -a rivet-assistant RIVET_EMAIL_ADDRESS=you@gmail.com RIVET_EMAIL_PASSWORD="$RIVET_EMAIL_PASSWORD"
+read -rs EMRYS_EMAIL_PASSWORD   # paste the app password; it stays out of your shell history
+fly secrets set -a rivet-assistant EMRYS_EMAIL_ADDRESS=you@gmail.com EMRYS_EMAIL_PASSWORD="$EMRYS_EMAIL_PASSWORD"
 ```
 
 Gmail needs an app password: turn on 2-Step Verification, then create one at
 https://myaccount.google.com/apppasswords (a Google Workspace admin can turn app passwords off). For a Workspace
-address on your own domain, also set `RIVET_EMAIL_IMAP_HOST=imap.gmail.com` and `RIVET_EMAIL_SMTP_HOST=smtp.gmail.com`.
+address on your own domain, also set `EMRYS_EMAIL_IMAP_HOST=imap.gmail.com` and `EMRYS_EMAIL_SMTP_HOST=smtp.gmail.com`.
 iCloud and Fastmail also require app passwords, created in their account security settings.
 
 ## The Android app (`android/`)
@@ -136,18 +136,20 @@ iCloud and Fastmail also require app passwords, created in their account securit
 Kotlin + Compose, minSdk 29, targetSdk 36. See [`android/README.md`](android/README.md) for building,
 installing and the on-device checklist.
 
-- **Interface**: the Rivet design system (dark graphite, safety orange, cyan/green/amber/crimson status;
-  Big Shoulders, IBM Plex Sans and Plex Mono) in Compose: a telemetry header, the robot on its stage with a
-  greeting, a transcript sheet you pull up over it, and a dock of keycaps (quick keys, a task latch and an
-  orange talk key). Replies render their markdown and citations. First launch is a power-on checklist.
-- **Launcher**: an adaptive icon drawn from Rivet's head with a themed monochrome layer
+- **Interface**: the Noir design system (near-black, porcelain, one halo accent; Instrument Serif, Geist and
+  Geist Mono) in Compose: a serif masthead with the dot-matrix sigil, Emrys on its stage with a serif greeting,
+  a glass transcript sheet you pull up over it, and a dock of soft pills, the composer and the porcelain voice
+  disc. The stage carries ElevenLabs UI's Matrix (Emrys's light language, in its armor and a light floor), Orb
+  and ShimmeringText. Replies render their markdown and citations. First launch is "Meet Emrys".
+- **Launcher**: an adaptive icon drawn from Emrys's head with a themed monochrome layer
   (`android/tools/build_icon.py` generates every icon drawable from one shape list), long-press shortcuts
-  (talk, type, catch me up, my day) and two home-screen widgets: a search bar ("Ask Rivet anything" with
-  a talk key) and a panel with link status, Rivet's latest reply and quick keys. Widgets and shortcuts open
+  (talk, type, catch me up, my day) and two home-screen widgets: a search bar ("Ask Emrys anything" with
+  a talk key) and a panel with link status, Emrys's latest reply and quick keys. Widgets and shortcuts open
   the app through fixed actions; a quick key carries only its name, never free text.
-- **Robot**: `Rivet_the_Robot.html`, bundled with offline fonts and a small bridge (`android/robot/bridge.js`)
-  so the app drives its moves, lip sync from text-to-speech, and a stage glow in the colour of what Rivet is
-  doing. Served from app assets only (no network, no file access).
+- **Robot**: `Emrys_the_Robot.html`, a porcelain hero with ElevenLabs UI's Matrix in its armor and the Orb and
+  ShimmeringText on its stage (`android/stage-ui`), bundled with offline fonts and a small bridge
+  (`android/robot/bridge.js`) so the app drives its moves, lip sync from text-to-speech, and a stage glow in the
+  colour of what Emrys is doing. Served from app assets only (no network, no file access).
 - **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
   reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
 - **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that
@@ -162,8 +164,8 @@ installing and the on-device checklist.
 ```bash
 cd brain
 uv sync --frozen --extra dev
-export PERPLEXITY_API_KEY=... HORIZON_API_KEY=... RIVET_DEVICE_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
-uv run rivet-brain            # serves :8080, /healthz and /v1/sessions/{session_id}
+export PERPLEXITY_API_KEY=... HORIZON_API_KEY=... EMRYS_DEVICE_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
+uv run emrys-brain            # serves :8080, /healthz and /v1/sessions/{session_id}
 ```
 
 Deployed on Fly.io as `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, one machine,

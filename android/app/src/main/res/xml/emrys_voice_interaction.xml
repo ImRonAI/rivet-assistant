@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Makes Emrys a full digital assistant. The role and the system parse this with raw attribute reads, so
+     the services are fully qualified class names and supportsAssist is a literal. -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="com.hiron.emrys.voice.EmrysSessionService"
+    android:recognitionService="com.hiron.emrys.voice.EmrysRecognitionService"
+    android:settingsActivity="com.hiron.emrys.MainActivity"
+    android:supportsAssist="true" />

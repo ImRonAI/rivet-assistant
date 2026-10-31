@@ -1,6 +1,6 @@
 services:
   brain:
-    image: rivet-brain:bf9190b
+    image: emrys-brain:bf9190b
     restart: unless-stopped
     env_file: brain.env
     volumes:
@@ -13,6 +13,7 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    env_file: computer.env
     volumes:
       - ./conf:/etc/caddy
       - caddy_data:/data
@@ -47,6 +48,16 @@ services:
     volumes:
       - laptop_home:/home/workspace
       - ./code-token:/run/secrets/code-token:ro
+
+  # Desktop Commander for the ElevenLabs agents: terminal and files in the laptop's home, where OpenCode lives.
+  computer:
+    build: ./computer
+    image: emrys-computer:0.3.1
+    restart: unless-stopped
+    env_file: laptop.env
+    mem_limit: 4g
+    volumes:
+      - laptop_home:/config
 
 volumes:
   caddy_data:

@@ -1,9 +1,9 @@
-Fonts bundled with Rivet (app/src/main/res/font and app/src/main/assets/rivet/fonts):
+Fonts bundled with the app (app/src/main/res/font and app/src/main/assets/emrys/fonts):
 
-- Big Shoulders Display: Copyright 2019 The Big Shoulders Project Authors (https://github.com/xotypeco/big_shoulders)
-- IBM Plex Sans and IBM Plex Mono: Copyright 2017 IBM Corp. (https://github.com/IBM/plex)
+- Instrument Serif: Copyright 2022 The Instrument Serif Project Authors (https://github.com/Instrument/instrument-serif)
+- Geist and Geist Mono: Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)
 
-Both are licensed under the SIL Open Font License, Version 1.1:
+All are licensed under the SIL Open Font License, Version 1.1:
 
 SIL OPEN FONT LICENSE
 

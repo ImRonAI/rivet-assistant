@@ -1,42 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Long-press Rivet's icon: talk, type, or one of the quick keys. Quick keys carry only their fixed key. -->
+<!-- Long-press Emrys's icon: talk, type, or one of the quick keys. Quick keys carry only their fixed key. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:icon="@drawable/shortcut_talk"
         android:shortcutId="talk"
         android:shortcutShortLabel="@string/shortcut_talk">
         <intent
-            android:action="com.hiron.rivet.action.LISTEN"
-            android:targetClass="com.hiron.rivet.MainActivity"
-            android:targetPackage="com.hiron.rivet" />
+            android:action="com.hiron.emrys.action.LISTEN"
+            android:targetClass="com.hiron.emrys.MainActivity"
+            android:targetPackage="com.hiron.emrys" />
     </shortcut>
     <shortcut
         android:icon="@drawable/shortcut_type"
         android:shortcutId="type"
         android:shortcutShortLabel="@string/shortcut_type">
         <intent
-            android:action="com.hiron.rivet.action.TYPE"
-            android:targetClass="com.hiron.rivet.MainActivity"
-            android:targetPackage="com.hiron.rivet" />
+            android:action="com.hiron.emrys.action.TYPE"
+            android:targetClass="com.hiron.emrys.MainActivity"
+            android:targetPackage="com.hiron.emrys" />
     </shortcut>
     <shortcut
         android:icon="@drawable/shortcut_catchup"
         android:shortcutId="catchup"
         android:shortcutShortLabel="@string/shortcut_catchup">
         <intent
-            android:action="com.hiron.rivet.action.QUICK"
-            android:data="rivet://quick/CatchUp"
-            android:targetClass="com.hiron.rivet.MainActivity"
-            android:targetPackage="com.hiron.rivet" />
+            android:action="com.hiron.emrys.action.QUICK"
+            android:data="emrys://quick/CatchUp"
+            android:targetClass="com.hiron.emrys.MainActivity"
+            android:targetPackage="com.hiron.emrys" />
     </shortcut>
     <shortcut
         android:icon="@drawable/shortcut_myday"
         android:shortcutId="myday"
         android:shortcutShortLabel="@string/shortcut_myday">
         <intent
-            android:action="com.hiron.rivet.action.QUICK"
-            android:data="rivet://quick/MyDay"
-            android:targetClass="com.hiron.rivet.MainActivity"
-            android:targetPackage="com.hiron.rivet" />
+            android:action="com.hiron.emrys.action.QUICK"
+            android:data="emrys://quick/MyDay"
+            android:targetClass="com.hiron.emrys.MainActivity"
+            android:targetPackage="com.hiron.emrys" />
     </shortcut>
 </shortcuts>

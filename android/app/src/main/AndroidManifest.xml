@@ -5,9 +5,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
@@ -25,7 +22,7 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
-    <!-- Rivet opens and lists the user's launcher apps by name. -->
+    <!-- Emrys opens and lists the user's launcher apps by name. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -41,13 +38,10 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
     </queries>
 
     <application
-        android:name=".core.RivetApp"
+        android:name=".core.EmrysApp"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
@@ -55,7 +49,7 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Rivet"
+        android:theme="@style/Theme.Emrys"
         tools:targetApi="36">
 
         <activity
@@ -67,7 +61,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Makes Rivet selectable as the digital assistant (long-press Home/Power) on phones that do not run
+            <!-- Makes Emrys selectable as the digital assistant (long-press Home/Power) on phones that do not run
                  voice interaction services, such as low-RAM devices; there it opens the full app listening. -->
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
@@ -91,7 +85,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/rivet_search_widget" />
+                android:resource="@xml/emrys_search_widget" />
         </receiver>
 
         <receiver
@@ -103,20 +97,11 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/rivet_panel_widget" />
+                android:resource="@xml/emrys_panel_widget" />
         </receiver>
 
         <service
-            android:name=".service.RivetService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps the user's personal assistant connected so it can run approved tasks, reply to messages and deliver approval requests." />
-        </service>
-
-        <service
-            android:name=".device.RivetNotificationListener"
+            android:name=".device.EmrysNotificationListener"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
@@ -135,11 +120,11 @@
             </intent-filter>
             <meta-data
                 android:name="android.accessibilityservice"
-                android:resource="@xml/rivet_accessibility" />
+                android:resource="@xml/emrys_accessibility" />
         </service>
 
         <service
-            android:name=".device.RivetCallScreening"
+            android:name=".device.EmrysCallScreening"
             android:exported="true"
             android:permission="android.permission.BIND_SCREENING_SERVICE">
             <intent-filter>
@@ -147,9 +132,9 @@
             </intent-filter>
         </service>
 
-        <!-- The digital assistant: long-press Home/Power opens Rivet's overlay over the current app. -->
+        <!-- The digital assistant: long-press Home/Power opens Emrys's overlay over the current app. -->
         <service
-            android:name=".voice.RivetVoiceService"
+            android:name=".voice.EmrysVoiceService"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_VOICE_INTERACTION">
@@ -158,17 +143,17 @@
             </intent-filter>
             <meta-data
                 android:name="android.voice_interaction"
-                android:resource="@xml/rivet_voice_interaction" />
+                android:resource="@xml/emrys_voice_interaction" />
         </service>
 
         <service
-            android:name=".voice.RivetSessionService"
+            android:name=".voice.EmrysSessionService"
             android:exported="false"
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
 
         <!-- Other apps bind recognizers without a permission of their own to hold, so this one cannot ask for one. -->
         <service
-            android:name=".voice.RivetRecognitionService"
+            android:name=".voice.EmrysRecognitionService"
             android:exported="true"
             android:label="@string/app_name"
             tools:ignore="ExportedService">
@@ -178,34 +163,8 @@
             </intent-filter>
             <meta-data
                 android:name="android.speech"
-                android:resource="@xml/rivet_recognition" />
+                android:resource="@xml/emrys_recognition" />
         </service>
 
-        <!-- Shares a result image as the picture itself (cacheDir/shared/, res/xml/file_paths.xml). -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.files"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <receiver
-            android:name=".service.ApprovalActionReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".service.TakeOverReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".service.BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
     </application>
 </manifest>

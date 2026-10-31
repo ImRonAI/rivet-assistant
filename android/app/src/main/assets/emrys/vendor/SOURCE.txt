@@ -1,0 +1,16 @@
+perlin-noise.png: the noise texture the ElevenLabs UI Orb (components/ui/orb.tsx, upstream elevenlabs/ui commit
+3a28ebab197f8cfa599934f52db12ad1396e54f4) loads with useTexture. Unmodified, downloaded once from
+https://storage.googleapis.com/eleven-public-cdn/images/perlin-noise.png (HTTP 200, image/png, last-modified
+Fri, 26 Apr 2024 16:06:41 GMT, etag "4a062064e938535c8cc711c5cdb94573"; its MD5 matches the bucket's x-goog-hash
+md5=SgYgZOk4U1yMxxHFzblFcw==).
+
+perlin-noise.png   45385 bytes   256x256 RGBA PNG   sha256 6327c82c7700d6774794f7b06517e45bfedba50ef3b71abac280bd2595e98e6c
+
+ui/RobotView.kt answers GET requests for exactly that URL with this file (and Access-Control-Allow-Origin for the
+page's origin, since three's TextureLoader loads it as a crossorigin="anonymous" image), so the Orb works offline
+while every other request outside /assets/ stays blocked.
+
+stage-ui.js, stage-ui.css: the stage layer (android/stage-ui), built by `npm ci && npm run build` there. They bundle
+React, three, @react-three/fiber, @react-three/drei, motion and the ElevenLabs UI components orb, shimmering-text and
+matrix (MIT, https://github.com/elevenlabs/ui), installed verbatim with the official CLI; licences are in
+android/stage-ui/node_modules after `npm ci` and listed in android/stage-ui/package-lock.json.
