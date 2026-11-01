@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,6 +47,7 @@ import com.hiron.emrys.ui.ActivityScreen
 import com.hiron.emrys.ui.ApprovalSheet
 import com.hiron.emrys.ui.HomeScreen
 import com.hiron.emrys.ui.HudHeader
+import com.hiron.emrys.ui.LocalImages
 import com.hiron.emrys.ui.LocalPalette
 import com.hiron.emrys.ui.MiniStage
 import com.hiron.emrys.ui.Onboarding
@@ -83,7 +85,7 @@ class MainActivity : FragmentActivity() {
         )
         // A recreated activity (rotation, theme change) must not replay the request that first opened it.
         if (savedInstanceState == null) handle(intent)
-        setContent { EmrysTheme { EmrysAppUi(emrys, listenRequests, focusRequests, homeRequests) } }
+        setContent { EmrysTheme { CompositionLocalProvider(LocalImages provides emrys.images) { EmrysAppUi(emrys, listenRequests, focusRequests, homeRequests) } } }
     }
 
     override fun onNewIntent(intent: Intent) {

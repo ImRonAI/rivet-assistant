@@ -13,6 +13,8 @@ import com.hiron.emrys.core.EmrysStore
 import com.hiron.emrys.core.PermAction
 import com.hiron.emrys.core.RobotCommand
 import com.hiron.emrys.core.RobotDirector
+import com.hiron.emrys.core.SearchQuery
+import com.hiron.emrys.core.SearchResults
 import com.hiron.emrys.core.Settings
 import com.hiron.emrys.core.VoiceTurn
 import com.hiron.emrys.device.ScreenOperator
@@ -43,7 +45,8 @@ enum class AgentMode { Voice, Text }
 /**
  * Emrys's ElevenLabs agents, connected straight through the ElevenLabs Android SDK: [start] a voice or text
  * session, [sendText], [switchMode], [stop]. Every session starts with the user's id and their `perm_*` grants
- * as dynamic variables; the agents call the phone tools and `request_approval` as client tools.
+ * as dynamic variables; the agents call the phone tools, `request_approval` and the search tools ([SearchTools])
+ * as client tools.
  */
 class EmrysAgent(
     private val context: Context,
@@ -53,6 +56,7 @@ class EmrysAgent(
     private val update: ((EmrysState) -> EmrysState) -> Unit,
     private val robot: (RobotCommand) -> Unit,
     private val scope: CoroutineScope,
+    private val search: suspend (SearchQuery) -> Result<SearchResults>,
     private val connect: suspend (ConversationConfig, Context) -> ConversationSession = { config, context -> ConversationClient.startSession(config, context) },
 ) {
     // Main thread only. Every start and stop moves [generation] on, so a stale start or callback can tell.
@@ -149,7 +153,8 @@ class EmrysAgent(
             userId = settings.userId,
             dynamicVariables = settings.permissionVariables() + ("user_id" to settings.userId),
             textOnly = !voice,
-            clientTools = AgentTools.build(::runOnPhone) + (AgentTools.REQUEST_APPROVAL to AgentTools.approval(approve)),
+            clientTools = AgentTools.build(::runOnPhone) + (AgentTools.REQUEST_APPROVAL to AgentTools.approval(approve)) +
+                SearchTools.build(search, update),
             onConnect = { connected.complete(Unit) },
             onDisconnect = {
                 connected.completeExceptionally(IllegalStateException("the agent ended the session"))

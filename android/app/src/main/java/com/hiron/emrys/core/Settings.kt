@@ -33,6 +33,16 @@ class Settings(context: Context) {
         get() = prefs.getString("forwarded_to", "").orEmpty()
         set(value) = prefs.edit().putString("forwarded_to", value.trim()).apply()
 
+    /** The Brave Search plan's key, for the agents' search tools (web, news, images, videos, places, page text). */
+    var braveSearchKey: String
+        get() = prefs.getString("brave_search_key", null) ?: BuildConfig.DEFAULT_BRAVE_SEARCH_KEY
+        set(value) = prefs.edit().putString("brave_search_key", value.trim()).apply()
+
+    /** The Brave Answers plan's key, for the `answers` tool. */
+    var braveAnswersKey: String
+        get() = prefs.getString("brave_answers_key", null) ?: BuildConfig.DEFAULT_BRAVE_ANSWERS_KEY
+        set(value) = prefs.edit().putString("brave_answers_key", value.trim()).apply()
+
     /** Whether the one-time permission request has been shown. */
     var onboarded: Boolean
         get() = prefs.getBoolean("onboarded", false)

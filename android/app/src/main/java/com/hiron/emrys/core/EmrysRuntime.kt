@@ -8,6 +8,7 @@ import com.hiron.emrys.device.ReminderStore
 import com.hiron.emrys.device.ReminderStoreFile
 import com.hiron.emrys.device.Reminders
 import com.hiron.emrys.service.Notifications
+import com.hiron.emrys.ui.ImageLoader
 import com.hiron.emrys.voice.EmrysAgent
 import com.hiron.emrys.widget.EmrysWidgets
 import kotlinx.coroutines.CompletableDeferred
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -73,7 +75,15 @@ class EmrysRuntime(private val app: Context) {
     /** Approvals the agents are waiting on, by request id. */
     private val pending = ConcurrentHashMap<String, CompletableDeferred<ApprovalAnswer>>()
 
-    val agent = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope)
+    private val http = OkHttpClient()
+
+    /** Brave Search for the agents' search tools, with the keys in Settings. */
+    val search = BraveSearch(http, settings::braveSearchKey, settings::braveAnswersKey)
+
+    /** Result thumbnails and images, cached in memory only. */
+    val images = ImageLoader(http)
+
+    val agent = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
 
     init {
         EmrysCallScreening.onIncoming = { number -> note("call", "Incoming call from ${number.ifBlank { "unknown number" }}") }

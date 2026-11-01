@@ -390,6 +390,7 @@ internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifie
         }
         items(messages.asReversed(), key = { it.id }) { m ->
             when {
+                m.search != null || m.searching != null -> SearchBlock(m.id, m.search, m.searching, Modifier.animateItem())
                 m.system -> SystemLine(m.text, Modifier.animateItem().padding(horizontal = gutter))
                 m.fromUser -> UserBubble(m, Modifier.animateItem().padding(horizontal = gutter))
                 else -> Reply(m, Modifier.animateItem().padding(horizontal = gutter))
