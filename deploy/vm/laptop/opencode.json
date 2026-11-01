@@ -16,5 +16,21 @@
         }
       }
     }
+  },
+  "mcp": {
+    "context7": { "type": "remote", "url": "https://mcp.context7.com/mcp" },
+    "deepwiki": { "type": "remote", "url": "https://mcp.deepwiki.com/mcp" },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "oauth": false,
+      "headers": { "Authorization": "Bearer {file:~/.config/opencode/github-token}" }
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@0.0.83", "--headless", "--browser", "chromium", "--isolated"]
+    },
+    "vercel": { "type": "remote", "url": "https://mcp.vercel.com" },
+    "linear": { "type": "remote", "url": "https://mcp.linear.app/mcp" }
   }
 }

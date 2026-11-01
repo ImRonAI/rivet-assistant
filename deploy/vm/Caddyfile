@@ -17,3 +17,7 @@ desktop.rivet.ron-ai.dev {
 code.rivet.ron-ai.dev {
 	reverse_proxy code:3000
 }
+
+hooks.oubliai.com {
+	reverse_proxy hooks:8090
+}
