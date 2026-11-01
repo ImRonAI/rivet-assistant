@@ -4,4 +4,5 @@ build/
 app/build/
 .kotlin/
 *.apk
+emrys.local.properties
 rivet.local.properties

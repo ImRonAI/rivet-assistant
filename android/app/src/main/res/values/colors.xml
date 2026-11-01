@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Rivet's palette for the home-screen widgets, which draw with RemoteViews and can't use the Compose theme. -->
+<!-- Emrys's Noir palette for the home-screen widgets, which draw with RemoteViews and can't use the Compose theme. -->
 <resources>
-    <!-- rivet_bg lives in themes.xml with the window background. -->
-    <color name="rivet_raised">#FF161B22</color>
-    <color name="rivet_field">#FF12171D</color>
-    <color name="rivet_tile">#FF1D232B</color>
-    <color name="rivet_ink">#FFE8ECF0</color>
-    <color name="rivet_ink2">#FF8A949E</color>
-    <color name="rivet_accent">#FFFF5A1F</color>
-    <color name="rivet_accent_hi">#FFFF723B</color>
-    <color name="rivet_accent_ink">#FF13171C</color>
-    <color name="rivet_ok">#FF42D392</color>
-    <color name="rivet_amber">#FFF2B544</color>
-    <color name="rivet_crimson">#FFE5484D</color>
+    <!-- emrys_bg lives in themes.xml with the window background. -->
+    <color name="emrys_raised">#FF141417</color>
+    <color name="emrys_field">#FF131316</color>
+    <color name="emrys_tile">#FF1A1A1E</color>
+    <color name="emrys_ink">#FFF3F2EE</color>
+    <color name="emrys_ink2">#FF9E9DA4</color>
+    <color name="emrys_accent">#FFB7C2FF</color>
+    <color name="emrys_accent_hi">#FFCDD5FF</color>
+    <color name="emrys_accent_ink">#FF0A0A0C</color>
+    <color name="emrys_ok">#FF97D4A6</color>
+    <color name="emrys_amber">#FFE8C07C</color>
+    <color name="emrys_crimson">#FFF07B6C</color>
     <!-- Glass: the search bar's fill, its hairline and the light along its top edge. -->
-    <color name="rivet_glass">#E6161B22</color>
-    <color name="rivet_edge">#1AFFFFFF</color>
-    <color name="rivet_highlight">#14FFFFFF</color>
-    <color name="rivet_shadow">#59000000</color>
+    <color name="emrys_glass">#E6141417</color>
+    <color name="emrys_edge">#17FFFFFF</color>
+    <color name="emrys_highlight">#12FFFFFF</color>
+    <color name="emrys_shadow">#66000000</color>
     <!-- The talk key's halo rings. -->
-    <color name="rivet_halo">#26FF5A1F</color>
-    <color name="rivet_halo_outer">#12FF5A1F</color>
+    <color name="emrys_halo">#26B7C2FF</color>
+    <color name="emrys_halo_outer">#10B7C2FF</color>
 </resources>

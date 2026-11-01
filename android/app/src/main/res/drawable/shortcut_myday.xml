@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher shortcut icon: a graphite (or safety-orange) disc with one glyph. -->
+<!-- Launcher shortcut icon: a soft noir disc with a hairline and a porcelain Material Outlined today glyph. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
-    <path android:fillColor="#FF161B22" android:pathData="M0,24a24,24 0 1 0 48,0a24,24 0 1 0 -48,0z" />
-    <path android:fillColor="#00000000" android:strokeColor="#29E8ECF0" android:strokeWidth="1"
+    <path android:fillColor="#FF18181C" android:pathData="M0,24a24,24 0 1 0 48,0a24,24 0 1 0 -48,0z" />
+    <path android:fillColor="#00000000" android:strokeColor="#24F3F2EE" android:strokeWidth="1"
         android:pathData="M0.5,24a23.5,23.5 0 1 0 47,0a23.5,23.5 0 1 0 -47,0z" />
     <group android:translateX="12" android:translateY="12">
-        <path android:fillColor="#FF42D392" android:pathData="M19,3h-1V1h-2v2H8V1H6v2H5c-1.11,0 -1.99,0.9 -1.99,2L3,19c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zM19,19H5V8h14v11zM7,10h5v5H7z" />
+        <path android:fillColor="#FFF3F2EE" android:pathData="M19,3h-1L18,1h-2v2L8,3L8,1L6,1v2L5,3c-1.11,0 -2,0.9 -2,2v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2L21,5c0,-1.1 -0.9,-2 -2,-2zM19,19L5,19L5,9h14v10zM19,7L5,7L5,5h14v2zM7,11h5v5L7,16z" />
     </group>
 </vector>

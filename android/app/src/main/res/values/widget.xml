@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- A quick key on the panel: a soft outline pill with a Geist label, each as wide as its label plus an equal share of the row. -->
     <style name="WidgetKey">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">32dp</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">30dp</item>
         <item name="android:layout_weight">1</item>
         <item name="android:layout_marginStart">2dp</item>
         <item name="android:layout_marginEnd">2dp</item>
         <item name="android:background">@drawable/widget_key_bg</item>
         <item name="android:gravity">center</item>
-        <item name="android:paddingBottom">1dp</item>
+        <item name="android:paddingStart">5dp</item>
+        <item name="android:paddingEnd">5dp</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
-        <item name="android:fontFamily">@font/ibm_plex_sans_medium</item>
-        <item name="android:textColor">#FFE8ECF0</item>
-        <item name="android:textSize">12sp</item>
+        <item name="android:fontFamily">@font/geist_medium</item>
+        <item name="android:textColor">@color/emrys_ink</item>
+        <item name="android:textSize">12.5sp</item>
     </style>
 </resources>

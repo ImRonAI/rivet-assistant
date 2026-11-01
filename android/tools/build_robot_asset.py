@@ -1,34 +1,39 @@
-"""Builds app/src/main/assets/rivet/index.html from the original robot page.
+"""Builds app/src/main/assets/emrys/index.html from the robot page.
 
-Three changes, nothing else: Google Fonts links become local @font-face rules (the app works offline),
-an ``embedded`` class hides the page's own move dock, telemetry strip and hint (the app draws its own), and bridge.js is appended
-after the page script.
+Four changes, nothing else: Google Fonts links become local @font-face rules for the Noir faces (the app works
+offline), an ``embedded`` class makes the stage fill the WebView, bridge.js is appended after the page script, and the
+stage layer (the ElevenLabs UI layer built from android/stage-ui into assets/emrys/vendor/stage-ui.{js,css} by
+``npm ci && npm run build`` there, and checked in) is linked from the head and loaded after the bridge.
+``--check`` also type-checks bridge.js with TypeScript (robot/tsconfig.json), fetched at its pinned version by npx.
 
-Usage: python3 tools/build_robot_asset.py  (from android/)
+Usage: python3 tools/build_robot_asset.py [--check]  (from android/)
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "robot" / "Rivet_the_Robot.html"
+SOURCE = ROOT / "robot" / "Emrys_the_Robot.html"
 BRIDGE = ROOT / "robot" / "bridge.js"
-OUT = ROOT / "app" / "src" / "main" / "assets" / "rivet" / "index.html"
+OUT = ROOT / "app" / "src" / "main" / "assets" / "emrys" / "index.html"
+VENDOR = OUT.parent / "vendor"
+STAGE_FILES = ("stage-ui.js", "stage-ui.css", "perlin-noise.png")
+TYPESCRIPT = "7.0.2"
 
 FONTS = [
-    ("Big Shoulders Display", 700, "big_shoulders_display_bold"),
-    ("Big Shoulders Display", 800, "big_shoulders_display_extrabold"),
-    ("IBM Plex Mono", 400, "ibm_plex_mono_regular"),
-    ("IBM Plex Mono", 500, "ibm_plex_mono_medium"),
-    ("IBM Plex Sans", 400, "ibm_plex_sans_regular"),
-    ("IBM Plex Sans", 500, "ibm_plex_sans_medium"),
-    ("IBM Plex Sans", 600, "ibm_plex_sans_semibold"),
+    ("Instrument Serif", 400, "normal", "instrument_serif_regular"),
+    ("Instrument Serif", 400, "italic", "instrument_serif_italic"),
+    ("Geist", 400, "normal", "geist_regular"),
+    ("Geist", 500, "normal", "geist_medium"),
+    ("Geist", 600, "normal", "geist_semibold"),
+    ("Geist Mono", 400, "normal", "geist_mono_regular"),
+    ("Geist Mono", 500, "normal", "geist_mono_medium"),
 ]
 EMBEDDED_CSS = (
-    "html.embedded .hud,html.embedded .dock,html.embedded .hint{display:none}"
     "html.embedded .app{grid-template-rows:minmax(0,1fr);height:100%}"
     "html.embedded,html.embedded body{overflow:hidden}"
 )
@@ -41,21 +46,36 @@ def build(source: str, bridge: str) -> str:
     for link in links:
         source = source.replace(link, "", 1)
     faces = "".join(
-        f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:normal;font-display:swap;"
+        f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:{style};font-display:swap;"
         f"src:url(fonts/{file}.ttf) format('truetype')}}"
-        for family, weight, file in FONTS
+        for family, weight, style, file in FONTS
     )
     source = source.replace("<style>", f"<style>{faces}{EMBEDDED_CSS}", 1)
     source = source.replace("<html", '<html class="embedded"', 1) if "<html class=" not in source else source
+    if source.count("</head>") != 1:
+        raise SystemExit("expected exactly one </head>")
+    source = source.replace("</head>", '<link rel="stylesheet" href="vendor/stage-ui.css"></head>', 1)
     if source.count("</body>") != 1:
         raise SystemExit("expected exactly one </body>")
-    return source.replace("</body>", f"<script>\n{bridge}</script>\n</body>", 1)
+    return source.replace(
+        "</body>", f'<script>\n{bridge}</script>\n<script src="vendor/stage-ui.js"></script>\n</body>', 1
+    )
+
+
+def typecheck() -> None:
+    tsc = ["npx", "--yes", f"--package=typescript@{TYPESCRIPT}", "tsc", "--project", str(ROOT / "robot")]
+    if subprocess.run(tsc).returncode:
+        raise SystemExit("robot/bridge.js has type errors")
 
 
 def main() -> None:
+    missing = [name for name in STAGE_FILES if not (VENDOR / name).is_file()]
+    if missing:
+        raise SystemExit(f"missing {', '.join(missing)} in {VENDOR}; run npm ci && npm run build in android/stage-ui")
     html = build(SOURCE.read_text(encoding="utf-8"), BRIDGE.read_text(encoding="utf-8"))
     OUT.parent.mkdir(parents=True, exist_ok=True)
     if "--check" in sys.argv:
+        typecheck()
         if OUT.read_text(encoding="utf-8") != html:
             raise SystemExit(f"{OUT} is stale; run tools/build_robot_asset.py")
         return

@@ -1,8 +1,0 @@
-{
-  "model": "openai/gpt-5.6-sol",
-  "input": "Write a 2000-word essay about rivers.",
-  "stream": true,
-  "store": false,
-  "max_steps": 8,
-  "max_output_tokens": 16
-}

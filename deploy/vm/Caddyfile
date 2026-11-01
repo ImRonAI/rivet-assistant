@@ -1,0 +1,23 @@
+rivet.ron-ai.dev {
+	@computer path /computer/*
+	handle @computer {
+		@token header Authorization "Bearer {$EMRYS_COMPUTER_TOKEN}"
+		handle @token {
+			reverse_proxy computer:8080
+		}
+		respond 401
+	}
+	respond 404
+}
+
+desktop.rivet.ron-ai.dev {
+	reverse_proxy laptop:3000
+}
+
+code.rivet.ron-ai.dev {
+	reverse_proxy code:3000
+}
+
+hooks.oubliai.com {
+	reverse_proxy hooks:8090
+}

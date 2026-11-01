@@ -7,24 +7,25 @@ plugins {
 }
 
 android {
-    namespace = "com.hiron.rivet"
+    namespace = "com.hiron.emrys"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.hiron.rivet"
+        applicationId = "com.hiron.emrys"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.4.0"
-        // Ready-to-use defaults from rivet.local.properties (never committed); all stay editable in Settings.
+        // Phones only: the ElevenLabs SDK's WebRTC library is ~12 MB per ABI, and the x86/armv7 copies were 34 MB.
+        ndk { abiFilters += "arm64-v8a" }
+        versionCode = 13
+        versionName = "0.5.0"
+        // Ready-to-use defaults from emrys.local.properties (never committed); they stay editable in Settings.
         val local = Properties().apply {
-            rootProject.file("rivet.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+            rootProject.file("emrys.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         fun baked(key: String) = "\"" + local.getProperty(key, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
-        buildConfigField("String", "DEFAULT_BRAIN_URL", baked("brainUrl"))
-        buildConfigField("String", "DEFAULT_SESSION", baked("session"))
-        buildConfigField("String", "DEFAULT_DEVICE_TOKEN", baked("deviceToken"))
         buildConfigField("String", "DEFAULT_ANSWERING_NUMBER", baked("answeringNumber"))
+        buildConfigField("String", "DEFAULT_BRAVE_SEARCH_KEY", baked("braveSearchKey"))
+        buildConfigField("String", "DEFAULT_BRAVE_ANSWERS_KEY", baked("braveAnswersKey"))
     }
 
     buildTypes {
@@ -50,9 +51,7 @@ android {
         unitTests.all {
             // Real rendering for the screen tests' screenshots.
             it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
-            it.systemProperty("rivet.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
-            // RIVET_LIVE=1 also runs LiveBrainTest against the deployed brain this build is configured for.
-            it.systemProperty("rivet.live", System.getenv("RIVET_LIVE") ?: "0")
+            it.systemProperty("emrys.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
         }
     }
     lint {
@@ -64,6 +63,10 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        allWarningsAsErrors.set(true)
+        extraWarnings.set(true)
+        progressiveMode.set(true)
+        freeCompilerArgs.add("-Xjsr305=strict")
     }
 }
 
@@ -79,11 +82,10 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
-    implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
     implementation(libs.elevenlabs.android)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
@@ -91,7 +93,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)

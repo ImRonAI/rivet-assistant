@@ -1,0 +1,79 @@
+services:
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file: computer.env
+    volumes:
+      - ./conf:/etc/caddy
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # The owner's desktop: linuxserver's webtop with the toolbox's developer tools.
+  laptop:
+    build:
+      context: ./laptop
+      additional_contexts:
+        toolbox: ./toolbox
+    image: emrys-laptop:ls219
+    restart: unless-stopped
+    shm_size: "1gb"
+    env_file: laptop.env
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      SELKIES_ALLOWED_ORIGINS: "https://desktop.rivet.ron-ai.dev"
+    volumes:
+      - laptop_home:/config
+
+  code:
+    image: gitpod/openvscode-server:1.105.1
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: none
+    entrypoint:
+      - /home/.openvscode-server/bin/openvscode-server
+      - --host
+      - 0.0.0.0
+      - --connection-token-file
+      - /run/secrets/code-token
+      - --default-folder
+      - /home/workspace/workspace
+    volumes:
+      - laptop_home:/home/workspace
+      - ./code-token:/run/secrets/code-token:ro
+
+  # Desktop Commander for the ElevenLabs agents: terminal and files in the laptop's home, where OpenCode lives.
+  computer:
+    build:
+      context: ./computer
+      additional_contexts:
+        toolbox: ./toolbox
+    image: emrys-computer:0.3.1
+    restart: unless-stopped
+    env_file: laptop.env
+    mem_limit: 4g
+    volumes:
+      - laptop_home:/config
+
+  # The agents' webhooks at https://hooks.oubliai.com: OpenCode jobs that outlive the conversation, then a callback.
+  hooks:
+    image: emrys-computer:0.3.1
+    restart: unless-stopped
+    command: ["/opt/bridge/bin/python", "/opt/bridge/hooks.py"]
+    env_file:
+      - laptop.env
+      - elevenlabs.env
+      - hooks.env
+    mem_limit: 4g
+    volumes:
+      - laptop_home:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+  laptop_home:

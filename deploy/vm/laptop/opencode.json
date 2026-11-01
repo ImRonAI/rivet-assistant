@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["mistral"],
+  "model": "mistral/zai-glm-5-3",
+  "provider": {
+    "mistral": {
+      "npm": "@ai-sdk/mistral@3.0.78",
+      "whitelist": ["zai-glm-5-3", "zai-glm-5-3-flash", "deepseek-v4-1-flash-1017"],
+      "models": {
+        "zai-glm-5-3": {
+          "options": { "reasoningEffort": "max" }
+        },
+        "zai-glm-5-3-flash": {},
+        "deepseek-v4-1-flash-1017": {
+          "modalities": { "input": ["text", "image"] }
+        }
+      }
+    }
+  },
+  "mcp": {
+    "context7": { "type": "remote", "url": "https://mcp.context7.com/mcp" },
+    "deepwiki": { "type": "remote", "url": "https://mcp.deepwiki.com/mcp" },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "oauth": false,
+      "headers": { "Authorization": "Bearer {file:~/.config/opencode/github-token}" }
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@0.0.83", "--headless", "--browser", "chromium", "--isolated"]
+    },
+    "vercel": { "type": "remote", "url": "https://mcp.vercel.com" },
+    "linear": { "type": "remote", "url": "https://mcp.linear.app/mcp" }
+  }
+}
