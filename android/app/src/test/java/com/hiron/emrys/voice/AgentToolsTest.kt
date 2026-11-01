@@ -62,6 +62,13 @@ class AgentToolsTest {
     }
 
     @Test
+    fun anUnlabeledElementIsNamedByItsNumberAlone() {
+        assertTrue(ScreenOperator.sameLabel("", null))
+        assertTrue(ScreenOperator.sameLabel("", ""))
+        assertFalse(ScreenOperator.sameLabel("", "Send"))
+    }
+
+    @Test
     fun audioTagsAreSpokenButNotShown() {
         assertEquals("What's up,", AgentTools.withoutAudioTags("[warmly] [surprised]What's up,"))
         assertEquals("Hey, you there?", AgentTools.withoutAudioTags("[surprised]Hey, you there?"))

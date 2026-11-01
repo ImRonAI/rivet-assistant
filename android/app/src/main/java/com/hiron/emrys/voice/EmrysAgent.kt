@@ -15,6 +15,7 @@ import com.hiron.emrys.core.RobotCommand
 import com.hiron.emrys.core.RobotDirector
 import com.hiron.emrys.core.Settings
 import com.hiron.emrys.core.VoiceTurn
+import com.hiron.emrys.device.ScreenOperator
 import com.hiron.emrys.device.ToolResult
 import io.elevenlabs.ClientTool
 import io.elevenlabs.ClientToolResult
@@ -226,6 +227,8 @@ class EmrysAgent(
 
     /** Adds a line to the conversation; returns its id. */
     private fun say(fromUser: Boolean, text: String): String {
+        // The user asking Emrys anything lifts a Stop they pressed on the app operator.
+        if (fromUser) ScreenOperator.resume()
         val message = ChatMessage("agent:" + UUID.randomUUID().toString().take(12), fromUser, text)
         update {
             it.copy(
