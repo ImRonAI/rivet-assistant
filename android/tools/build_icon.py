@@ -1,7 +1,7 @@
-"""Builds Rivet's launcher icon, monochrome icon, notification icon and head mark from one shape list.
+"""Builds Emrys's launcher icon, monochrome icon, notification icon and head mark from one shape list.
 
 Writes the adaptive icon layers (``ic_launcher_background``, ``ic_launcher_foreground``,
-``ic_launcher_monochrome``), the status-bar icon ``ic_rivet``, and ``rivet_head`` (the full-colour head used in
+``ic_launcher_monochrome``), the status-bar icon ``ic_emrys``, and ``emrys_head`` (the full-colour head used in
 the app and the widget) as Android vector drawables, plus ``icon-preview.svg`` for review.
 
 Usage: python3 tools/build_icon.py [--check]  (from android/)
@@ -164,8 +164,8 @@ OUTPUTS = {
     "ic_launcher_background.xml": vector(BACKGROUND, 108, 108),
     "ic_launcher_foreground.xml": vector(FOREGROUND, 108, 108),
     "ic_launcher_monochrome.xml": vector(SILHOUETTE, 108, 108),
-    "ic_rivet.xml": vector(SILHOUETTE, 24, 60, HEAD_SHIFT),
-    "rivet_head.xml": vector(FOREGROUND[1:], 60, 60, HEAD_SHIFT),
+    "ic_emrys.xml": vector(SILHOUETTE, 24, 60, HEAD_SHIFT),
+    "emrys_head.xml": vector(FOREGROUND[1:], 60, 60, HEAD_SHIFT),
 }
 
 

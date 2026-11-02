@@ -1,4 +1,4 @@
-Fonts bundled with Rivet (app/src/main/res/font and app/src/main/assets/rivet/fonts):
+Fonts bundled with Emrys (app/src/main/res/font and app/src/main/assets/emrys/fonts):
 
 - Big Shoulders Display: Copyright 2019 The Big Shoulders Project Authors (https://github.com/xotypeco/big_shoulders)
 - IBM Plex Sans and IBM Plex Mono: Copyright 2017 IBM Corp. (https://github.com/IBM/plex)

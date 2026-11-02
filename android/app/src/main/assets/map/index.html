@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Rivet's place map: MapLibre GL JS over OpenFreeMap's dark style, numbered pins from window.rivetMap.show(). -->
+<!-- Emrys's place map: MapLibre GL JS over OpenFreeMap's dark style, numbered pins from window.emrysMap.show(). -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -27,7 +27,7 @@
   let pins = [];
 
   function post(message) {
-    if (window.RivetMap) RivetMap.postMessage(JSON.stringify(message));
+    if (window.EmrysMap) EmrysMap.postMessage(JSON.stringify(message));
   }
 
   function pin(place) {
@@ -45,7 +45,7 @@
     return { n: place.n, marker: new maplibregl.Marker({ element }).setLngLat([place.lng, place.lat]).addTo(map) };
   }
 
-  window.rivetMap = {
+  window.emrysMap = {
     show(data) {
       if (map === null || interactive !== data.interactive) {
         if (map !== null) map.remove();
@@ -59,7 +59,7 @@
         data.places.forEach((p) => bounds.extend([p.lng, p.lat]));
         map.fitBounds(bounds, { padding: 48, maxZoom: 15, animate: false });
       }
-      window.rivetMap.select(data.selected);
+      window.emrysMap.select(data.selected);
     },
     select(n) {
       pins.forEach((p) => p.marker.getElement().classList.toggle("on", p.n === n));

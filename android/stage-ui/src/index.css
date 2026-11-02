@@ -1,0 +1,51 @@
+/* The stage layer's styles. They load into the robot page, so Tailwind comes in without Preflight (Tailwind's own
+   opt-out: theme and utilities only) and shadcn's base layer is left out, which would restyle the page's body and
+   every border. The tokens the ElevenLabs components read are set on the stage, in Noir values. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist", system-ui, sans-serif;
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+}
+
+/* One mood colour for the whole stage. Every Matrix lights in currentColor (they share one gradient), so the colour
+   is set here and eases between moods. Unlit dots read as faint porcelain glass beads. */
+.stage {
+  --foreground: #f3f2ee;
+  --muted-foreground: rgb(243 242 238 / 0.9);
+  --emrys-mood: #b7c2ff;
+  color: var(--emrys-mood);
+  transition: color 0.8s ease;
+}
+html[data-mood="cy"] .stage { --emrys-mood: #8fdbe8; }
+html[data-mood="amb"] .stage { --emrys-mood: #e8c07c; }
+html[data-mood="ok"] .stage { --emrys-mood: #97d4a6; }
+html[data-mood="rec"] .stage { --emrys-mood: #f07b6c; }
+html[data-voice="speaking"] .stage { --emrys-mood: #b7c2ff; }
+@media (prefers-reduced-motion: reduce) {
+  .stage { transition: none; }
+}
+
+.emrys-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.emrys-layer[hidden] { display: none; }
+
+/* The robot page sizes every svg in its stage to fill it (.stage svg); a Matrix's svg keeps its own size. */
+.stage .emrys-matrix svg {
+  position: static;
+  inset: auto;
+  width: auto;
+  height: auto;
+}

@@ -1,6 +1,6 @@
 """The tools Rivet runs on the user's phone, and how each one is approved.
 
-The phone implements them (``android/app/src/main/java/com/hiron/rivet/device/DeviceTools.kt``); here they are
+The phone implements them (``android/app/src/main/java/com/hiron/emrys/device/DeviceTools.kt``); here they are
 declared to the model as proxies over the session's device bridge. Policies follow the plan's rule: reads run
 without asking (third-party content taints the turn), anything that reaches another person or spends money
 asks, and the app operator asks at commit points, judged from the label the phone verifies before it taps.
