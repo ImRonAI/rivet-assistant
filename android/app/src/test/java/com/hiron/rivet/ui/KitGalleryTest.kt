@@ -14,12 +14,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Psychology
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.StopCircle
+import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,10 +52,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.hiron.rivet.core.Activity as RivetActivity
 
-/** The shared v3 components on one page each, saved to build/screens/kit-gallery*.png for review. */
+/** The shared Noir components on one page each, saved to build/screens/kit-gallery*.png for review. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w411dp-h1760dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w411dp-h1960dp-xxhdpi")
 class KitGalleryTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
@@ -73,52 +77,57 @@ class KitGalleryTest {
                 HudHeader(RivetState(connection = Connection.Online, activity = RivetActivity.Waiting, approvals = listOf(approval, approval)), "Assistant")
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     StepIndicator(2, 4)
-                    StepHeadline("TWO MODELS, ONE RIVET", Modifier.fillMaxWidth())
-                    Eyebrow("VOICE CONFIGURATION")
-                    HeroTitle("RIVET'S VOICE")
-                    SectionLabel("Ways to make one", trailing = "4 WAYS")
+                    StepHeadline("Two models, one Emrys", Modifier.fillMaxWidth())
+                    Eyebrow("Voice configuration")
+                    HeroTitle("Emrys's voice")
+                    SectionLabel("Ways to make one", trailing = "4 ways")
                     FeatureCard(
-                        Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Rivet answers in its own voice, powered by ElevenLabs.",
-                        tone = Tone.Accent, tag = "WHEN YOU TALK" to Tone.Accent,
+                        Icons.Outlined.GraphicEq, "Voice model", "Talk out loud and Emrys answers in its own voice, powered by ElevenLabs.",
+                        tone = Tone.Accent, tag = "When you talk" to Tone.Accent,
                         trailing = { RivetToggle(true, { toggled = it }) },
                         nested = { NestedRow("Read replies aloud when I type", true, {}) },
                     )
                     FeatureCard(
                         Icons.Outlined.Psychology, "Text model", "Reads, plans and writes every answer, and asks before it acts.",
-                        tag = "ALWAYS ON" to Tone.Cyan, trailing = { RivetToggle(true, null, enabled = false) },
+                        tag = "Always on" to Tone.Cyan, trailing = { RivetToggle(true, null, enabled = false) },
                     )
                     FeatureCard(
-                        Icons.Outlined.PowerSettingsNew, "Long-press power button", "Hold the power button to call Rivet from anywhere.",
-                        tone = Tone.Accent, tag = "PRIMARY" to Tone.Accent, selected = true, onClick = {}, role = Role.RadioButton,
+                        Icons.Outlined.PowerSettingsNew, "Long-press power button", "Hold the power button to call Emrys from anywhere.",
+                        tone = Tone.Accent, tag = "Primary" to Tone.Accent, selected = true, onClick = {}, role = Role.RadioButton,
                         trailing = { RadioDot(true) },
                     )
                     FeatureCard(
                         Icons.Outlined.Mic, "Record a sample", "Record 30 seconds of your own voice", tone = Tone.Neutral, onClick = {},
                         trailing = { androidx.compose.material3.Icon(Icons.AutoMirrored.Outlined.ArrowForward, null, tint = LocalPalette.current.ink2) },
                     )
-                    InfoStrip("Previews play through your phone's voice until Rivet's ElevenLabs voice is connected.")
-                    InfoStrip("This came up while Rivet was reading a message. Check it carefully.", icon = Icons.Outlined.WarningAmber, tone = Tone.Amber)
-                    CheckCard("Clean speech", "No heavy background noise or music", "REQUIRED", Tone.Neutral)
+                    InfoStrip("Previews play through your phone's voice until Emrys's ElevenLabs voice is connected.")
+                    InfoStrip("This came up while Emrys was reading a message. Check it carefully.", icon = Icons.Outlined.WarningAmber, tone = Tone.Amber)
+                    CheckCard("Clean speech", "No heavy background noise or music", "Required", Tone.Neutral)
                     StatusLine("File looks good", Tone.Green, bars = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Tone.entries.forEach { StatusTag(it.name, it) }
-                        StatusTag("BEST", Tone.Accent, outline = true)
                     }
-                    TrustFooter("REVOCABLE ANY TIME IN ANDROID SETTINGS · NOTHING GOES OUT WITHOUT YOUR OK")
-                    PrimaryKey("Get Started", {})
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        StatusTag("Best", Tone.Accent, outline = true)
+                        Tag("Live", LocalPalette.current.rec, hot = true)
+                        Capsule("Listening", LocalPalette.current.rec, live = true)
+                        Pip(LocalPalette.current.cy, live = true)
+                    }
+                    TrustFooter("Revocable any time in Android settings · nothing goes out without your OK")
+                    PrimaryKey("Get started", {})
                     PrimaryKey("Continue", {}, style = CtaStyle.Display)
                     PrimaryKey("Finish recording", {}, style = CtaStyle.Display, leading = Icons.Outlined.StopCircle, trailingArrow = false)
                     PrimaryKey("Continue", {}, style = CtaStyle.Display, enabled = false)
                     SecondaryKey("Skip voice setup", {})
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextKey("Not now", {})
-                        TextKey("Choose Rivet's voice", {}, leading = Icons.Outlined.GraphicEq, tone = Tone.Cyan)
+                        TextKey("Choose Emrys's voice", {}, leading = Icons.Outlined.GraphicEq, tone = Tone.Cyan)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip("ALL", true, {})
-                        FilterChip("WARM", false, {})
-                        FilterChip("CRISP", false, {})
-                        FilterChip("DEEP", false, {})
+                        FilterChip("All", true, {})
+                        FilterChip("Warm", false, {})
+                        FilterChip("Crisp", false, {})
+                        FilterChip("Deep", false, {})
                     }
                 }
                 ChipRail {
@@ -132,10 +141,33 @@ class KitGalleryTest {
                         Keycap("Dismiss", {})
                         SysKey("Details", true, {})
                         SysKey("Type", false, {})
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Keycap("Turn off", {}, tone = KeyTone.Danger)
+                        Keycap("Remove", {}, enabled = false)
+                        Keycap("Share", {}, icon = Icons.Outlined.Share, tag = "2")
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        IconKey(Icons.Outlined.Close, "Close", {})
+                        IconKey(Icons.Outlined.Mic, "Microphone", {}, ring = LocalPalette.current.rec)
+                        RivetToggle(false, {})
                         CompactToggle(false, {})
+                        CompactToggle(true, {})
                         RadioDot(false)
+                        RadioDot(true)
                     }
                 }
+            }
+            Box(Modifier.align(Alignment.BottomCenter)) {
+                PendantTabs(
+                    listOf(
+                        PendantTab("rivet", "Emrys", Icons.Outlined.Home, badge = 2, tag = "rivet"),
+                        PendantTab("activity", "Activity", Icons.Outlined.Timeline),
+                        PendantTab("settings", "Settings", Icons.Outlined.Tune),
+                    ),
+                    "rivet",
+                    {},
+                )
             }
         }
         compose.onNodeWithText("Voice model").assertExists()
@@ -144,6 +176,7 @@ class KitGalleryTest {
     }
 
     @Test
+    @Config(qualifiers = "w411dp-h2160dp-xxhdpi")
     fun stageMetersAndInputs() {
         var text by mutableStateOf("")
         page {
@@ -152,17 +185,20 @@ class KitGalleryTest {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     StageFrame(Modifier.fillMaxWidth().height(248.dp), hint = STAGE_HINT, mood = LocalPalette.current.cy) {}
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Eyebrow("RECORDING", tone = Tone.Red, live = true)
+                        Eyebrow("Recording", tone = Tone.Red, live = true)
                         TimerPill(14, 30)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         HaloTalkKey(TalkState.Idle, {}, "Start recording", large = true)
                     }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        HaloTalkKey(TalkState.Listening, {}, "Finish recording", large = true)
+                    }
                     RivetCard {
                         LevelMeter(listOf(0.2f, 0.5f, 0.8f, 0.4f, 0.95f, 0.6f, 0.3f, 0.7f, 0.5f, 0.35f, 0.2f, 0.1f), Modifier.fillMaxWidth())
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                        HaloTalkKey(TalkState.Idle, {}, "Speak to Rivet")
+                        HaloTalkKey(TalkState.Idle, {}, "Speak to Emrys")
                         HaloTalkKey(TalkState.Listening, {}, "Stop listening")
                         SendKey({})
                         PlayKey(false, {})
@@ -170,9 +206,16 @@ class KitGalleryTest {
                     }
                     MiniWave(listOf(0.3f, 0.6f, 0.9f, 0.5f, 0.7f, 0.4f, 0.8f, 0.6f, 0.3f, 0.5f, 0.7f, 0.4f, 0.2f, 0.5f), 0.45f)
                     ComposerCard(text, { text = it }, "e.g., A calm, witty radio operator with dry warmth and crisp articulation…", 280)
-                    DropZone("CHOOSE AUDIO", "Tap to pick a file from your phone (at least 30 seconds)", {})
+                    DropZone("Choose audio", "Tap to pick a file from your phone (at least 30 seconds)", {})
                     RecessedField("", {}, label = "Server address", placeholder = "https://rivet-brain.fly.dev")
-                    StatTile(12, "Things done", LocalPalette.current.cy)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        StatTile(12, "Things done", LocalPalette.current.cy, Modifier.weight(1f))
+                        StatTile(2, "Waiting on you", LocalPalette.current.amb, Modifier.weight(1f))
+                    }
+                    HudCard("Connection", pip = LocalPalette.current.ok, meta = "Online") {
+                        Readout("Server", "rivet-assistant.fly.dev", mono = true)
+                        Readout("Made by", "Ron AI · hi-ron.com")
+                    }
                 }
             }
             FadeFooter(Modifier.align(Alignment.BottomCenter)) {
@@ -183,7 +226,7 @@ class KitGalleryTest {
         compose.waitForIdle()
         assertEquals(280, text.length)
         compose.onNodeWithText("280 / 280").assertExists()
-        compose.onNodeWithContentDescription("Speak to Rivet").assertExists()
+        compose.onNodeWithContentDescription("Speak to Emrys").assertExists()
         compose.onNodeWithContentDescription("Back").assertExists()
         shot(compose, compose.activity, "kit-gallery-meters")
     }
