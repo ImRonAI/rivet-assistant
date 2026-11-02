@@ -129,7 +129,7 @@ class ReviewScreensTest {
         sheet(listOf(buy))
         compose.onNodeWithText("Spends money · you can't undo it").assertIsDisplayed()
         compose.onNodeWithText("Approve with unlock").assertIsDisplayed()
-        compose.onNodeWithText("Rivet always asks before spending money, so this works only with Deny.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Emrys always asks before spending money, so this works only with Deny.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Technical details").performClick()
         compose.onNodeWithText("telnyx_execute").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(600)
@@ -143,9 +143,9 @@ class ReviewScreensTest {
     @Test
     fun afterReadingAMessageAlwaysAllowIsOff() {
         sheet(listOf(textApproval(untrusted = true)))
-        compose.onNodeWithText("This came up while Rivet was reading a message, an email or a web page. Check it carefully.").assertIsDisplayed()
+        compose.onNodeWithText("This came up while Emrys was reading a message, an email or a web page. Check it carefully.").assertIsDisplayed()
         compose.onNodeWithText("If I say no, don't ask again about Texts to Dana").performScrollTo().performClick()
-        compose.onNodeWithText("Rivet read a message, an email or a web page while working on this, so it can't be always allowed right now. This works only with Deny.")
+        compose.onNodeWithText("Emrys read a message, an email or a web page while working on this, so it can't be always allowed right now. This works only with Deny.")
             .assertIsDisplayed()
         compose.onAllNodesWithText("Always allow").assertCountEquals(0)
         compose.onNodeWithText("Approve").assertIsDisplayed()
@@ -168,7 +168,7 @@ class ReviewScreensTest {
             false, emptyList(), null, null,
         )
         sheet(listOf(text, email, buy))
-        compose.onNodeWithText("Rivet wants to do 3 things:").assertIsDisplayed()
+        compose.onNodeWithText("Emrys wants to do 3 things:").assertIsDisplayed()
         compose.onNodeWithText("Send answers").assertIsDisplayed()
         shot(compose, compose.activity, "review-approval-batch-narrow")
         compose.onNodeWithText("Deny all").performClick()

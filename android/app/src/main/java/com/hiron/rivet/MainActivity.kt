@@ -84,7 +84,7 @@ class MainActivity : FragmentActivity() {
     // Asked for from the assistant overlay, which has no activity to show the permission dialog itself.
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         when {
-            granted -> Toast.makeText(this, "Microphone on. Long-press Home to talk to Rivet.", Toast.LENGTH_LONG).show()
+            granted -> Toast.makeText(this, "Microphone on. Long-press Home to talk to Emrys.", Toast.LENGTH_LONG).show()
             // Denied for good: only the app's settings page can turn it back on.
             !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> startActivity(
                 Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
@@ -94,7 +94,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Rivet is dark first: light system-bar icons on its graphite surfaces, whatever the system theme.
+        // Emrys is dark first: light system-bar icons on its noir surfaces, whatever the system theme.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -147,7 +147,12 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-private enum class Tab(val label: String) { Rivet("Rivet"), Activity("Activity"), Settings("Settings") }
+/** The tabs; each keeps its test tag ("tab-rivet", …) from its name, whatever its label says. */
+private enum class Tab(val label: String) {
+    Rivet("Emrys"), Activity("Activity"), Settings("Settings");
+
+    val tag: String get() = name.lowercase()
+}
 
 @Composable
 private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int, searchRequests: Int) {
@@ -184,7 +189,7 @@ private fun RivetAppUi(runtime: RivetRuntime, listenRequests: Int, focusRequests
         }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask Rivet")
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask Emrys")
         try {
             runtime.listening(true)
             voice.launch(intent)
@@ -295,9 +300,9 @@ private fun MainUi(
         if (!WindowInsets.isImeVisible) {
             PendantTabs(
                 listOf(
-                    PendantTab(Tab.Rivet, Tab.Rivet.label, ImageVector.vectorResource(R.drawable.ic_rivet), badge = state.approvals.size),
-                    PendantTab(Tab.Activity, Tab.Activity.label, Icons.Outlined.Timeline),
-                    PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune),
+                    PendantTab(Tab.Rivet, Tab.Rivet.label, ImageVector.vectorResource(R.drawable.emrys_sigil), badge = state.approvals.size, tag = Tab.Rivet.tag),
+                    PendantTab(Tab.Activity, Tab.Activity.label, Icons.Outlined.Timeline, tag = Tab.Activity.tag),
+                    PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune, tag = Tab.Settings.tag),
                 ),
                 tab,
                 onTab,

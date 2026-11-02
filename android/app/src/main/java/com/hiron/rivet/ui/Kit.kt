@@ -1,6 +1,8 @@
 package com.hiron.rivet.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -48,7 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -71,14 +72,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** How a keycap reads: a plain key, the one primary action (safety orange), or a destructive one. */
+/** How a key reads: a plain key, the one primary action (porcelain), or a destructive one (coral). */
 enum class KeyTone { Plain, Accent, Danger }
 
-private val KeyShape = RoundedCornerShape(12.dp)
+private val KeyShape = RoundedCornerShape(50)
 
 /**
- * A teach-pendant keycap: 1px border, a lit top edge, a 1px lip underneath, and a 1px press that drops the
- * lip. [tag] is the small mono plate on the right of the label.
+ * A soft pill key: a quiet fill and a 1dp hairline, brightening while pressed. [KeyTone.Accent] is the porcelain
+ * primary; [KeyTone.Danger] carries coral ink on a coral hairline. [tag] is a small quiet note after the label.
  */
 @Composable
 fun Keycap(
@@ -90,24 +91,17 @@ fun Keycap(
     icon: ImageVector? = null,
     enabled: Boolean = true,
 ) {
-    val p = LocalPalette.current
-    val c = keyColors(p, tone)
-    KeyBody(onClick, modifier, c, enabled, role = Role.Button, glow = tone == KeyTone.Accent) {
-        if (icon != null) Icon(icon, contentDescription = null, tint = c.ink, modifier = Modifier.size(18.dp))
+    val c = keyColors(LocalPalette.current, tone)
+    KeyBody(onClick, modifier, c, enabled, role = Role.Button) {
+        if (icon != null) Icon(icon, contentDescription = null, tint = c.icon, modifier = Modifier.size(18.dp))
         Text(text, style = Type.key, color = c.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (tag != null) {
-            Text(
-                tag, style = Type.labelSm, color = if (tone == KeyTone.Plain) p.ink2 else c.ink.copy(alpha = 0.7f),
-                modifier = Modifier.border(1.dp, if (tone == KeyTone.Plain) p.edge else c.ink.copy(alpha = 0.35f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-            )
-        }
+        if (tag != null) Text(tag, style = Type.labelMd, color = c.ink.copy(alpha = 0.6f), maxLines = 1)
     }
 }
 
 /**
- * A square keycap holding one icon: the composer's talk and send keys. [ring] lights an LED ring around it
- * (crimson while the microphone is live).
+ * A round key holding one icon: the composer's talk and send keys, the viewer's actions. [ring] lights a thin
+ * breathing ring around it (coral while the microphone is live).
  */
 @Composable
 fun IconKey(
@@ -119,29 +113,27 @@ fun IconKey(
     size: Dp = 48.dp,
     ring: Color? = null,
 ) {
-    val p = LocalPalette.current
-    val c = keyColors(p, tone)
-    val glow = if (ring != null) breathe(0.35f, 1f, 700) else 0f
-    val shape = if (tone == KeyTone.Accent) RoundedCornerShape(50) else RoundedCornerShape(14.dp)
+    val c = keyColors(LocalPalette.current, tone)
+    val glow = if (ring != null) breathe(0.4f, 1f, Motion.BREATHE / 2) else 0f
     Box(
         modifier.size(size).drawBehind {
             if (ring != null) {
-                val grow = 5.dp.toPx()
-                val outline = shape.createOutline(Size(this.size.width + grow * 2, this.size.height + grow * 2), layoutDirection, this)
-                translate(-grow, -grow) { drawOutline(outline, ring.copy(alpha = 0.35f * glow), style = Stroke(2.dp.toPx())) }
+                val grow = 4.dp.toPx()
+                val outline = CircleShape.createOutline(Size(this.size.width + grow * 2, this.size.height + grow * 2), layoutDirection, this)
+                translate(-grow, -grow) { drawOutline(outline, ring.copy(alpha = 0.6f * glow), style = Stroke(1.dp.toPx())) }
             }
         },
     ) {
         KeyBody(
             onClick, Modifier.fillMaxSize().semantics { contentDescription = description }, c, enabled = true, role = Role.Button, square = true,
-            shape = shape, glow = tone == KeyTone.Accent,
+            shape = CircleShape,
         ) {
-            Icon(icon, contentDescription = null, tint = c.ink, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = c.icon, modifier = Modifier.size(21.dp))
         }
     }
 }
 
-/** A latching key in the secondary-key look, white while it is on; [height] and [radius] match it to the keys beside it. */
+/** A latching pill in the secondary-key look, porcelain while it is on; [height] and [radius] match it to the keys beside it. */
 @Composable
 fun SysKey(
     text: String,
@@ -157,8 +149,8 @@ fun SysKey(
     val pressed by source.collectIsPressedAsState()
     val shape = RoundedCornerShape(radius)
     Box(
-        modifier.height(height).clip(shape).background(if (on) p.white else if (pressed) p.cardHi else p.raised)
-            .border(1.dp, if (on) p.white else if (pressed) p.lineHi else p.edge, shape)
+        modifier.height(height).clip(shape).background(if (on) p.ink else if (pressed) p.cardHi else p.key)
+            .border(1.dp, if (on) p.ink else if (pressed) p.lineHi else p.line, shape)
             .toggleable(on, interactionSource = source, indication = null, role = Role.Switch) {
                 haptics.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
                 onToggle(it)
@@ -166,16 +158,16 @@ fun SysKey(
             .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center,
     ) {
-        CapsText(text, Type.monoKey, if (on) p.bg else p.ink, maxLines = 1)
+        CapsText(text, Type.monoKey, if (on) p.accentInk else p.ink, maxLines = 1)
     }
 }
 
-private data class KeyColors(val fill: Color, val pressed: Color, val line: Color, val ink: Color, val light: Color)
+private data class KeyColors(val fill: Color, val pressed: Color, val line: Color, val pressedLine: Color, val ink: Color, val icon: Color)
 
 private fun keyColors(p: Palette, tone: KeyTone) = when (tone) {
-    KeyTone.Plain -> KeyColors(p.card, p.cardHi, p.edge, p.ink, Color.White.copy(alpha = 0.06f))
-    KeyTone.Accent -> KeyColors(p.accent, p.accentHi, p.accent, p.accentInk, Color.White.copy(alpha = 0.28f))
-    KeyTone.Danger -> KeyColors(p.card, p.cardHi, p.rec.copy(alpha = 0.6f), p.rec, Color.White.copy(alpha = 0.06f))
+    KeyTone.Plain -> KeyColors(p.key, p.cardHi, p.line, p.lineHi, p.ink, p.ink2)
+    KeyTone.Accent -> KeyColors(p.ink, p.ink, p.ink, p.accentHi, p.accentInk, p.accentInk)
+    KeyTone.Danger -> KeyColors(p.key, p.cardHi, p.rec.copy(alpha = 0.45f), p.rec.copy(alpha = 0.8f), p.rec, p.rec)
 }
 
 @Composable
@@ -187,70 +179,56 @@ private fun KeyBody(
     role: Role,
     square: Boolean = false,
     shape: Shape = KeyShape,
-    glow: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val down = pressed && enabled
     Row(
         modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .alpha(if (enabled) 1f else 0.4f)
-            .graphicsLayer { translationY = if (pressed) 1.dp.toPx() else 0f }
-            .then(if (glow && enabled) Modifier.glow(Glows.cta.color, 12.dp, shape) else Modifier)
-            .lip(p.keyShadow, !pressed, shape)
-            .clip(shape).background(if (pressed) c.pressed else c.fill).topLight(c.light)
-            .border(1.dp, c.line, shape)
+            .graphicsLayer { if (down) { scaleX = 0.98f; scaleY = 0.98f } }
+            .then(if (down) Modifier.ring(c.pressedLine.copy(alpha = 0.6f), shape, true, gap = 2.dp) else Modifier)
+            .clip(shape).background(if (down) c.pressed else c.fill)
+            .border(1.dp, if (down) c.pressedLine else c.line, shape)
             .clickable(enabled = enabled, interactionSource = source, indication = null, role = role) {
                 haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
                 onClick()
             }
-            .padding(horizontal = if (square) 0.dp else 14.dp),
+            .padding(horizontal = if (square) 0.dp else 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         content = content,
     )
 }
 
-/** The 1px shadow line under a keycap; it disappears while the key is pressed down. */
-private fun Modifier.lip(color: Color, show: Boolean, shape: Shape) = drawBehind {
-    if (show) translate(0f, 1.dp.toPx()) { drawOutline(shape.createOutline(size, layoutDirection, this), color) }
-}
-
-/** A hairline of light along the top edge, as on a machined key. */
-private fun Modifier.topLight(color: Color) = drawWithContent {
-    drawContent()
-    val inset = 6.dp.toPx()
-    drawLine(color, Offset(inset, 0.75.dp.toPx()), Offset(size.width - inset, 0.75.dp.toPx()), strokeWidth = 1.dp.toPx())
-}
-
-/** An infinitely breathing value between [from] and [to]; tests and reduced-motion hosts hold it at [to]. */
+/** An infinitely breathing value between [from] and [to]; reduced-motion hosts hold it at [to]. */
 @Composable
 private fun breathe(from: Float, to: Float, halfPeriodMs: Int): Float {
+    if (rememberReduceMotion()) return to
     val t = rememberInfiniteTransition(label = "breathe")
-    return t.animateFloat(to, from, infiniteRepeatable(tween(halfPeriodMs), RepeatMode.Reverse), label = "breathe").value
+    return t.animateFloat(to, from, infiniteRepeatable(tween(halfPeriodMs, easing = Motion.Standard), RepeatMode.Reverse), label = "breathe").value
 }
 
-/** A status LED. [live] pulses it (the robot HUD's `live` pip) and blooms it. */
+/** A status dot in a [size]×2 square. [live] lets it breathe slowly in a faint bloom (the robot HUD's `live` pip). */
 @Composable
 fun Pip(color: Color, modifier: Modifier = Modifier, live: Boolean = false, size: Dp = 8.dp) {
-    val alpha = if (live) breathe(0.35f, 1f, 600) else 1f
+    val alpha = if (live) breathe(0.45f, 1f, Motion.BREATHE / 2) else 1f
     Canvas(modifier.size(size * 2)) {
-        val r = size.toPx() / 2
-        if (live) drawCircle(Brush.radialGradient(listOf(color.copy(alpha = 0.45f * alpha), Color.Transparent), center, r * 2.2f), r * 2.2f)
-        drawCircle(color.copy(alpha = alpha), r)
-        drawCircle(Color.White.copy(alpha = 0.35f * alpha), r * 0.35f, center + Offset(-r * 0.3f, -r * 0.3f))
+        val r = size.toPx() * 0.375f
+        if (live) drawCircle(Brush.radialGradient(listOf(color.copy(alpha = 0.35f * alpha), Color.Transparent), center, r * 2.8f), r * 2.8f)
+        drawCircle(color.copy(alpha = 0.55f + 0.45f * alpha), r)
     }
 }
 
-/** A tag plate in the [StatusTag] style for any colour: tinted fill, mono caps. [hot] fills it solid. */
+/** A status tag in the [StatusTag] style for any colour: a dot and a label. [hot] sets it on a soft wash of the colour. */
 @Composable
 fun Tag(text: String, color: Color, modifier: Modifier = Modifier, hot: Boolean = false) {
     TagPlate(text, color, modifier, hot = hot)
 }
 
-/** Four rivet heads in the corners of a plate: Rivet's signature, and how a machined panel is held on. */
+/** Four small studs in the corners of a plate. */
 fun Modifier.rivets(color: Color, inset: Dp = 7.dp, radius: Dp = 1.6.dp) = drawBehind {
     val i = inset.toPx()
     val r = radius.toPx()
@@ -261,8 +239,8 @@ fun Modifier.rivets(color: Color, inset: Dp = 7.dp, radius: Dp = 1.6.dp) = drawB
 }
 
 /**
- * A HUD card: card fill and hairline edge, an uppercase mono header with an optional index, LED and right-hand
- * meta, a divider, then the body.
+ * A glass card: the translucent card fill and a hairline at a 20dp radius, a header row (an optional status dot,
+ * a small figure, the title and a quiet right-hand note), a hairline, then the body.
  */
 @Composable
 fun HudCard(
@@ -277,14 +255,14 @@ fun HudCard(
     content: @Composable () -> Unit,
 ) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
-    Column(modifier.fillMaxWidth().clip(shape).background(p.card).border(1.dp, outline ?: p.edge, shape)) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, outline ?: p.line, shape)) {
         HudHeaderRow(title, index = index, pip = pip, live = live, meta = meta, metaColor = metaColor)
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { content() }
     }
 }
 
-/** The header strip of a HUD card, also used on its own above full-bleed lists. */
+/** The header row of a glass card, also used on its own above full-bleed lists. Text renders as written. */
 @Composable
 fun HudHeaderRow(
     title: String,
@@ -299,14 +277,14 @@ fun HudHeaderRow(
     val p = LocalPalette.current
     Column(modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 38.dp).padding(start = if (pip != null) 8.dp else 16.dp, end = 16.dp),
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = if (pip != null) 12.dp else 18.dp, end = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (pip != null) Pip(pip, live = live)
             if (pip != null) Spacer(Modifier.size(4.dp))
-            if (index != null) Text(index, style = Type.labelSm, color = p.ink2, modifier = Modifier.padding(end = 10.dp))
-            Text(title.uppercase(), style = Type.labelSm, color = p.ink, modifier = Modifier.weight(1f), maxLines = 1)
-            if (meta != null) Odometer(meta.uppercase(), Type.labelSm, metaColor ?: p.ink2)
+            if (index != null) Text(index, style = Type.tele, color = p.ink2, modifier = Modifier.padding(end = 10.dp))
+            Text(title, style = Type.title, color = p.ink, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (meta != null) Odometer(meta, Type.labelMd, metaColor ?: p.ink2)
             trailing?.invoke()
         }
         Rule(color = p.line)
@@ -319,44 +297,43 @@ fun Rule(modifier: Modifier = Modifier, color: Color = LocalPalette.current.rule
 }
 
 /**
- * Text that rolls like a split-flap readout when it changes: the old value slides up and out, the new one up
- * and in.
+ * Text that settles softly when it changes: the old value fades up and away while the new one fades in from just
+ * below. With motion reduced it changes in place.
  */
 @Composable
-fun Odometer(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier) {
+fun Odometer(text: String, style: TextStyle, color: Color, modifier: Modifier = Modifier, overflow: TextOverflow = TextOverflow.Clip) {
+    val reduce = rememberReduceMotion()
     AnimatedContent(
         targetState = text,
         transitionSpec = {
-            (slideInVertically(tween(260)) { it } + fadeIn(tween(260))) togetherWith
-                (slideOutVertically(tween(220)) { -it } + fadeOut(tween(180)))
+            if (reduce) {
+                EnterTransition.None togetherWith ExitTransition.None
+            } else {
+                (slideInVertically(tween(Motion.BASE, easing = Motion.Emphasized)) { it / 3 } + fadeIn(tween(Motion.BASE))) togetherWith
+                    (slideOutVertically(tween(Motion.QUICK)) { -it / 3 } + fadeOut(tween(Motion.QUICK)))
+            }
         },
         modifier = modifier,
         label = "odometer",
-    ) { value -> Text(value, style = style, color = color, maxLines = 1) }
+    ) { value -> Text(value, style = style, color = color, maxLines = 1, overflow = overflow) }
 }
 
-/** A choice of a few options: [FilterChip]s in a pill track; the chosen one is white. */
+/** A choice of a few options in a soft pill track; the chosen one is the raised active segment. */
 @Composable
 fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val track = RoundedCornerShape(50)
     Row(
-        modifier.fillMaxWidth().clip(track).background(p.field).border(1.dp, p.edge, track).padding(4.dp),
+        modifier.fillMaxWidth().clip(track).background(p.field).border(1.dp, p.line, track).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         options.forEach { (value, label) -> Chip(label, value == selected, { onSelect(value) }, Modifier.weight(1f).height(40.dp), outlined = false) }
     }
 }
 
-/** A recessed well: a dark line along the inside top edge, as if the surface were milled down. */
-private fun Modifier.innerShade() = drawWithContent {
-    drawContent()
-    drawLine(Color.Black.copy(alpha = 0.45f), Offset(10.dp.toPx(), 1.dp.toPx()), Offset(size.width - 10.dp.toPx(), 1.dp.toPx()), strokeWidth = 1.5.dp.toPx())
-}
-
 /**
- * A recessed input: field fill and a hairline at rest; focused, an orange border with a faint outer ring.
- * [label] sits above in mono caps.
+ * An input: a rounded field fill and a hairline at rest; focused, a halo border, a faint halo ring and a halo
+ * caret. [label] sits above in Geist, as written.
  */
 @Composable
 fun RecessedField(
@@ -375,9 +352,9 @@ fun RecessedField(
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(12.dp)
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (label != null) Text(label.uppercase(), style = Type.labelSm, color = if (focused) p.accent else p.ink2)
+    val shape = RoundedCornerShape(14.dp)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (label != null) Text(label, style = Type.labelLg, color = if (focused) p.accent else p.ink2)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -392,13 +369,13 @@ fun RecessedField(
             interactionSource = source,
             decorationBox = { inner ->
                 Box(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).ring(p.accent.copy(alpha = 0.3f), shape, focused)
-                        .clip(shape).background(p.field).innerShade()
-                        .border(1.dp, if (focused) p.accent.copy(alpha = 0.6f) else p.edge, shape)
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).ring(p.accent.copy(alpha = 0.16f), shape, focused, gap = 2.dp)
+                        .clip(shape).background(p.field)
+                        .border(1.dp, if (focused) p.accent.copy(alpha = 0.6f) else p.line, shape)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    if (value.isEmpty() && placeholder != null) Text(placeholder, style = Type.bodyLg, color = p.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (value.isEmpty() && placeholder != null) Text(placeholder, style = Type.bodyLg, color = p.ink2.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     inner()
                 }
             },
@@ -406,35 +383,35 @@ fun RecessedField(
     }
 }
 
-/** A switch in Rivet's colours: the [RivetToggle]. */
+/** A switch in Emrys's colours: the [RivetToggle]. */
 @Composable
 fun RivetSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) = RivetToggle(checked, onCheckedChange, modifier)
 
-/** A label/value row in mono, like the header telemetry. */
+/** A label/value row: a quiet label and its value. [mono] sets the value in Geist Mono, for codes, addresses and ids. */
 @Composable
-fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color? = null) {
+fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color? = null, mono: Boolean = false) {
     val p = LocalPalette.current
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label.uppercase(), style = Type.labelSm, color = p.ink2, modifier = Modifier.padding(end = 12.dp))
+    Row(modifier.fillMaxWidth().heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = Type.body, color = p.ink2, modifier = Modifier.padding(end = 16.dp))
         Spacer(Modifier.weight(1f))
-        Text(value, style = Type.mono, color = valueColor ?: p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, style = if (mono) Type.mono else Type.body.copy(fontWeight = Type.title.fontWeight), color = valueColor ?: p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** A counter plate: a big display numeral over a mono caption, for the activity summary. */
+/** A counter: a serif figure over a status dot and a quiet label, on a glass card, for the activity summary. */
 @Composable
 fun StatTile(value: Int, label: String, color: Color, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(20.dp)
     Column(
-        modifier.clip(shape).background(p.card).border(1.dp, p.edge, shape).padding(horizontal = 14.dp, vertical = 12.dp),
+        modifier.clip(shape).background(p.hud).border(1.dp, p.line, shape).padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.size(6.dp))
-            Text(label.uppercase(), style = Type.eyebrow, color = p.ink2, maxLines = 1)
-        }
         Odometer("$value", Type.stat, p.ink)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SignalDot(color)
+            Spacer(Modifier.size(8.dp))
+            Text(label, style = Type.labelLg, color = p.ink2, maxLines = 1)
+        }
     }
 }

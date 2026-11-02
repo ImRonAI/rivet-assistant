@@ -10,8 +10,8 @@ class PlainTest {
         assertEquals(
             listOf(
                 "Only looks · changes nothing", "Sends a message · you can't undo it", "Changes something on your phone or account",
-                "Deletes something · you can't undo it", "Spends money · you can't undo it", "Something Rivet hasn't done before",
-                "Something Rivet hasn't done before",
+                "Deletes something · you can't undo it", "Spends money · you can't undo it", "Something Emrys hasn't done before",
+                "Something Emrys hasn't done before",
             ),
             listOf("read", "send", "write", "destructive", "purchase", "unknown", "something_new").map { Plain.risk(Tier.of(it), "sms_send") },
         )
@@ -36,7 +36,7 @@ class PlainTest {
         assertEquals("Checked the calendar", Plain.log("tool", "calendar_list"))
         assertEquals("Checked the phone", Plain.log("device", "device_status: done"))
         assertEquals("Placed a call · No permission to call", Plain.log("device", "phone_call: No permission to call"))
-        assertEquals("Rivet's model is busy. Trying again in 8s.", Plain.log("backoff", "Model busy; retrying in 8s"))
+        assertEquals("Emrys's model is busy. Trying again in 8s.", Plain.log("backoff", "Model busy; retrying in 8s"))
     }
 
     @Test
@@ -65,11 +65,11 @@ class PlainTest {
 
     @Test
     fun kindsHaveWordsAndTones() {
-        assertEquals("DID" to Tone.Cyan, Plain.kind("tool"))
-        assertEquals("YOU ASKED" to Tone.Accent, Plain.kind("turn"))
-        assertEquals("TRYING AGAIN" to Tone.Amber, Plain.kind("backoff"))
-        assertEquals("PROBLEM" to Tone.Red, Plain.kind("error"))
-        assertEquals("CALL" to Tone.Green, Plain.kind("call"))
-        assertEquals("ODD" to Tone.Neutral, Plain.kind("odd"))
+        assertEquals("Did" to Tone.Cyan, Plain.kind("tool"))
+        assertEquals("You asked" to Tone.Accent, Plain.kind("turn"))
+        assertEquals("Trying again" to Tone.Amber, Plain.kind("backoff"))
+        assertEquals("Problem" to Tone.Red, Plain.kind("error"))
+        assertEquals("Call" to Tone.Green, Plain.kind("call"))
+        assertEquals("Odd" to Tone.Neutral, Plain.kind("odd"))
     }
 }

@@ -20,7 +20,7 @@ import java.util.Locale
 
 /** Plain words for tool ids, approval tiers, log kinds and phone numbers, so nothing on screen reads like a system code. */
 object Plain {
-    /** Tool id to (what Rivet wants to do, what Rivet did). */
+    /** Tool id to (what Emrys wants to do, what Emrys did). */
     private val TOOLS = mapOf(
         "sms_send" to ("Send a text" to "Sent a text"),
         "sms_list" to ("Read your texts" to "Read texts"),
@@ -50,10 +50,10 @@ object Plain {
     )
 
     private val KINDS = mapOf(
-        "turn" to ("YOU ASKED" to Tone.Accent), "search" to ("SEARCH" to Tone.Cyan), "tool" to ("DID" to Tone.Cyan),
-        "device" to ("PHONE" to Tone.Cyan), "approval" to ("APPROVAL" to Tone.Amber), "backoff" to ("TRYING AGAIN" to Tone.Amber),
-        "restart" to ("RESTART" to Tone.Amber), "notice" to ("NOTE" to Tone.Neutral), "error" to ("PROBLEM" to Tone.Red),
-        "call" to ("CALL" to Tone.Green), "task" to ("TASK" to Tone.Accent),
+        "turn" to ("You asked" to Tone.Accent), "search" to ("Search" to Tone.Cyan), "tool" to ("Did" to Tone.Cyan),
+        "device" to ("Phone" to Tone.Cyan), "approval" to ("Approval" to Tone.Amber), "backoff" to ("Trying again" to Tone.Amber),
+        "restart" to ("Restart" to Tone.Amber), "notice" to ("Note" to Tone.Neutral), "error" to ("Problem" to Tone.Red),
+        "call" to ("Call" to Tone.Green), "task" to ("Task" to Tone.Accent),
     )
 
     private val TOOL_LINE = Regex("""^([a-z_]+)(?::\s*(.*))?$""", RegexOption.DOT_MATCHES_ALL)
@@ -97,7 +97,7 @@ object Plain {
         Tier.Write -> "Changes something on your phone or account"
         Tier.Destructive -> "Deletes something · you can't undo it"
         Tier.Purchase -> "Spends money · you can't undo it"
-        Tier.Unknown -> "Something Rivet hasn't done before"
+        Tier.Unknown -> "Something Emrys hasn't done before"
     }
 
     fun toneFor(tier: Tier): Tone = when (tier) {
@@ -122,12 +122,12 @@ object Plain {
                 return done(id) + (rest?.let { " · ${numbers(it)}" } ?: "")
             }
         }
-        if (kind == "backoff") BACKOFF.matchEntire(text)?.let { return "Rivet's model is busy. Trying again in ${it.groupValues[1]}s." }
+        if (kind == "backoff") BACKOFF.matchEntire(text)?.let { return "Emrys's model is busy. Trying again in ${it.groupValues[1]}s." }
         return numbers(text)
     }
 
-    /** A log kind as a tag word and its tone. */
-    fun kind(kind: String): Pair<String, Tone> = KINDS[kind] ?: (kind.uppercase() to Tone.Neutral)
+    /** A log kind as a short word in sentence case, and its tone. */
+    fun kind(kind: String): Pair<String, Tone> = KINDS[kind] ?: (spoken(kind) to Tone.Neutral)
 
     private fun spoken(id: String): String = id.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }

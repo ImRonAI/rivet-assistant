@@ -79,25 +79,25 @@ class MiniStageTest {
     fun statusCopy() {
         val call = LiveCall("c1", "Dana", "+18015550123", true, 0L, LiveCallStatus.Answering)
         val expected = mapOf(
-            Activity.Idle to "Rivet is ready.",
-            Activity.Listening to "Rivet is listening.",
-            Activity.Thinking to "Rivet is thinking.",
-            Activity.Searching to "Rivet is searching the web.",
-            Activity.Working to "Rivet is working on it.",
-            Activity.Texting to "Rivet is writing a text.",
-            Activity.Emailing to "Rivet is writing an email.",
-            Activity.Calling to "Rivet is on a call.",
-            Activity.Waiting to "Rivet needs your OK.",
-            Activity.Done to "Rivet is done.",
-            Activity.Failed to "Rivet didn't finish.",
+            Activity.Idle to "Emrys is ready.",
+            Activity.Listening to "Emrys is listening.",
+            Activity.Thinking to "Emrys is thinking.",
+            Activity.Searching to "Emrys is searching the web.",
+            Activity.Working to "Emrys is working on it.",
+            Activity.Texting to "Emrys is writing a text.",
+            Activity.Emailing to "Emrys is writing an email.",
+            Activity.Calling to "Emrys is on a call.",
+            Activity.Waiting to "Emrys needs your OK.",
+            Activity.Done to "Emrys is done.",
+            Activity.Failed to "Emrys didn't finish.",
         )
         assertEquals(Activity.entries.toSet(), expected.keys)
         expected.forEach { (activity, text) -> assertEquals(text, stageStatus(online.copy(activity = activity))) }
-        assertEquals("Rivet is offline.", stageStatus(RivetState(connection = Connection.Offline, activity = Activity.Working)))
-        assertEquals("Rivet is connecting.", stageStatus(RivetState(connection = Connection.Connecting, activity = Activity.Working)))
-        assertEquals("Rivet is answering a call.", stageStatus(online.copy(activity = Activity.Working, liveCall = call)))
-        assertEquals("Rivet is answering a call.", stageStatus(online.copy(liveCall = call.copy(status = LiveCallStatus.Transferring))))
-        assertEquals("Rivet is working on it.", stageStatus(online.copy(activity = Activity.Working, liveCall = call.copy(status = LiveCallStatus.Ended))))
+        assertEquals("Emrys is offline.", stageStatus(RivetState(connection = Connection.Offline, activity = Activity.Working)))
+        assertEquals("Emrys is connecting.", stageStatus(RivetState(connection = Connection.Connecting, activity = Activity.Working)))
+        assertEquals("Emrys is answering a call.", stageStatus(online.copy(activity = Activity.Working, liveCall = call)))
+        assertEquals("Emrys is answering a call.", stageStatus(online.copy(liveCall = call.copy(status = LiveCallStatus.Transferring))))
+        assertEquals("Emrys is working on it.", stageStatus(online.copy(activity = Activity.Working, liveCall = call.copy(status = LiveCallStatus.Ended))))
     }
 
     @Test
@@ -105,8 +105,8 @@ class MiniStageTest {
         var opened = 0
         band(onOpen = { opened++ })
         compose.onNodeWithTag(MINI_STAGE_TAG).assertExists()
-        val cover = compose.onNodeWithContentDescription("Rivet is ready.")
-        assertEquals("Open Rivet", cover.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
+        val cover = compose.onNodeWithContentDescription("Emrys is ready.")
+        assertEquals("Open Emrys", cover.fetchSemanticsNode().config[SemanticsActions.OnClick].label)
         cover.performClick()
         assertEquals(1, opened)
     }
@@ -114,7 +114,7 @@ class MiniStageTest {
     @Test
     fun withoutOpenItIsNotAKey() {
         band()
-        compose.onNodeWithContentDescription("Rivet is ready.").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+        compose.onNodeWithContentDescription("Emrys is ready.").assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
     }
 
     @Test
