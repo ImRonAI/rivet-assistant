@@ -20,12 +20,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Add
@@ -43,11 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -109,8 +116,9 @@ object Share {
 }
 
 /**
- * An image result full screen: pinch to zoom, then a panel with its title, source and size, and Share (the image
- * itself), Open page and Add to Rivet. Back closes it.
+ * An image result full screen: pinch to zoom, Close and Open page across the top, and a caption over a soft noir
+ * fade with its number and title in serif, its source and size in Geist, Share (the image itself, the porcelain
+ * pill) and Add to Emrys. A tap on the image hides or shows the caption; Back closes it.
  */
 @Composable
 fun ImageViewer(item: ImageItem, n: Int, onAdd: (ContextItem) -> Unit, onDismiss: () -> Unit) {
@@ -137,23 +145,34 @@ fun ImageViewer(item: ImageItem, n: Int, onAdd: (ContextItem) -> Unit, onDismiss
                 backdrop = Color.Black,
             )
             IconKey(Icons.Outlined.Close, "Close", onDismiss, Modifier.statusBarsPadding().padding(12.dp).align(Alignment.TopStart))
+            Keycap(
+                "Open page", { openExternally(context, item.url) }, Modifier.statusBarsPadding().padding(12.dp).align(Alignment.TopEnd),
+                icon = Icons.AutoMirrored.Outlined.OpenInNew,
+            )
             AnimatedVisibility(
                 panel,
                 Modifier.align(Alignment.BottomCenter),
                 enter = slideInVertically(tween(Motion.BASE, easing = Motion.Emphasized)) { it } + fadeIn(),
             ) {
-                val shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
                 Column(
-                    Modifier.fillMaxWidth().background(p.raised, shape).navigationBarsPadding().padding(16.dp),
+                    Modifier.fillMaxWidth()
+                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.32f to p.bg.copy(alpha = 0.86f), 1f to p.bg))
+                        .navigationBarsPadding().padding(start = 20.dp, end = 20.dp, top = 56.dp, bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("$n. ${item.title}", style = Type.title, color = p.ink, maxLines = 3)
+                    Text(
+                        buildAnnotatedString {
+                            withStyle(SpanStyle(color = p.ink2)) { append("$n.") }
+                            append(" ${item.title}")
+                        },
+                        style = Type.quote.copy(fontSize = 26.sp, lineHeight = 31.sp), color = p.ink, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                    )
                     val meta = listOfNotNull(item.source, if (item.width != null && item.height != null) "${item.width} × ${item.height}" else null)
-                    if (meta.isNotEmpty()) Text(meta.joinToString(" · ").uppercase(), style = Type.labelSm, color = p.ink2)
+                    if (meta.isNotEmpty()) Text(meta.joinToString(" · "), style = Type.cardBody, color = p.ink2)
+                    Spacer(Modifier.height(10.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Keycap("Share", { scope.launch { Share.image(context, images, item) } }, tone = KeyTone.Accent, icon = Icons.Outlined.Share)
-                        Keycap("Open page", { openExternally(context, item.url) }, icon = Icons.AutoMirrored.Outlined.OpenInNew)
-                        ContextItem.of(SearchKind.Images, item)?.let { added -> Keycap("Add to Rivet", { onAdd(added) }, icon = Icons.Outlined.Add) }
+                        ContextItem.of(SearchKind.Images, item)?.let { added -> Keycap("Add to Emrys", { onAdd(added) }, icon = Icons.Outlined.Add) }
                     }
                 }
             }

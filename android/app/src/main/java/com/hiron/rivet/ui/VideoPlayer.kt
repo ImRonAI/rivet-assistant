@@ -11,7 +11,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -43,7 +47,7 @@ object InlinePlayer {
     var playing: String? by mutableStateOf(null)
 }
 
-/** Starts [url] outside Rivet; false when nothing on the phone can open it. */
+/** Starts [url] outside Emrys; false when nothing on the phone can open it. */
 fun openExternally(context: Context, url: String): Boolean = try {
     context.startActivity(VideoEmbed.external(url))
     true
@@ -53,7 +57,7 @@ fun openExternally(context: Context, url: String): Boolean = try {
 
 /**
  * The inline player for [youtubeId] under the card [key]. It plays after a tap inside it (WebView's default
- * user-gesture rule), and is destroyed when the card leaves the screen, another player starts, or Rivet goes to
+ * user-gesture rule), and is destroyed when the card leaves the screen, another player starts, or Emrys goes to
  * the background.
  */
 @SuppressLint("SetJavaScriptEnabled")
@@ -63,7 +67,12 @@ fun VideoPlayer(key: String, youtubeId: String, modifier: Modifier = Modifier) {
     DisposableEffect(key) { onDispose { if (InlinePlayer.playing == key) InlinePlayer.playing = null } }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { if (InlinePlayer.playing == key) InlinePlayer.playing = null }
     Box(modifier.background(androidx.compose.ui.graphics.Color.Black), contentAlignment = Alignment.Center) {
-        Text("Loading the player…", style = Type.mono, color = p.ink2)
+        // Under the player until its page draws: a breathing glacier dot and a quiet line.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SignalDot(p.cy, live = true)
+            Spacer(Modifier.width(10.dp))
+            Text("Loading the player…", style = Type.labelLg, color = p.ink2)
+        }
         AndroidView(
             factory = { context ->
                 WebView(context).apply {
