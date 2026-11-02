@@ -1,4 +1,4 @@
-"""Builds app/src/main/assets/rivet/index.html from the robot page.
+"""Builds app/src/main/assets/emrys/index.html from the robot page.
 
 Three changes, nothing else: Google Fonts links become local @font-face rules (the app works offline),
 an ``embedded`` class makes the stage fill the WebView, and bridge.js is appended after the page script.
@@ -15,9 +15,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "robot" / "Rivet_the_Robot.html"
+SOURCE = ROOT / "robot" / "Emrys_the_Robot.html"
 BRIDGE = ROOT / "robot" / "bridge.js"
-OUT = ROOT / "app" / "src" / "main" / "assets" / "rivet" / "index.html"
+OUT = ROOT / "app" / "src" / "main" / "assets" / "emrys" / "index.html"
 TYPESCRIPT = "7.0.2"
 
 FONTS = [

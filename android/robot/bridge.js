@@ -1,7 +1,7 @@
-/* Rivet app bridge. Loaded after the robot page's own script, so it shares its top-level bindings
+/* Emrys app bridge. Loaded after the robot page's own script, so it shares its top-level bindings
    (play, D, time, cam, stage, LETTER_VIS).
-   The app drives it with window.rivet.{state,mouth,quiet,viseme,theme,focus}; the page reports back to
-   the app through the RivetHost web message listener the app installs. */
+   The app drives it with window.emrys.{state,mouth,quiet,viseme,theme,focus}; the page reports back to
+   the app through the EmrysHost web message listener the app installs. */
 (() => {
   /** @type {Record<string, string>} */
   const STATE_MOVE = {
@@ -11,10 +11,10 @@
 
   /** @param {{ type: string }} message */
   function post(message) {
-    try { window.RivetHost && window.RivetHost.postMessage(JSON.stringify(message)); } catch (e) { }
+    try { window.EmrysHost && window.EmrysHost.postMessage(JSON.stringify(message)); } catch (e) { }
   }
 
-  /* the stage glows behind Rivet in the colour of what it is doing: cyan working, amber waiting on the user,
+  /* the stage glows behind Emrys in the colour of what it is doing: cyan working, amber waiting on the user,
      green done, crimson listening (a live sensor) or stuck */
   /** @type {Record<string, string>} */
   const MOOD = {
@@ -51,7 +51,7 @@
   let mouthKey = null;
   function quiet() {
     clearInterval(mouthTimer);
-    if (mouthKey) window.rivet.viseme(mouthKey, 0);
+    if (mouthKey) window.emrys.viseme(mouthKey, 0);
     mouthKey = null;
   }
   /** @param {string} word @param {number} seconds */
@@ -62,10 +62,10 @@
     const step = Math.max(40, ((seconds > 0 ? seconds : letters.length / 13) * 1000) / letters.length);
     let i = 0;
     mouthTimer = setInterval(() => {
-      if (mouthKey) window.rivet.viseme(mouthKey, 0);
+      if (mouthKey) window.emrys.viseme(mouthKey, 0);
       if (i >= letters.length) { clearInterval(mouthTimer); mouthKey = null; return; }
       mouthKey = LETTER_VIS[letters.charAt(i++)] || 'nn';
-      window.rivet.viseme(mouthKey, 0.85);
+      window.emrys.viseme(mouthKey, 0.85);
     }, step);
   }
 
@@ -80,7 +80,7 @@
      back to at rest (a lower one lifts the robot in the frame); a double tap resets the view to zoom 1 and the
      framing is put back after it. */
   const FOCUS = { stage: { zoom: 1, ty: 1.1 }, card: { zoom: 1.3, ty: .86 }, greet: { zoom: 1.25, ty: .5 } };
-  /* a short greeting stage (large text, small phones) stands Rivet further back so its feet stay above the words */
+  /* a short greeting stage (large text, small phones) stands Emrys further back so its feet stay above the words */
   const GREET_SHORT = { zoom: 1.5, ty: .34 };
   /** @type {keyof typeof FOCUS} */
   let focusMode = 'stage';
@@ -101,6 +101,6 @@
   window.addEventListener('resize', () => { if (focusMode === 'greet') focus(focusMode); });
   stage.addEventListener('dblclick', () => { cam.zoom = focusZoom; cam.dirty = true; });
 
-  Object.assign(window.rivet, { state, mouth, quiet, theme, focus });
+  Object.assign(window.emrys, { state, mouth, quiet, theme, focus });
   post({ type: 'ready' });
 })();

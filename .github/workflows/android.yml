@@ -3,9 +3,9 @@ name: android
 on:
   push:
     branches: [main]
-    paths: ["android/**", "brain/src/rivet_brain/device_tools.py", ".github/workflows/android.yml"]
+    paths: ["android/**", "brain/src/emrys_brain/device_tools.py", ".github/workflows/android.yml"]
   pull_request:
-    paths: ["android/**", "brain/src/rivet_brain/device_tools.py", ".github/workflows/android.yml"]
+    paths: ["android/**", "brain/src/emrys_brain/device_tools.py", ".github/workflows/android.yml"]
 
 permissions:
   contents: read
@@ -31,5 +31,5 @@ jobs:
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: rivet-apk
+          name: emrys-apk
           path: android/app/build/outputs/apk/release/app-release.apk

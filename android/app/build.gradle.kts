@@ -7,18 +7,18 @@ plugins {
 }
 
 android {
-    namespace = "com.hiron.rivet"
+    namespace = "com.hiron.emrys"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.hiron.rivet"
+        applicationId = "com.hiron.emrys"
         minSdk = 29
         targetSdk = 36
         versionCode = 12
         versionName = "0.4.5"
-        // Ready-to-use defaults from rivet.local.properties (never committed); all stay editable in Settings.
+        // Ready-to-use defaults from emrys.local.properties (never committed); all stay editable in Settings.
         val local = Properties().apply {
-            rootProject.file("rivet.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+            rootProject.file("emrys.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         fun baked(key: String) = "\"" + local.getProperty(key, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         buildConfigField("String", "DEFAULT_BRAIN_URL", baked("brainUrl"))
@@ -50,9 +50,9 @@ android {
         unitTests.all {
             // Real rendering for the screen tests' screenshots.
             it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
-            it.systemProperty("rivet.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
-            // RIVET_LIVE=1 also runs LiveBrainTest against the deployed brain this build is configured for.
-            it.systemProperty("rivet.live", System.getenv("RIVET_LIVE") ?: "0")
+            it.systemProperty("emrys.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
+            // EMRYS_LIVE=1 also runs LiveBrainTest against the deployed brain this build is configured for.
+            it.systemProperty("emrys.live", System.getenv("EMRYS_LIVE") ?: "0")
         }
     }
     lint {

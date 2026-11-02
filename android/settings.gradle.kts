@@ -17,5 +17,5 @@ dependencyResolutionManagement {
         }
     }
 }
-rootProject.name = "rivet"
+rootProject.name = "emrys"
 include(":app")

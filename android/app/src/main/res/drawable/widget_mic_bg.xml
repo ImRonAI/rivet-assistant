@@ -2,14 +2,14 @@
 <!-- The talk key: a safety-orange disc inside two soft halo rings. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <shape android:shape="oval"><solid android:color="@color/rivet_halo_outer" /></shape>
+        <shape android:shape="oval"><solid android:color="@color/emrys_halo_outer" /></shape>
     </item>
     <item android:left="3dp" android:top="3dp" android:right="3dp" android:bottom="3dp">
-        <shape android:shape="oval"><solid android:color="@color/rivet_halo" /></shape>
+        <shape android:shape="oval"><solid android:color="@color/emrys_halo" /></shape>
     </item>
     <item android:left="6dp" android:top="6dp" android:right="6dp" android:bottom="6dp">
         <shape android:shape="oval">
-            <gradient android:angle="270" android:startColor="@color/rivet_accent_hi" android:endColor="@color/rivet_accent" />
+            <gradient android:angle="270" android:startColor="@color/emrys_accent_hi" android:endColor="@color/emrys_accent" />
         </shape>
     </item>
 </layer-list>

@@ -20,7 +20,7 @@ TOKEN = "device-token-0123456789abcdef"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
 
 # The phone's tool registry, read from the app's source so both sides cannot drift apart.
-PHONE_REGISTRY = Path(__file__).resolve().parents[2] / "android/app/src/main/java/com/hiron/rivet/device/DeviceTools.kt"
+PHONE_REGISTRY = Path(__file__).resolve().parents[2] / "android/app/src/main/java/com/hiron/emrys/device/DeviceTools.kt"
 PHONE_TOOLS = set(re.findall(r'^\s*"([a-z_]+)" to Tool', PHONE_REGISTRY.read_text(), re.MULTILINE))
 # Run on the phone only by the brain's own code (calls.py saves the answering number), never by the model.
 INTERNAL_PHONE_TOOLS = {"call_answering_number"}
