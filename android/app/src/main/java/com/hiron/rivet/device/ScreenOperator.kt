@@ -164,7 +164,7 @@ class ScreenOperator : AccessibilityService() {
                 }
             }
             "type" -> when {
-                n.isPassword -> ToolResult.error("Rivet never types into password fields. Ask the user to enter it.")
+                n.isPassword -> ToolResult.error("Emrys never types into password fields. Ask the user to enter it.")
                 !n.isEditable -> ToolResult.error("Element \"${labelOf(n)}\" is not a text field.")
                 text == null -> ToolResult.error("Say what text to type.")
                 else -> {
@@ -238,8 +238,8 @@ class ScreenOperator : AccessibilityService() {
             }
 
         private fun notConnected() = ToolResult.error(
-            "Rivet can't operate apps yet. Ask the user to open Rivet › Settings › Permissions › App operator and turn on " +
-                "Rivet's accessibility service.",
+            "Emrys can't operate apps yet. Ask the user to open Emrys › Settings › Permissions › App operator and turn on " +
+                "Emrys's accessibility service.",
         )
     }
 }

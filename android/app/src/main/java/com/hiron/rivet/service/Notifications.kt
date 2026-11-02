@@ -22,11 +22,11 @@ import com.hiron.rivet.core.ServerEvent
 import com.hiron.rivet.ui.Plain
 import com.hiron.rivet.ui.Rich
 
-/** Who a call Rivet is answering is from and the message the caller left, before the brain reports it live. */
+/** Who a call Emrys is answering is from and the message the caller left, before the brain reports it live. */
 data class CallNote(val from: String, val message: String = "", val urgent: Boolean = false)
 
 /**
- * Rivet's notification channels and the notifications it posts. Each kind is one group whose summary exists only
+ * Emrys's notification channels and the notifications it posts. Each kind is one group whose summary exists only
  * while the group has two or more notifications; each call is one notification that changes in place.
  */
 object Notifications {
@@ -61,7 +61,7 @@ object Notifications {
 
         fun title(count: Int): String = when (this) {
             Approvals -> "$count things need your OK"
-            Calls -> "$count calls Rivet answered"
+            Calls -> "$count calls Emrys answered"
             Reminders -> "$count reminders"
             Actions -> "$count things ready to open"
         }
@@ -71,16 +71,16 @@ object Notifications {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannels(
             listOf(
-                NotificationChannel(SERVICE, "Rivet connection", NotificationManager.IMPORTANCE_MIN),
+                NotificationChannel(SERVICE, "Emrys connection", NotificationManager.IMPORTANCE_MIN),
                 NotificationChannel(APPROVALS, "Approvals", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Rivet asks before it sends, buys, deletes or changes anything"
+                    description = "Emrys asks before it sends, buys, deletes or changes anything"
                 },
                 NotificationChannel(REMINDERS, "Reminders", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(ACTIONS, "Ready to open", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Drafts and apps Rivet has ready for you"
+                    description = "Drafts and apps Emrys has ready for you"
                 },
-                NotificationChannel(CALLS, "Calls Rivet answered", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Calls Rivet's answering line picked up and the messages callers left"
+                NotificationChannel(CALLS, "Calls Emrys answered", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Calls Emrys's answering line picked up and the messages callers left"
                 },
             ),
         )
@@ -89,7 +89,8 @@ object Notifications {
     fun service(context: Context, status: String) =
         NotificationCompat.Builder(context, SERVICE)
             .setSmallIcon(R.drawable.ic_rivet)
-            .setContentTitle("Rivet")
+            .setColor(context.getColor(R.color.rivet_accent))
+            .setContentTitle("Emrys")
             .setContentText(status)
             .setOngoing(true)
             .setSilent(true)
@@ -97,7 +98,7 @@ object Notifications {
             .build()
 
     /**
-     * One notification per approval, titled with what Rivet wants to do. Lower tiers get Approve/Deny actions that
+     * One notification per approval, titled with what Emrys wants to do. Lower tiers get Approve/Deny actions that
      * need the phone unlocked; high tiers (purchases, deletes, anything unclassified) only open the app, where
      * biometrics are required. [names] maps numbers to contact names.
      */
@@ -105,6 +106,7 @@ object Notifications {
         val text = (if (request.high) "High risk · " else "") + (request.because ?: Plain.risk(request.tier, request.tool))
         val builder = NotificationCompat.Builder(context, APPROVALS)
             .setSmallIcon(R.drawable.ic_rivet)
+            .setColor(context.getColor(R.color.rivet_accent))
             .setContentTitle(Plain.people(request.headline, names))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(approvalBody(request, names)))
@@ -122,7 +124,7 @@ object Notifications {
         post(context, approvalId(request.id), builder, Group.Approvals)
     }
 
-    /** The approval's body as plain lines: each block, then why Rivet is asking. */
+    /** The approval's body as plain lines: each block, then why Emrys is asking. */
     fun approvalBody(request: ApprovalRequest, names: Map<String, String> = emptyMap()): String {
         val lines = request.blocks.map { block ->
             when (block) {
@@ -149,6 +151,7 @@ object Notifications {
         context, slot(REMINDER_IDS, id),
         NotificationCompat.Builder(context, REMINDERS)
             .setSmallIcon(R.drawable.ic_rivet)
+            .setColor(context.getColor(R.color.rivet_accent))
             .setContentTitle("Reminder")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -169,7 +172,8 @@ object Notifications {
             context, callId(callId),
             NotificationCompat.Builder(context, CALLS)
                 .setSmallIcon(R.drawable.ic_rivet)
-                .setContentTitle("Rivet is answering a call")
+                .setColor(context.getColor(R.color.rivet_accent))
+                .setContentTitle("Emrys is answering a call")
                 .setContentText(from)
                 .setStyle(NotificationCompat.BigTextStyle().bigText((listOf(from) + messageLines(note.message, note.urgent)).joinToString("\n")))
                 .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -186,6 +190,7 @@ object Notifications {
         context, slot(CALL_MESSAGE_IDS, event.callbackNumber + event.message),
         NotificationCompat.Builder(context, CALLS)
             .setSmallIcon(R.drawable.ic_rivet)
+            .setColor(context.getColor(R.color.rivet_accent))
             .setContentTitle((if (event.urgent) "Urgent message from " else "Message from ") + CallText.caller(event))
             .setContentText(event.message.ifBlank { "(no message)" })
             .setStyle(NotificationCompat.BigTextStyle().bigText(CallText.describe(event)))
@@ -197,7 +202,7 @@ object Notifications {
     )
 
     /**
-     * The ongoing notification while Rivet is on a call: the latest lines, the caller's message once there is one
+     * The ongoing notification while Emrys is on a call: the latest lines, the caller's message once there is one
      * and, while it is answering, "Take over" (which needs the phone unlocked). Quiet, except once for an urgent
      * message ([alert]).
      */
@@ -209,7 +214,8 @@ object Notifications {
         val body = (recent + listOfNotNull(status) + messageLines(call.message, call.urgent)).joinToString("\n").ifBlank { "Listening…" }
         val builder = NotificationCompat.Builder(context, CALLS)
             .setSmallIcon(R.drawable.ic_rivet)
-            .setContentTitle("Rivet is answering ${call.caller}")
+            .setColor(context.getColor(R.color.rivet_accent))
+            .setContentTitle("Emrys is answering ${call.caller}")
             .setContentText(status ?: recent.lastOrNull() ?: "Listening…")
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -234,8 +240,9 @@ object Notifications {
             context, callId(call.callId),
             NotificationCompat.Builder(context, CALLS)
                 .setSmallIcon(R.drawable.ic_rivet)
+                .setColor(context.getColor(R.color.rivet_accent))
                 .setContentTitle((if (call.takenOver) "You took over the call from " else "Call from ") + call.caller)
-                .setContentText(call.summary.ifBlank { "Rivet has no summary of this call." })
+                .setContentText(call.summary.ifBlank { "Emrys has no summary of this call." })
                 .setStyle(NotificationCompat.BigTextStyle().bigText((listOf(CallText.summary(call)) + message).joinToString("\n")))
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 .setOnlyAlertOnce(true)
@@ -251,6 +258,7 @@ object Notifications {
             context, id,
             NotificationCompat.Builder(context, ACTIONS)
                 .setSmallIcon(R.drawable.ic_rivet)
+                .setColor(context.getColor(R.color.rivet_accent))
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(PendingIntent.getActivity(context, id, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
@@ -272,6 +280,7 @@ object Notifications {
         children.mapNotNull { it.notification.extras.getCharSequence(Notification.EXTRA_TITLE) }.forEach { inbox.addLine(it) }
         val builder = NotificationCompat.Builder(context, group.channel)
             .setSmallIcon(R.drawable.ic_rivet)
+            .setColor(context.getColor(R.color.rivet_accent))
             .setContentTitle(group.title(children.size))
             .setStyle(inbox)
             .setGroup(group.key)

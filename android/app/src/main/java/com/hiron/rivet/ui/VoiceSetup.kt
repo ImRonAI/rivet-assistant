@@ -10,13 +10,21 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -34,11 +42,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.GraphicEq
@@ -72,14 +80,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -99,23 +112,26 @@ import kotlinx.coroutines.delay
 enum class VoiceScreen { Selector, Presets, Describe, Record, Capturing, Review, Upload }
 
 /** The line read on the record screen and shown on the review card. */
-const val SAMPLE_LINE = "Hello Rivet. Today we are building a helpful assistant with an honest heart, expressive eyes, and a clear, friendly voice."
+const val SAMPLE_LINE = "Hello Emrys. Today we are building a helpful assistant with an honest heart, expressive eyes, and a clear, friendly voice."
 
 private const val MAX_SECONDS = 30
 private const val MAX_DESCRIPTION = 280
 private const val SKIP = "Skip voice setup"
 
 private val DESCRIBE_CHIPS = listOf(
-    "Vintage Radio" to "A warm, slightly crackly mid-century radio announcer who speaks clearly and kindly.",
-    "Calm & Robotic" to "A calm, even robot voice: clear, friendly and unhurried, with a light mechanical edge.",
-    "Warm Conversational" to "A warm, relaxed voice that sounds like a friend chatting over coffee.",
-    "Crisp Newsreader" to "A crisp, confident newsreader who keeps things short and clear.",
-    "Friendly Mechanic" to "A friendly, practical voice with a grin in it, like a mechanic explaining a fix.",
+    "Vintage radio" to "A warm, slightly crackly mid-century radio announcer who speaks clearly and kindly.",
+    "Calm & robotic" to "A calm, even robot voice: clear, friendly and unhurried, with a light mechanical edge.",
+    "Warm conversational" to "A warm, relaxed voice that sounds like a friend chatting over coffee.",
+    "Crisp newsreader" to "A crisp, confident newsreader who keeps things short and clear.",
+    "Friendly mechanic" to "A friendly, practical voice with a grin in it, like a mechanic explaining a fix.",
 )
 
 private val REVIEW_WAVE = listOf(0.35f, 0.6f, 0.9f, 0.5f, 0.75f, 0.4f, 0.85f, 0.6f, 0.3f, 0.55f, 0.8f, 0.45f, 0.25f, 0.5f)
 
-/** Choosing Rivet's voice, shown over the whole app. [stage] sits under the header and stays put while pages change. */
+/** A voice's name, set like a name: Instrument Serif, a little smaller than the wordmark. */
+private val VoiceName = Type.brand.copy(fontSize = 24.sp, lineHeight = 28.sp)
+
+/** Choosing Emrys's voice, shown over the whole app. [stage] sits under the header and stays put while pages change. */
 @Composable
 fun VoiceSetup(
     studio: VoiceStudio,
@@ -222,13 +238,13 @@ fun VoiceSetup(
     }
 }
 
-/** Eyebrow, hero title and subline over scrolling content, with the keys in a fade footer. */
+/** Eyebrow, serif title (ended by the halo stop) and sub-line over scrolling content, with the keys in a fade footer. */
 @Composable
 private fun VoicePage(
     title: String,
     sub: String,
     centered: Boolean = false,
-    eyebrow: @Composable () -> Unit = { Eyebrow("VOICE CONFIGURATION") },
+    eyebrow: @Composable () -> Unit = { Eyebrow("Voice configuration") },
     footer: @Composable ColumnScope.() -> Unit,
     body: @Composable ColumnScope.() -> Unit,
 ) {
@@ -243,13 +259,13 @@ private fun VoicePage(
                     .then(if (centered) Modifier.heightIn(min = maxHeight) else Modifier)
                     .padding(bottom = footerHeight + 16.dp),
             ) {
-                Spacer(Modifier.height(24.dp))
-                eyebrow()
-                Spacer(Modifier.height(10.dp))
-                HeroTitle(title)
-                Spacer(Modifier.height(12.dp))
-                Text(sub, style = Type.bodyLg, color = p.ink2)
                 Spacer(Modifier.height(28.dp))
+                eyebrow()
+                Spacer(Modifier.height(14.dp))
+                HeroTitle(title, Modifier.semantics { heading() })
+                Spacer(Modifier.height(12.dp))
+                Text(sub, style = Type.bodyLg.copy(lineBreak = LineBreak.Heading), color = p.ink2)
+                Spacer(Modifier.height(32.dp))
                 // A capture screen sits its content in the middle of the room left above the footer.
                 if (centered) Spacer(Modifier.weight(1f))
                 body()
@@ -282,10 +298,13 @@ private fun clock(seconds: Int) = "%02d:%02d".format(seconds / 60, seconds % 60)
 
 @Composable
 private fun ArrowMark() {
-    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = LocalPalette.current.ink2, modifier = Modifier.size(20.dp))
+    Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = LocalPalette.current.ink2, modifier = Modifier.size(18.dp))
 }
 
-/** A row card with a large icon well: the selector's dropdown and its ways to make a voice. */
+/**
+ * The selected-voice card: an icon well, the voice's name (set in serif once one is [named]) over a quiet line, and
+ * [trailing] on the right.
+ */
 @Composable
 private fun RowCard(
     icon: ImageVector,
@@ -293,25 +312,56 @@ private fun RowCard(
     sub: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tone: Tone = Tone.Neutral,
     lit: Boolean = false,
-    monoSub: Boolean = false,
+    named: Boolean = false,
     trailing: @Composable () -> Unit = { ArrowMark() },
 ) {
     val p = LocalPalette.current
-    RivetCard(modifier, onClick = onClick, role = Role.Button) {
+    RivetCard(modifier, onClick = onClick, role = Role.Button, padding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(icon, tone = tone, selected = lit, size = 48.dp, iconSize = 22.dp)
+            IconWell(icon, selected = lit, size = 48.dp, iconSize = 22.dp)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, style = Type.title, color = p.ink)
-                Text(sub, style = if (monoSub) Type.mono else Type.body, color = p.ink2)
+                Text(title, style = if (named) VoiceName else Type.title, color = p.ink)
+                Text(sub, style = Type.body, color = p.ink2)
             }
             Spacer(Modifier.width(12.dp))
             trailing()
         }
     }
 }
+
+/** One way to make a voice, a row of the selector's glass list: icon well, title over a line, and an arrow. */
+@Composable
+private fun WayRow(icon: ImageVector, title: String, sub: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    Row(
+        modifier.fillMaxWidth().background(if (pressed) p.cardHi else Color.Transparent)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconWell(icon, size = 40.dp, iconSize = 20.dp)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = Type.title, color = p.ink)
+            Text(sub, style = Type.body, color = p.ink2)
+        }
+        Spacer(Modifier.width(12.dp))
+        ArrowMark()
+    }
+}
+
+private class Way(val icon: ImageVector, val title: String, val sub: String, val to: VoiceScreen)
+
+private val WAYS = listOf(
+    Way(Icons.Outlined.Mic, "Record a sample", "Record 30 seconds of your own voice", VoiceScreen.Record),
+    Way(Icons.Outlined.AutoAwesome, "Describe a voice", "Say what it should sound like in your own words", VoiceScreen.Describe),
+    Way(Icons.Outlined.UploadFile, "Upload a recording", "Use a .wav or .mp3 file you already have", VoiceScreen.Upload),
+    Way(Icons.Outlined.Tune, "Preset library", "Ready-made voices to choose from", VoiceScreen.Presets),
+)
 
 @Composable
 private fun SelectorPage(
@@ -323,14 +373,14 @@ private fun SelectorPage(
 ) {
     val p = LocalPalette.current
     VoicePage(
-        title = "RIVET'S VOICE",
+        title = "Emrys's voice",
         sub = "Pick a ready-made voice or make one that's yours.",
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display)
             SecondaryKey(SKIP, onSkip)
         },
     ) {
-        SectionLabel("Selected voice", trailing = "OPTIONAL")
+        SectionLabel("Selected voice", trailing = "Optional")
         Spacer(Modifier.height(12.dp))
         val sub = when {
             saved == null -> "No voice chosen yet"
@@ -339,17 +389,18 @@ private fun SelectorPage(
         }
         RowCard(
             Icons.Outlined.GraphicEq, saved ?: "Choose or make a voice", sub, { go(VoiceScreen.Presets) },
-            Modifier.enter(0), tone = Tone.Accent, lit = saved != null, monoSub = true,
+            Modifier.enter(0), lit = saved != null, named = saved != null,
             trailing = { Icon(Icons.Outlined.UnfoldMore, contentDescription = null, tint = p.ink2, modifier = Modifier.size(22.dp)) },
         )
-        Spacer(Modifier.height(32.dp))
-        SectionLabel("Ways to make one", trailing = "4 WAYS")
+        Spacer(Modifier.height(36.dp))
+        SectionLabel("Ways to make one", trailing = "${WAYS.size} ways")
         Spacer(Modifier.height(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            RowCard(Icons.Outlined.Mic, "Record a sample", "Record 30 seconds of your own voice", { go(VoiceScreen.Record) }, Modifier.enter(1))
-            RowCard(Icons.Outlined.AutoAwesome, "Describe a voice", "Say what it should sound like in your own words", { go(VoiceScreen.Describe) }, Modifier.enter(2))
-            RowCard(Icons.Outlined.UploadFile, "Upload a recording", "Use a .wav or .mp3 file you already have", { go(VoiceScreen.Upload) }, Modifier.enter(3))
-            RowCard(Icons.Outlined.Tune, "Preset library", "Ready-made voices to choose from", { go(VoiceScreen.Presets) }, Modifier.enter(4))
+        val shape = RoundedCornerShape(20.dp)
+        Column(Modifier.fillMaxWidth().clip(shape).background(p.card).border(1.dp, p.line, shape)) {
+            WAYS.forEachIndexed { i, way ->
+                if (i > 0) Rule(Modifier.padding(start = 74.dp), color = p.line)
+                WayRow(way.icon, way.title, way.sub, { go(way.to) }, Modifier.enter(i + 1))
+            }
         }
     }
 }
@@ -364,8 +415,8 @@ private fun DescribePage(
 ) {
     val p = LocalPalette.current
     VoicePage(
-        title = "DESCRIBE A VOICE",
-        sub = "Describe how Rivet should sound, in plain words.",
+        title = "Describe a voice",
+        sub = "Describe how Emrys should sound, in plain words.",
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display, enabled = text.isNotBlank())
             SecondaryKey(SKIP, onSkip)
@@ -375,15 +426,15 @@ private fun DescribePage(
             text, onText, "e.g., A calm, witty radio operator with dry warmth and crisp articulation…", MAX_DESCRIPTION,
             Modifier.enter(0),
         )
-        Spacer(Modifier.height(28.dp))
-        SectionLabel("Suggested presets", trailing = "TAP TO APPLY")
+        Spacer(Modifier.height(32.dp))
+        SectionLabel("Suggested presets", trailing = "Tap to apply")
         Spacer(Modifier.height(12.dp))
         ChipRail(Modifier.bleed(20.dp).enter(1)) {
             DESCRIBE_CHIPS.forEach { (label, fill) ->
                 item(label) { PillChip(label, { onText(fill.take(MAX_DESCRIPTION)) }, selected = text == fill) }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         val ready = text.isNotBlank()
         TextKey(
             "Hear a sample", { if (ready) studio.preview(SAMPLE_LINE) },
@@ -391,10 +442,10 @@ private fun DescribePage(
             leading = Icons.Outlined.PlayArrow, tone = Tone.Accent,
         )
         if (!studio.connected && ready) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
-                "The sample plays in your phone's voice until Rivet's ElevenLabs voice is connected.",
-                style = Type.cardBody, color = p.ink2,
+                "The sample plays in your phone's voice until Emrys's ElevenLabs voice is connected.",
+                style = Type.cardBody, color = p.ink2, modifier = Modifier.padding(horizontal = 10.dp),
             )
         }
     }
@@ -421,7 +472,7 @@ private fun PresetsPage(
     var playing by remember { mutableStateOf<String?>(null) }
     val chosen = presets.firstOrNull { it.id == picked }
     VoicePage(
-        title = "PRESET LIBRARY",
+        title = "Preset library",
         sub = "Choose from ${presets.size} ready-made voices.",
         footer = {
             PrimaryKey("Continue", { chosen?.let(onChoose) }, style = CtaStyle.Display, enabled = chosen != null)
@@ -429,11 +480,11 @@ private fun PresetsPage(
         },
     ) {
         Row(Modifier.bleed(20.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip("ALL", filter == null, { filter = null })
-            VoiceTone.entries.forEach { tone -> FilterChip(tone.name.uppercase(), filter == tone, { filter = tone }) }
+            FilterChip("All", filter == null, { filter = null })
+            VoiceTone.entries.forEach { tone -> FilterChip(tone.name, filter == tone, { filter = tone }) }
         }
-        Spacer(Modifier.height(20.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(Modifier.height(24.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             presets.filter { filter == null || it.tone == filter }.forEachIndexed { i, preset ->
                 PresetCard(
                     preset, selected = preset.id == picked, active = preset.id == active, playing = playing == preset.id,
@@ -444,7 +495,7 @@ private fun PresetsPage(
                             playing = null
                         } else {
                             playing = preset.id
-                            studio.preview("Hi, I'm ${preset.name}. This is how Rivet sounds with my voice.", preset) {
+                            studio.preview("Hi, I'm ${preset.name}. This is how Emrys sounds with my voice.", preset) {
                                 if (playing == preset.id) playing = null
                             }
                         }
@@ -455,11 +506,12 @@ private fun PresetsPage(
         }
         if (!studio.connected) {
             Spacer(Modifier.height(20.dp))
-            InfoStrip("Previews play through your phone's voice until Rivet's ElevenLabs voice is connected.")
+            InfoStrip("Previews play through your phone's voice until Emrys's ElevenLabs voice is connected.")
         }
     }
 }
 
+/** A ready-made voice as a choice card: its name in serif over its character, a preview key and a radio; chosen, it wears the halo ring. */
 @Composable
 private fun PresetCard(
     preset: VoicePreset,
@@ -471,24 +523,27 @@ private fun PresetCard(
     modifier: Modifier = Modifier,
 ) {
     val p = LocalPalette.current
-    RivetCard(modifier.semantics { this.selected = selected }, selected = selected, onClick = onSelect, role = Role.RadioButton) {
+    RivetCard(
+        modifier.ring(p.accent.copy(alpha = 0.2f), RoundedCornerShape(20.dp), selected, gap = 3.dp).semantics { this.selected = selected },
+        selected = selected, onClick = onSelect, role = Role.RadioButton,
+        padding = PaddingValues(start = 18.dp, end = 12.dp, top = 16.dp, bottom = 16.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconWell(preset.icon(), selected = selected, size = 44.dp, iconSize = 22.dp)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            IconWell(preset.icon(), selected = selected, size = 44.dp, iconSize = 20.dp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(preset.name, style = Type.title, color = p.ink, maxLines = 1)
+                    Text(preset.name, style = VoiceName, color = p.ink, maxLines = 1)
                     if (active) {
-                        Spacer(Modifier.width(8.dp))
-                        StatusTag("ACTIVE", Tone.Accent)
+                        Spacer(Modifier.width(10.dp))
+                        StatusTag("Active", Tone.Accent)
                     }
                 }
                 Text(preset.blurb, style = Type.body, color = p.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(4.dp))
             PlayKey(playing, onPlay)
-            Spacer(Modifier.width(4.dp))
-            RadioDot(selected)
+            RadioDot(selected, Modifier.padding(start = 4.dp, end = 6.dp))
         }
     }
 }
@@ -506,15 +561,15 @@ private fun RecordPage(
     val p = LocalPalette.current
     val context = LocalContext.current
     val begin = {
-        if (recorder.start()) onStarted() else onNotice("Rivet couldn't use the microphone. Check that no other app is recording.")
+        if (recorder.start()) onStarted() else onNotice("Emrys couldn't use the microphone. Check that no other app is recording.")
     }
     val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) begin() else onNotice("Rivet needs the microphone to record. Allow it when Android asks, or in Android Settings.")
+        if (granted) begin() else onNotice("Emrys needs the microphone to record. Allow it when Android asks, or in Android Settings.")
     }
     VoicePage(
-        title = "RECORD SAMPLE",
+        title = "Record sample",
         sub = "Tap the microphone to start recording.",
-        eyebrow = { Eyebrow("VOICE SAMPLE") },
+        eyebrow = { Eyebrow("Voice sample") },
         centered = true,
         footer = {
             PrimaryKey("Continue", onContinue, style = CtaStyle.Display, enabled = hasSample)
@@ -522,7 +577,7 @@ private fun RecordPage(
         },
     ) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             HaloTalkKey(
                 TalkState.Idle,
                 {
@@ -532,15 +587,40 @@ private fun RecordPage(
                 "Start recording",
                 large = true,
             )
-            Spacer(Modifier.height(24.dp))
-            Text("TAP TO RECORD", style = Type.monoKey, color = p.ink)
-            Spacer(Modifier.height(6.dp))
-            Text("30-second sample", style = Type.mono, color = p.ink2)
+            Spacer(Modifier.height(20.dp))
+            Text("Tap to record", style = Type.title, color = p.ink)
+            Spacer(Modifier.height(4.dp))
+            Text("30-second sample", style = Type.body, color = p.ink2)
         }
         if (notice != null) {
             Spacer(Modifier.height(24.dp))
             InfoStrip(notice, icon = Icons.Outlined.ErrorOutline, tone = Tone.Red)
         }
+    }
+}
+
+/**
+ * The microphone's live level around the record key: a calm aurora ring that widens, thickens and brightens with
+ * the real level, easing between readings (stepping, with motion reduced).
+ */
+@Composable
+private fun LevelRing(level: Float, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val spec: AnimationSpec<Float> = if (rememberReduceMotion()) snap() else tween(Motion.BASE, easing = Motion.Standard)
+    val v by animateFloatAsState(level.coerceIn(0f, 1f), spec, label = "level")
+    Canvas(modifier) {
+        val r = 84.dp.toPx() + 14.dp.toPx() * v
+        val bloom = r + 12.dp.toPx()
+        val edge = r / bloom
+        drawCircle(
+            Brush.radialGradient(
+                (edge - 0.25f).coerceAtLeast(0f) to Color.Transparent, edge to p.accent.copy(alpha = 0.12f * v), 1f to Color.Transparent,
+                center = center, radius = bloom,
+            ),
+            bloom,
+        )
+        val aurora = listOf(p.accentHi, p.accent, p.accentDeep, p.cy, p.accent, p.accentHi).map { it.copy(alpha = 0.22f + 0.6f * v) }
+        drawCircle(Brush.sweepGradient(aurora, center), r, style = Stroke((1f + 1.5f * v).dp.toPx()))
     }
 }
 
@@ -574,16 +654,16 @@ private fun CapturingPage(recorder: SampleRecorder, onFinish: () -> Unit, onCanc
         }
     }
     val (status, tone) = when {
-        recent.any { it >= 0.98f } -> "TOO LOUD" to Tone.Red
-        recent.size >= 25 && recent.all { it < 0.08f } -> "TOO QUIET" to Tone.Amber
-        else -> "LEVEL GOOD" to Tone.Green
+        recent.any { it >= 0.98f } -> "Too loud" to Tone.Red
+        recent.size >= 25 && recent.all { it < 0.08f } -> "Too quiet" to Tone.Amber
+        else -> "Level good" to Tone.Green
     }
     VoicePage(
-        title = "CAPTURING",
+        title = "Capturing",
         sub = "Speak naturally, up to 30 seconds.",
         eyebrow = {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("RECORDING", tone = Tone.Red, live = true)
+                Eyebrow("Recording", tone = Tone.Red, live = true)
                 Spacer(Modifier.weight(1f))
                 TimerPill((elapsedMs / 1000).toInt().coerceAtMost(MAX_SECONDS), MAX_SECONDS)
             }
@@ -594,47 +674,45 @@ private fun CapturingPage(recorder: SampleRecorder, onFinish: () -> Unit, onCanc
         },
     ) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            HaloTalkKey(TalkState.Listening, finish, "Finish recording", Modifier.trimY(36.dp), large = true)
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("RECORDING…", style = Type.monoKey, color = p.ink)
-                Spacer(Modifier.width(10.dp))
-                Box(Modifier.size(6.dp).alpha(pulse(low = 0.3f, periodMs = 1200)).glow(Glows.peak, CircleShape).clip(CircleShape).background(p.accent))
+            Box(Modifier.trimY(36.dp), contentAlignment = Alignment.Center) {
+                LevelRing(levels.lastOrNull() ?: 0f, Modifier.size(224.dp))
+                HaloTalkKey(TalkState.Listening, finish, "Finish recording", large = true)
             }
-            Spacer(Modifier.height(6.dp))
-            Text("Tap to finish sample", style = Type.mono, color = p.ink2)
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Recording…", style = Type.title, color = p.ink)
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.size(6.dp).alpha(pulse(low = 0.3f, periodMs = 1200)).clip(CircleShape).background(p.rec))
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Tap to finish sample", style = Type.body, color = p.ink2)
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(32.dp))
         Rule(color = p.line)
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Subtitles, contentDescription = null, tint = p.ink2, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Subtitles, contentDescription = null, tint = if (showLine) p.ink else p.ink2, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(14.dp))
             Text("Show the line to read", style = Type.title, color = p.ink, modifier = Modifier.weight(1f))
             RivetToggle(showLine, { showLine = it })
         }
-        Spacer(Modifier.height(8.dp))
-        RivetCard(padding = PaddingValues(20.dp)) {
+        Rule(color = p.line)
+        Spacer(Modifier.height(16.dp))
+        RivetCard(padding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 20.dp)) {
             if (showLine) {
-                Eyebrow("READ THIS OUT LOUD", tone = Tone.Neutral, dot = false)
-                Spacer(Modifier.height(12.dp))
+                Eyebrow("Read this out loud", tone = Tone.Neutral, dot = false)
+                Spacer(Modifier.height(14.dp))
                 Text(SAMPLE_LINE, style = Type.quote, color = p.ink)
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.BarChart, contentDescription = null, tint = p.ink, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("SOUND LEVEL", style = Type.monoKey, color = p.ink)
+                    Eyebrow("Sound level", Modifier.weight(1f), tone = Tone.Neutral, dot = false)
+                    SignalDot(tone.color())
+                    Spacer(Modifier.width(8.dp))
+                    Text(status, style = Type.labelLg, color = p.ink)
                 }
-                Spacer(Modifier.height(14.dp))
-                Rule(color = p.line)
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(18.dp))
                 LevelMeter(levels.toList().let { List(12 - it.size) { 0f } + it }, Modifier.fillMaxWidth())
-                Spacer(Modifier.height(16.dp))
-                Rule(color = p.line)
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("PEAK ${(peak * 100).toInt()}%", style = Type.labelMd, color = p.ink2, modifier = Modifier.weight(1f))
-                    Text(status, style = Type.labelMd, color = tone.color())
-                }
+                Spacer(Modifier.height(14.dp))
+                Text("Peak ${(peak * 100).toInt()}%", style = Type.labelMd.copy(fontFeatureSettings = "tnum"), color = p.ink2)
             }
         }
     }
@@ -654,7 +732,7 @@ private fun ReviewPage(
     var progress by remember { mutableFloatStateOf(0f) }
     val length = sample?.seconds ?: 0
     VoicePage(
-        title = "SAMPLE REVIEW",
+        title = "Sample review",
         sub = "Recording done. Listen back, or record it again.",
         centered = true,
         footer = {
@@ -662,17 +740,15 @@ private fun ReviewPage(
             SecondaryKey("Re-record sample", onRerecord, leading = Icons.Outlined.Replay)
         },
     ) {
-        RivetCard(padding = PaddingValues(20.dp)) {
+        RivetCard(padding = PaddingValues(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("READY TO PREVIEW", Modifier.weight(1f))
-                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = p.ink2, modifier = Modifier.size(16.dp))
+                Eyebrow("Ready to preview", Modifier.weight(1f))
+                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = p.ink2, modifier = Modifier.size(15.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(clock(length), style = Type.labelMd, color = p.ink2)
+                Text(clock(length), style = Type.tele, color = p.ink2)
             }
-            Spacer(Modifier.height(16.dp))
-            Rule(color = p.line)
-            Spacer(Modifier.height(16.dp))
-            Text("\u201C$SAMPLE_LINE\u201D", style = Type.quote, color = p.ink)
+            Spacer(Modifier.height(20.dp))
+            Text("“$SAMPLE_LINE”", style = Type.quote, color = p.ink)
             Spacer(Modifier.height(28.dp))
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 PlayKey(
@@ -693,21 +769,18 @@ private fun ReviewPage(
                     },
                     style = PlayStyle.Ghost,
                 )
-                Spacer(Modifier.height(18.dp))
-                Text(if (playing) "PLAYING" else "TAP TO LISTEN", style = Type.monoKey, color = p.ink)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "${clock((progress * length).toInt())} / ${clock(length)}",
-                    style = Type.labelMd.copy(fontSize = 12.sp, fontFeatureSettings = "tnum"), color = p.ink2,
-                )
+                Spacer(Modifier.height(16.dp))
+                Text(if (playing) "Playing" else "Tap to listen", style = Type.title, color = p.ink)
+                Spacer(Modifier.height(4.dp))
+                Text("${clock((progress * length).toInt())} / ${clock(length)}", style = Type.tele, color = p.ink2)
             }
             Spacer(Modifier.height(24.dp))
             Rule(color = p.line)
             Spacer(Modifier.height(14.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(p.ok))
-                Spacer(Modifier.width(8.dp))
-                Text("SAVED ON THIS PHONE", style = Type.labelMd, color = p.ink2, maxLines = 1, modifier = Modifier.weight(1f))
+                SignalDot(p.ok)
+                Spacer(Modifier.width(10.dp))
+                Text("Saved on this phone", style = Type.labelLg, color = p.ink2, maxLines = 1, modifier = Modifier.weight(1f))
                 MiniWave(REVIEW_WAVE, progress)
             }
         }
@@ -728,6 +801,7 @@ private fun UploadPage(
     onSkip: () -> Unit,
     onChoose: (Uri, String) -> Unit,
 ) {
+    val p = LocalPalette.current
     val context = LocalContext.current
     var uri by rememberSaveable { mutableStateOf<String?>(null) }
     val picked = remember(uri) { uri?.let { readFile(context, it.toUri()) } }
@@ -738,7 +812,7 @@ private fun UploadPage(
         }
     }
     VoicePage(
-        title = "UPLOAD A RECORDING",
+        title = "Upload a recording",
         sub = "Use a recording you already have of the voice you want.",
         footer = {
             PrimaryKey("Continue", { picked?.let { onChoose(it.uri, it.name) } }, style = CtaStyle.Display, enabled = picked != null)
@@ -747,25 +821,23 @@ private fun UploadPage(
     ) {
         RivetCard(padding = PaddingValues(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("AUDIO FILE", Modifier.weight(1f))
-                StatusTag("WAV / FLAC / MP3", Tone.Neutral, outline = true)
+                Eyebrow("Audio file", Modifier.weight(1f))
+                Text("WAV / FLAC / MP3", style = Type.labelMd, color = p.ink2, maxLines = 1)
             }
-            Spacer(Modifier.height(16.dp))
-            Rule(color = LocalPalette.current.line)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             if (picked == null) {
-                DropZone("CHOOSE AUDIO", "Tap to pick a file from your phone (at least 30 seconds)", { pick.launch(arrayOf("audio/*")) })
+                DropZone("Choose audio", "Tap to pick a file from your phone (at least 30 seconds)", { pick.launch(arrayOf("audio/*")) })
             } else {
                 val length = picked.seconds?.let { "${clock(it)} long · " }.orEmpty()
                 DropZone(picked.name, "${length}Tap to choose a different file", { pick.launch(arrayOf("audio/*")) }, picked = true)
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             val seconds = picked?.seconds
             when {
-                picked == null -> StatusLine("READY FOR A FILE", Tone.Green, bars = true)
-                seconds == null -> StatusLine("FILE PICKED", Tone.Green)
-                seconds >= MAX_SECONDS -> StatusLine("FILE LOOKS GOOD", Tone.Green, bars = true)
-                else -> StatusLine("SHORTER THAN 30 SECONDS", Tone.Amber)
+                picked == null -> StatusLine("Ready for a file", Tone.Green, bars = true)
+                seconds == null -> StatusLine("File picked", Tone.Green)
+                seconds >= MAX_SECONDS -> StatusLine("File looks good", Tone.Green, bars = true)
+                else -> StatusLine("Shorter than 30 seconds", Tone.Amber)
             }
         }
         if (notice != null) {
@@ -774,8 +846,8 @@ private fun UploadPage(
         }
         Spacer(Modifier.height(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            CheckCard("Clean speech", "No heavy background noise or music", "REQUIRED", Tone.Neutral)
-            CheckCard("Best quality", "A .wav or .flac file gives the clearest result", "RECOMMENDED", Tone.Accent)
+            CheckCard("Clean speech", "No heavy background noise or music", "Required", Tone.Neutral)
+            CheckCard("Best quality", "A .wav or .flac file gives the clearest result", "Recommended", Tone.Accent)
         }
     }
 }

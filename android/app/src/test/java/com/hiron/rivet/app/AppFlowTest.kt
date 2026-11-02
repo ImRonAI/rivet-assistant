@@ -182,10 +182,10 @@ class AppFlowTest {
 
         // The transcript sheet pulls up over the stage and back down.
         compose.onNodeWithContentDescription("Expand transcript").performClick()
-        until { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Show Rivet")).fetchSemanticsNodes().isNotEmpty() }
+        until { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Show Emrys")).fetchSemanticsNodes().isNotEmpty() }
         compose.mainClock.advanceTimeBy(600)
         shot("03b-home-transcript-expanded")
-        compose.onNodeWithContentDescription("Show Rivet").performClick()
+        compose.onNodeWithContentDescription("Show Emrys").performClick()
         compose.mainClock.advanceTimeBy(600)
 
         // An approval pops the review sheet; "don't ask again" with Deny answers the brain with a standing deny.
@@ -213,7 +213,7 @@ class AppFlowTest {
         brain(
             socket,
             """{"type":"call.live","call_id":"c-1","from":"+18015550123","verified":true,"started_at":$started,"status":"answering",
-               "lines":[{"speaker":"rivet","text":"Hi, this is Rivet, Tim's assistant. How can I help?"},
+               "lines":[{"speaker":"rivet","text":"Hi, this is Emrys, Tim's assistant. How can I help?"},
                {"speaker":"caller","text":"Hi, it's Dana from Wasatch Dental, confirming Friday at 9."}],"snapshot":true}""",
         )
         until { compose.onAllNodesWithTextCount("confirming Friday at 9") > 0 }
@@ -247,23 +247,23 @@ class AppFlowTest {
         shot("06-settings-top")
         compose.onNode(hasText("Turn on")).performScrollTo()
         shot("07-settings-call-answering")
-        compose.onNode(hasText("Open Rivet's app info")).performScrollTo().assertIsDisplayed()
+        compose.onNode(hasText("Open Emrys's app info")).performScrollTo().assertIsDisplayed()
         shot("08-settings-bottom")
     }
 
     @Test
     fun firstRunWalksEveryStepAndTheVoiceSetupOpensFromOnboardingAndSettings() {
         compose.onNodeWithText("Set up step by step").performClick()
-        compose.onNodeWithText("Save & Continue").assertIsDisplayed()
+        compose.onNodeWithText("Save & continue").assertIsDisplayed()
 
         // The voice link on step 2 opens the voice setup over onboarding; skipping it lands back on step 2.
-        compose.onNodeWithText("Choose Rivet's voice").performClick()
-        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+        compose.onNodeWithText("Choose Emrys's voice").performClick()
+        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
         shot("09-voice-from-onboarding")
         compose.onAllNodesWithText("Skip voice setup")[0].performClick()
-        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
 
-        compose.onNodeWithText("Save & Continue").performClick()
+        compose.onNodeWithText("Save & continue").performClick()
         compose.onNodeWithText("Skip for now").performClick()
         compose.onNodeWithText("Customize later in Settings").performClick()
         compose.waitForIdle()
@@ -272,17 +272,17 @@ class AppFlowTest {
         // Settings' Voice section opens the same setup.
         compose.onNodeWithTag(TAB_TAG_PREFIX + "settings").performClick()
         compose.onNodeWithText("Not chosen yet").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Rivet's voice").performScrollTo().performClick()
+        compose.onNodeWithText("Emrys's voice").performScrollTo().performClick()
         compose.onNodeWithText("Choose or make a voice").performClick()
-        compose.onNodeWithText("PRESET LIBRARY.").assertIsDisplayed()
+        compose.onNodeWithText("Preset library.").assertIsDisplayed()
         compose.onNodeWithText("Sol").performClick()
         compose.onNodeWithText("Continue").performClick()
-        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
 
         // Back closes the setup, and the Voice section shows the saved voice.
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
-        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
         compose.onNodeWithText("Sol").performScrollTo().assertIsDisplayed()
         shot("10-settings-voice-chosen")
     }
@@ -373,9 +373,9 @@ class AppFlowTest {
     }
 
     private fun openVoiceSetupFromSettings() {
-        compose.onNodeWithText("Rivet's voice").performScrollTo().performClick()
+        compose.onNodeWithText("Emrys's voice").performScrollTo().performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
     }
 
     private fun pressBack() {
@@ -408,7 +408,7 @@ class AppFlowTest {
         compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(2)
         assertOnlyPage(first, "opening the voice setup", Slot.VoiceBand)
         pressBack()
-        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
         assertOnlyPage(first, "closing the voice setup", Slot.Band)
         compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
 
@@ -430,12 +430,12 @@ class AppFlowTest {
         val quick = Intent(RivetWidgets.ACTION_QUICK, Uri.parse("rivet://quick/MyDay"))
         compose.runOnUiThread { InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(compose.activity, quick) }
         compose.waitForIdle()
-        compose.onNodeWithText("RIVET'S VOICE.").assertIsDisplayed()
+        compose.onNodeWithText("Emrys's voice.").assertIsDisplayed()
         compose.onAllNodesWithTag(MINI_STAGE_TAG).assertCountEquals(1)
         assertOnlyPage(page, "a widget opening Home under the voice setup", Slot.VoiceBand)
 
         pressBack()
-        compose.onNodeWithText("RIVET'S VOICE.").assertDoesNotExist()
+        compose.onNodeWithText("Emrys's voice.").assertDoesNotExist()
         assertOnlyPage(page, "closing the voice setup over Home", Slot.Stage)
     }
 

@@ -89,7 +89,7 @@ private const val UNBOUNDED_WIDTH_PX = 1080
 /** The app's [Images]; screens without one show the placeholders. */
 val LocalImages = staticCompositionLocalOf<Images?> { null }
 
-/** A result image: graphite while it loads, a broken-image glyph when it can't. */
+/** A result image: a quiet noir tile while it loads, a faint broken-image glyph when it can't. */
 @Composable
 fun RemoteImage(
     url: String?,
@@ -114,7 +114,7 @@ fun RemoteImage(
         when {
             bitmap != null -> Image(bitmap, description, Modifier.fillMaxSize(), contentScale = contentScale)
             loaded != null && url != null && images != null ->
-                Icon(Icons.Outlined.BrokenImage, contentDescription = description, tint = p.ink2, modifier = Modifier.size(24.dp))
+                Icon(Icons.Outlined.BrokenImage, contentDescription = description, tint = p.ink2.copy(alpha = 0.6f), modifier = Modifier.size(22.dp))
             else -> Box(Modifier.fillMaxSize())
         }
     }

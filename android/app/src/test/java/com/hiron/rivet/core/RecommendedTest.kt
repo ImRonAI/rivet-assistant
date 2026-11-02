@@ -29,7 +29,7 @@ class RecommendedTest {
             all.map { it.id },
         )
         assertEquals("Stop asking about Texts to +15550000000", all.last().title)
-        assertEquals("You said no 3 times in the last 30 days. Rivet will always decline it.", all.last().change)
+        assertEquals("You said no 3 times in the last 30 days. Emrys will always decline it.", all.last().change)
         assertEquals("Android asks you once for: Texts", all[4].change)
         assertTrue(all[3].change.endsWith("until you turn call answering on again in Settings › Call answering."))
 

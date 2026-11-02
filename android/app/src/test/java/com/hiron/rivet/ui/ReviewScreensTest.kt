@@ -129,7 +129,7 @@ class ReviewScreensTest {
         sheet(listOf(buy))
         compose.onNodeWithText("Spends money · you can't undo it").assertIsDisplayed()
         compose.onNodeWithText("Approve with unlock").assertIsDisplayed()
-        compose.onNodeWithText("Rivet always asks before spending money, so this works only with Deny.").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Emrys always asks before spending money, so this works only with Deny.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Technical details").performClick()
         compose.onNodeWithText("telnyx_execute").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(600)
@@ -143,9 +143,9 @@ class ReviewScreensTest {
     @Test
     fun afterReadingAMessageAlwaysAllowIsOff() {
         sheet(listOf(textApproval(untrusted = true)))
-        compose.onNodeWithText("This came up while Rivet was reading a message, an email or a web page. Check it carefully.").assertIsDisplayed()
+        compose.onNodeWithText("This came up while Emrys was reading a message, an email or a web page. Check it carefully.").assertIsDisplayed()
         compose.onNodeWithText("If I say no, don't ask again about Texts to Dana").performScrollTo().performClick()
-        compose.onNodeWithText("Rivet read a message, an email or a web page while working on this, so it can't be always allowed right now. This works only with Deny.")
+        compose.onNodeWithText("Emrys read a message, an email or a web page while working on this, so it can't be always allowed right now. This works only with Deny.")
             .assertIsDisplayed()
         compose.onAllNodesWithText("Always allow").assertCountEquals(0)
         compose.onNodeWithText("Approve").assertIsDisplayed()
@@ -168,7 +168,7 @@ class ReviewScreensTest {
             false, emptyList(), null, null,
         )
         sheet(listOf(text, email, buy))
-        compose.onNodeWithText("Rivet wants to do 3 things:").assertIsDisplayed()
+        compose.onNodeWithText("Emrys wants to do 3 things:").assertIsDisplayed()
         compose.onNodeWithText("Send answers").assertIsDisplayed()
         shot(compose, compose.activity, "review-approval-batch-narrow")
         compose.onNodeWithText("Deny all").performClick()
@@ -193,8 +193,8 @@ class ReviewScreensTest {
         val runtime = compose.activity.rivet
         page { Box(Modifier.padding(20.dp)) { RivetCard { ApprovalRules(runtime, rulesState(Connection.Online)) } } }
         compose.onNodeWithText("Texts to Dana").assertIsDisplayed()
-        compose.onNodeWithText("ALWAYS ALLOW").assertIsDisplayed()
-        compose.onNodeWithText("ALWAYS DENY").assertIsDisplayed()
+        compose.onNodeWithText("Always allow").assertIsDisplayed()
+        compose.onNodeWithText("Always deny").assertIsDisplayed()
         compose.onNodeWithText("Removing…").assertIsDisplayed()
         compose.onNodeWithText("+1 801-555-0100 · since", substring = true).assertIsDisplayed()
         shot(compose, compose.activity, "review-settings-rules")
@@ -204,7 +204,7 @@ class ReviewScreensTest {
     fun approvalRulesOffline() {
         val runtime = compose.activity.rivet
         page { Box(Modifier.padding(20.dp)) { RivetCard { ApprovalRules(runtime, rulesState(Connection.Offline).copy(removingRules = emptySet())) } } }
-        compose.onNodeWithText("Connect to Rivet to change rules.").assertIsDisplayed()
+        compose.onNodeWithText("Connect to Emrys to change rules.").assertIsDisplayed()
         shot(compose, compose.activity, "review-settings-rules-offline")
     }
 
@@ -212,7 +212,7 @@ class ReviewScreensTest {
     fun noApprovalRulesYet() {
         val runtime = compose.activity.rivet
         page { Box(Modifier.padding(20.dp)) { RivetCard { ApprovalRules(runtime, RivetState(connection = Connection.Online)) } } }
-        compose.onNodeWithText("No rules yet. When Rivet asks, tick “Don't ask again” to make one.").assertIsDisplayed()
+        compose.onNodeWithText("No rules yet. When Emrys asks, tick “Don't ask again” to make one.").assertIsDisplayed()
     }
 
     private val recommendations = Recommended.list(
@@ -227,7 +227,7 @@ class ReviewScreensTest {
     fun recommendedSettingsSheet() {
         var applied: List<Recommendation>? = null
         page { RecommendedSheet(recommendations, onApply = { applied = it }, onDismiss = {}) }
-        compose.onNodeWithText("Rivet suggests 7 changes:").assertIsDisplayed()
+        compose.onNodeWithText("Emrys suggests 7 changes").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(600)
         shot(compose, compose.activity, "review-recommended-sheet")
         compose.onNodeWithContentDescription("Quiet assistant overlay").performClick()
@@ -247,7 +247,7 @@ class ReviewScreensTest {
     fun nothingToRecommend() {
         var dismissed = false
         page { RecommendedSheet(emptyList(), onApply = {}, onDismiss = { dismissed = true }) }
-        compose.onNodeWithText("Everything already matches Rivet's recommendations.").assertIsDisplayed()
+        compose.onNodeWithText("Everything already matches Emrys's recommendations.").assertIsDisplayed()
         compose.onNodeWithText("Done").performClick()
         assertTrue(dismissed)
     }
@@ -284,7 +284,7 @@ class ReviewScreensTest {
         val state = activityState()
         page { ActivityScreen(runtime, state) }
         compose.onNodeWithText("Sent a text").assertExists()
-        compose.onNodeWithText("Rivet's model is busy. Trying again in 8s.").assertExists()
+        compose.onNodeWithText("Emrys's model is busy. Trying again in 8s.").assertExists()
         compose.onNode(hasText("Dana from Wasatch Dental", substring = true)).assertExists()
         compose.onNodeWithText("Call the dentist back").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(800)
@@ -323,21 +323,21 @@ class ReviewScreensTest {
     }
 
     @Test
-    @Config(qualifiers = "w411dp-h3000dp-xxhdpi")
+    @Config(qualifiers = "w411dp-h3800dp-xxhdpi")
     fun settingsWholePage() {
         var opened = 0
         settings(FakeStudio("Copper")) { opened++ }
         compose.onNodeWithText("Copper").assertIsDisplayed()
         compose.onAllNodesWithText("Turn on").assertCountEquals(1)
-        compose.onAllNodesWithText("Open Rivet's app info").assertCountEquals(1)
+        compose.onAllNodesWithText("Open Emrys's app info").assertCountEquals(1)
         compose.mainClock.advanceTimeBy(800)
         shot(compose, compose.activity, "review-settings")
-        compose.onNodeWithText("Rivet's voice").performClick()
+        compose.onNodeWithText("Emrys's voice").performClick()
         assertEquals(1, opened)
     }
 
     @Test
-    @Config(qualifiers = "w360dp-h3600dp-xxhdpi", fontScale = 1.3f)
+    @Config(qualifiers = "w360dp-h5600dp-xxhdpi", fontScale = 1.3f)
     fun settingsOnANarrowPhone() {
         settings(FakeStudio(null)) {}
         compose.onNodeWithText("Not chosen yet").assertIsDisplayed()

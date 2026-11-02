@@ -96,7 +96,7 @@ class SearchClientTest {
     @Test
     fun errorsAreTypedWithPlainWords() {
         reply(JSONObject().put("error", "unauthorized"), 401)
-        assertEquals("Rivet's brain didn't accept this phone's device token. Check it in Settings.", search(SearchKind.Web).exceptionOrNull()?.message)
+        assertEquals("Emrys's brain didn't accept this phone's device token. Check it in Settings.", search(SearchKind.Web).exceptionOrNull()?.message)
 
         reply(JSONObject().put("error", "Search is busy. Try again in a moment.").put("retry_after", 1), 429)
         val busy = search(SearchKind.Web).exceptionOrNull() as SearchError.Busy

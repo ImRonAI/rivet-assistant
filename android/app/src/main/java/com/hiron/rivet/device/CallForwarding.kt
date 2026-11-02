@@ -60,7 +60,7 @@ object CallForwarding {
             telecom.placeCall(Uri.fromParts("tel", code, null), Bundle())
             null
         } catch (e: SecurityException) {
-            "Rivet needs the Phone permission to dial your carrier's forwarding code."
+            "Emrys needs the Phone permission to dial your carrier's forwarding code."
         }
     }
 }

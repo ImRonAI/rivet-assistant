@@ -39,15 +39,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -61,13 +56,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 enum class CtaStyle { Sans, Display }
 
-private val CtaShape = RoundedCornerShape(16.dp)
+/** Every key in Noir is a full pill. */
+private val CtaShape = RoundedCornerShape(50)
 
-/** A pressable that dips slightly and ticks under the finger. */
+/** A pressable that ticks under the finger and reports whether it is held down. */
 @Composable
 private fun pressable(enabled: Boolean, role: Role, onClick: () -> Unit): Pair<Modifier, Boolean> {
     val haptics = LocalHapticFeedback.current
@@ -81,8 +76,8 @@ private fun pressable(enabled: Boolean, role: Role, onClick: () -> Unit): Pair<M
 }
 
 /**
- * Mono caps for keys, links and labels. Screen readers and tests get [text] as written, so a key that shows
- * "NOT NOW" is still announced as "Not now".
+ * Key and link text, rendered exactly as written (Noir sets interface text in sentence case). Screen readers and
+ * tests get [text] as written.
  */
 @Composable
 fun CapsText(
@@ -94,16 +89,16 @@ fun CapsText(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
 ) {
-    val locale = LocalConfiguration.current.locales[0]
     Text(
-        text.uppercase(locale), style = style, color = color, textAlign = textAlign, maxLines = maxLines, overflow = overflow,
+        text, style = style, color = color, textAlign = textAlign, maxLines = maxLines, overflow = overflow,
         modifier = modifier.clearAndSetSemantics { this.text = AnnotatedString(text) },
     )
 }
 
 /**
- * The full-width glowing primary key. [CtaStyle.Sans] is the onboarding and sheet key; [CtaStyle.Display] is the
- * voice-setup key in Big Shoulders caps. Both carry dark ink on the orange; a disabled key is a graphite plate.
+ * The full-width primary call to action: a porcelain pill with noir ink in Geist Medium. [CtaStyle.Sans] is the
+ * onboarding and sheet key; [CtaStyle.Display] is the larger voice-setup key. Pressed, it gathers a thin halo
+ * hairline and a soft halo light; disabled, it is a faint glass pill with grey ink.
  */
 @Composable
 fun PrimaryKey(
@@ -118,18 +113,16 @@ fun PrimaryKey(
     val p = LocalPalette.current
     val (press, pressed) = pressable(enabled, Role.Button, onClick)
     val ink = if (enabled) p.accentInk else p.ink2
+    val down = enabled && pressed
     Row(
         modifier.fillMaxWidth().height(56.dp)
-            .graphicsLayer { if (pressed) { scaleX = 0.985f; scaleY = 0.985f } }
-            .then(if (enabled) Modifier.glow(Glows.cta, CtaShape) else Modifier)
+            .graphicsLayer { if (down) { scaleX = 0.985f; scaleY = 0.985f } }
+            .then(if (down) Modifier.glow(Glows.cta, CtaShape).ring(p.accentHi.copy(alpha = 0.75f), CtaShape, true, gap = 2.dp) else Modifier)
             .clip(CtaShape)
-            .background(
-                if (!enabled) SolidColor(p.tile)
-                else Brush.verticalGradient(if (pressed) listOf(p.accentHi, p.accentHi) else listOf(p.accentHi, p.accent)),
-            )
-            .then(if (enabled) Modifier.topLine(Color.White.copy(alpha = 0.14f)) else Modifier.border(1.dp, p.edge, CtaShape))
+            .background(if (enabled) p.ink else p.edge)
+            .then(if (enabled) Modifier else Modifier.border(1.dp, p.line, CtaShape))
             .then(press)
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -137,11 +130,10 @@ fun PrimaryKey(
             Icon(leading, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
         }
-        if (style == CtaStyle.Display) {
-            CapsText(text, Type.cta, ink, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        } else {
-            Text(text, style = Type.button, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-        }
+        Text(
+            text, style = if (style == CtaStyle.Display) Type.cta else Type.button, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
         if (trailingArrow) {
             Spacer(Modifier.width(10.dp))
             Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
@@ -149,14 +141,10 @@ fun PrimaryKey(
     }
 }
 
-/** A hairline of light across the flat of the top edge, starting where the corners end. */
-private fun Modifier.topLine(color: Color) = drawWithContent {
-    drawContent()
-    val inset = size.height / 2
-    drawLine(color, Offset(inset, 0.75.dp.toPx()), Offset(size.width - inset, 0.75.dp.toPx()), strokeWidth = 1.dp.toPx())
-}
-
-/** The outlined secondary key under a primary key. [height] 56 pairs it with a primary key in one row; [radius] 12 is the compact card key. */
+/**
+ * The outline pill under a primary key: a porcelain hairline and Geist Medium label, brightening while pressed.
+ * [height] 56 pairs it with a primary key in one row; a smaller [radius] gives the compact card key.
+ */
 @Composable
 fun SecondaryKey(
     text: String,
@@ -165,15 +153,15 @@ fun SecondaryKey(
     leading: ImageVector? = null,
     enabled: Boolean = true,
     height: Dp = 48.dp,
-    radius: Dp = 16.dp,
+    radius: Dp = 28.dp,
 ) {
     val p = LocalPalette.current
     val (press, pressed) = pressable(enabled, Role.Button, onClick)
     val shape = RoundedCornerShape(radius)
     Row(
         modifier.fillMaxWidth().height(height).alpha(if (enabled) 1f else 0.4f).clip(shape)
-            .background(if (pressed) p.cardHi else p.raised).border(1.dp, if (pressed) p.lineHi else p.edge, shape)
-            .then(press).padding(horizontal = 16.dp),
+            .background(if (pressed) p.cardHi else Color.Transparent).border(1.dp, if (pressed) p.ink.copy(alpha = 0.28f) else p.lineHi, shape)
+            .then(press).padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -181,17 +169,17 @@ fun SecondaryKey(
             Icon(leading, contentDescription = null, tint = p.ink2, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
         }
-        CapsText(text, Type.monoKey, p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        CapsText(text, if (height >= 52.dp) Type.button else Type.key, p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** A mono caps text link. */
+/** A text link in Geist Medium: porcelain, or halo for [Tone.Accent]. [leading] takes the tone's colour. */
 @Composable
 fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null, tone: Tone = Tone.Neutral) {
     val p = LocalPalette.current
     val (press, pressed) = pressable(true, Role.Button, onClick)
     Row(
-        modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp)).then(press).alpha(if (pressed) 0.6f else 1f).padding(horizontal = 8.dp),
+        modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(50)).then(press).alpha(if (pressed) 0.55f else 1f).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
@@ -199,23 +187,30 @@ fun TextKey(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, le
             Icon(leading, contentDescription = null, tint = tone.color(), modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
         }
-        CapsText(text, Type.monoKey, p.ink2, maxLines = 1)
+        CapsText(text, Type.monoKey, if (tone == Tone.Accent) p.accent else p.ink, maxLines = 1)
     }
 }
 
-/** A pill filter chip: white when selected. */
+/** A pill filter chip: porcelain when selected, a hairline outline otherwise. */
 @Composable
 fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) = Chip(text, selected, onClick, modifier, outlined = true)
 
-/** A [FilterChip]; inside a [Segmented] track it drops its own outline. */
+/** A [FilterChip]; inside a [Segmented] track it drops its outline, and the chosen one is the raised active segment. */
 @Composable
 internal fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier, outlined: Boolean) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val pill = RoundedCornerShape(50)
-    val fill by animateColorAsState(if (selected) p.white else p.field, tween(Motion.QUICK), label = "chip")
+    val on = if (outlined) p.ink else p.high
+    val fill by animateColorAsState(if (selected) on else Color.Transparent, tween(Motion.BASE, easing = Motion.Emphasized), label = "chip")
+    val line = when {
+        selected && outlined -> p.ink
+        selected -> p.lineHi
+        outlined -> p.lineHi
+        else -> Color.Transparent
+    }
     Box(
-        modifier.height(32.dp).clip(pill).background(fill).border(1.dp, if (selected) p.white else if (outlined) p.edge else Color.Transparent, pill)
+        modifier.height(34.dp).clip(pill).background(fill).border(1.dp, line, pill)
             .selectable(selected, role = Role.RadioButton) {
                 haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                 onClick()
@@ -223,25 +218,30 @@ internal fun Chip(text: String, selected: Boolean, onClick: () -> Unit, modifier
             .padding(horizontal = 16.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = Type.monoKey.copy(fontSize = 12.sp), color = if (selected) p.bg else p.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val ink = when {
+            selected && outlined -> p.accentInk
+            selected -> p.ink
+            else -> p.ink2
+        }
+        Text(text, style = Type.labelLg, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** A suggestion or quick-action pill. [selected] latches it white. */
+/** A suggestion or quick-action pill on a soft fill. [selected] latches it in porcelain. */
 @Composable
 fun PillChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null, selected: Boolean = false) {
     val p = LocalPalette.current
     val pill = RoundedCornerShape(50)
     val (press, pressed) = pressable(true, Role.Button, onClick)
-    val ink = if (selected) p.bg else p.ink
+    val ink = if (selected) p.accentInk else p.ink
     Row(
-        modifier.height(40.dp).clip(pill).background(if (selected) p.white else if (pressed) p.cardHi else p.field)
-            .border(1.dp, if (selected) p.white else p.edge, pill).then(press).padding(horizontal = 16.dp),
+        modifier.height(40.dp).clip(pill).background(if (selected) p.ink else if (pressed) p.cardHi else p.field)
+            .border(1.dp, if (selected) p.ink else if (pressed) p.lineHi else p.line, pill).then(press).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leading != null) {
-            Icon(leading, contentDescription = null, tint = if (selected) p.bg else p.accent, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
+            Icon(leading, contentDescription = null, tint = if (selected) p.accentInk else p.ink2, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(7.dp))
         }
         Text(text, style = Type.chip, color = ink, maxLines = 1)
     }
@@ -264,8 +264,9 @@ private fun Toggle(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modi
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val inset = (height - thumb) / 2
-    val x by animateDpAsState(if (checked) width - thumb - inset else inset, tween(150, easing = Motion.Standard), label = "toggle")
-    val track by animateColorAsState(if (checked) p.accent else p.track, tween(150), label = "track")
+    val x by animateDpAsState(if (checked) width - thumb - inset else inset, tween(Motion.BASE, easing = Motion.Emphasized), label = "toggle")
+    val track by animateColorAsState(if (checked) p.ink else p.track, tween(Motion.BASE), label = "track")
+    val knob by animateColorAsState(if (checked) p.bg else p.ink2, tween(Motion.BASE), label = "thumb")
     val pill = RoundedCornerShape(50)
     val interactive = onCheckedChange != null
     Box(
@@ -283,46 +284,46 @@ private fun Toggle(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modi
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            Modifier.size(width, height).alpha(if (enabled) 1f else 0.5f).clip(pill).background(track)
-                .border(1.dp, if (checked) p.accentHi.copy(alpha = 0.6f) else p.edge, pill),
+            Modifier.size(width, height).alpha(if (enabled) 1f else 0.4f).clip(pill).background(track)
+                .border(1.dp, if (checked) p.ink else p.lineHi, pill),
         ) {
-            Box(Modifier.offset { IntOffset(x.roundToPx(), inset.roundToPx()) }.size(thumb).clip(CircleShape).background(p.ink))
+            Box(Modifier.offset { IntOffset(x.roundToPx(), inset.roundToPx()) }.size(thumb).clip(CircleShape).background(knob))
         }
     }
 }
 
-/** Rivet's toggle: orange track when on, graphite when off. A null [onCheckedChange] shows the state only. */
+/** Emrys's switch: a slim porcelain track with a noir thumb when on, a quiet graphite track when off. A null [onCheckedChange] shows the state only. */
 @Composable
 fun RivetToggle(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Toggle(checked, onCheckedChange, modifier, enabled, 36.dp, 20.dp, 16.dp)
+    Toggle(checked, onCheckedChange, modifier, enabled, 36.dp, 20.dp, 14.dp)
 }
 
-/** The small toggle for nested rows. */
+/** The small switch for nested rows. */
 @Composable
 fun CompactToggle(checked: Boolean, onCheckedChange: ((Boolean) -> Unit)?, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    Toggle(checked, onCheckedChange, modifier, enabled, 32.dp, 16.dp, 12.dp)
+    Toggle(checked, onCheckedChange, modifier, enabled, 30.dp, 16.dp, 10.dp)
 }
 
-/** A radio mark for radio cards. */
+/** A radio mark for radio cards: a faint ring, porcelain and filled when chosen. */
 @Composable
 fun RadioDot(selected: Boolean, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
-    val dot by animateDpAsState(if (selected) 10.dp else 0.dp, tween(Motion.QUICK), label = "radio")
-    Box(modifier.size(20.dp).clip(CircleShape).border(1.dp, if (selected) p.accent else p.dot, CircleShape), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(dot).clip(CircleShape).background(p.accent))
+    val dot by animateDpAsState(if (selected) 8.dp else 0.dp, tween(Motion.BASE, easing = Motion.Emphasized), label = "radio")
+    Box(modifier.size(20.dp).clip(CircleShape).border(1.dp, if (selected) p.ink else p.dot, CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(dot).clip(CircleShape).background(p.ink))
     }
 }
 
-/** The round accent send key. */
+/** The round porcelain send key; pressed, it gathers a thin halo hairline. */
 @Composable
 fun SendKey(onClick: () -> Unit, modifier: Modifier = Modifier, description: String = "Send") {
     val p = LocalPalette.current
     val (press, pressed) = pressable(true, Role.Button, onClick)
     Box(
         modifier.size(52.dp)
-            .graphicsLayer { if (pressed) { scaleX = 0.94f; scaleY = 0.94f } }
-            .glow(Glows.cta.color, 12.dp)
-            .clip(CircleShape).background(if (pressed) p.accentHi else p.accent)
+            .graphicsLayer { if (pressed) { scaleX = 0.95f; scaleY = 0.95f } }
+            .then(if (pressed) Modifier.glow(Glows.cta, CircleShape).ring(p.accentHi.copy(alpha = 0.75f), CircleShape, true, gap = 2.dp) else Modifier)
+            .clip(CircleShape).background(p.ink)
             .semantics { contentDescription = description }
             .then(press),
         contentAlignment = Alignment.Center,

@@ -90,7 +90,7 @@ class ActionLedger(private val file: File, private val limit: Int = 500) {
     companion object {
         val INTERRUPTED: JSONObject
             get() = ToolResult.error(
-                "Rivet's phone app stopped while this action was running. It may or may not have happened; " +
+                "Emrys's phone app stopped while this action was running. It may or may not have happened; " +
                     "check before trying again.",
             ).toJson()
     }

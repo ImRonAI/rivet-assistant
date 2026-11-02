@@ -93,11 +93,11 @@ class SearchClient(http: OkHttpClient, private val gateway: () -> GatewayConfig)
     private fun error(code: Int, body: JSONObject, retryAfter: Int?): SearchError {
         val said = body.optStringOrNull("error")?.takeIf { it.isNotBlank() }
         return when (code) {
-            401 -> SearchError.Failed("Rivet's brain didn't accept this phone's device token. Check it in Settings.")
-            404 -> SearchError.Failed("Rivet's brain can't search yet. It needs an update.")
+            401 -> SearchError.Failed("Emrys's brain didn't accept this phone's device token. Check it in Settings.")
+            404 -> SearchError.Failed("Emrys's brain can't search yet. It needs an update.")
             429 -> SearchError.Busy(retryAfter)
             503 -> SearchError.NotSetUp
-            400 -> SearchError.Failed(said ?: "Rivet couldn't search for that.")
+            400 -> SearchError.Failed(said ?: "Emrys couldn't search for that.")
             504 -> SearchError.Failed(said ?: "Brave Search took too long.")
             else -> SearchError.Failed(said ?: "Brave Search didn't answer properly.")
         }
@@ -109,7 +109,7 @@ class SearchClient(http: OkHttpClient, private val gateway: () -> GatewayConfig)
         const val QUICK_TIMEOUT_S = 5L
         const val SUGGESTIONS = 8
         const val NOT_CONFIGURED = "Set the brain URL and device token in Settings first."
-        private const val UNREADABLE = "Rivet's brain sent results this app can't read."
+        private const val UNREADABLE = "Emrys's brain sent results this app can't read."
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -120,14 +121,14 @@ open class SearchScreensTest {
         compose.onNodeWithContentDescription("1. The 12 best trail running shoes of 2026, tested on rock, mud and snow, Example Gear").assertIsDisplayed()
         shot("web")
         compose.onAllNodesWithContentDescription("Share")[0].assertIsDisplayed()
-        compose.onAllNodesWithText("Add to Rivet", useUnmergedTree = true)[0].performClick()
+        compose.onAllNodesWithText("Add to Emrys", useUnmergedTree = true)[0].performClick()
         assertEquals("https://gear.example.com/best", added.single().url)
     }
 
     @Test
     fun newsWithBreaking() {
         conversation(SearchFixtures.newsResults)
-        compose.onNodeWithText("BREAKING", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Breaking", useUnmergedTree = true).assertIsDisplayed()
         shot("news")
     }
 
@@ -139,7 +140,7 @@ open class SearchScreensTest {
         compose.onNodeWithText("1. Muddy trail shoes after a race").assertIsDisplayed()
         compose.onNodeWithText("Share").assertIsDisplayed()
         shot("image-viewer")
-        compose.onNodeWithText("Add to Rivet").performClick()
+        compose.onNodeWithText("Add to Emrys").performClick()
         assertEquals("https://img/full1", added.single().imageUrl)
     }
 
@@ -169,17 +170,18 @@ open class SearchScreensTest {
     @Test
     fun answer() {
         conversation(SearchFixtures.answerResults)
-        compose.onNodeWithText("ANSWER · BRAVE").assertIsDisplayed()
-        compose.onNodeWithText("SOURCES").assertIsDisplayed()
+        compose.onNodeWithText("Answer · Brave").assertIsDisplayed()
+        compose.onNodeWithText("Sources").assertIsDisplayed()
         compose.onNodeWithText("gear.example.com").assertIsDisplayed()
-        compose.onNodeWithText("[2]").assertIsDisplayed()
+        // Each source carries its number, matching the answer's [n] markers.
+        compose.onNode(hasText("2") and hasText("rei.example.com")).assertIsDisplayed()
         shot("answer")
     }
 
     @Test
     fun placeholders() {
         conversation(null, running = SearchKind.Web)
-        compose.onNodeWithText("SEARCHING WEB").assertIsDisplayed()
+        compose.onNodeWithText("Searching the web").assertIsDisplayed()
         shot("skeleton")
     }
 
@@ -210,7 +212,7 @@ open class SearchScreensTest {
             compose.waitForIdle()
             shot("page-${tab.lowercase()}")
         }
-        compose.onNodeWithText("Ask Rivet about “trail running shoes”").assertIsDisplayed()
+        compose.onNodeWithText("Ask Emrys about “trail running shoes”").assertIsDisplayed()
     }
 
     @Test
@@ -225,7 +227,7 @@ open class SearchScreensTest {
         shot("sheet")
         compose.onNodeWithText("trail running shoes waterproof").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Ask Rivet about “trail running shoes waterproof”").assertIsDisplayed()
+        compose.onNodeWithText("Ask Emrys about “trail running shoes waterproof”").assertIsDisplayed()
         shot("sheet-results")
     }
 

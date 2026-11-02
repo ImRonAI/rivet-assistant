@@ -1,5 +1,6 @@
 package com.hiron.rivet.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -38,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -50,18 +50,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import com.hiron.rivet.core.Activity
-import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.min
-import kotlin.math.sin
 
 /**
- * The robot's stage: a radial backdrop, a still turntable that shows until the robot page has loaded (and under
- * Robolectric), and an optional [hint] in a glass pill at the bottom. [framed] puts it on a card. [mood] lights the
- * floor in that colour. The WebView goes in [content] and draws over the backdrop once its page is up.
+ * The robot's stage: a noir window with a soft spotlight and a pool of light on the floor ringed by two faint
+ * circles, shown until the robot page has loaded (and under Robolectric), and an optional [hint] in a glass pill at
+ * the bottom. [framed] sets it in a [radius]-cornered window behind a 1dp hairline. [mood] lights the floor in that
+ * colour. The WebView goes in [content] and draws over the backdrop once its page is up.
  */
 @Composable
 fun StageFrame(
@@ -69,42 +67,43 @@ fun StageFrame(
     framed: Boolean = true,
     hint: String? = null,
     mood: Color? = null,
+    radius: Dp = 28.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(radius)
     val breath = if (mood != null && !rememberReduceMotion()) {
-        rememberInfiniteTransition(label = "mood").animateFloat(0.7f, 1f, infiniteRepeatable(tween(1400, easing = Motion.Standard), RepeatMode.Reverse), label = "mood").value
+        rememberInfiniteTransition(label = "mood").animateFloat(0.7f, 1f, infiniteRepeatable(tween(Motion.BREATHE, easing = Motion.Standard), RepeatMode.Reverse), label = "mood").value
     } else {
         1f
     }
     Box(
         modifier.testTag(STAGE_TAG)
-            .then(if (framed) Modifier.clip(shape).border(1.dp, p.edge, shape) else Modifier.clipToBounds())
-            .background(p.bg)
-            .then(if (framed) Modifier.topShade() else Modifier),
+            .then(if (framed) Modifier.clip(shape).border(1.dp, p.line, shape) else Modifier.clipToBounds())
+            .background(p.bg),
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            backdrop(p.raised, p.bg)
-            if (mood != null) floorGlow(mood.copy(alpha = 0.18f * breath))
-            turntable(p.card, p.ink)
+            spotlight(p.ink)
+            if (mood != null) floorGlow(mood.copy(alpha = 0.16f * breath))
+            floorRings(p.ink)
         }
         content()
         if (hint != null) {
+            // The pill's insets and the icon match Onboarding's check that the hint fits on one line.
             Row(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)
-                    .background(p.glass, CircleShape).border(1.dp, p.edge, CircleShape).padding(horizontal = 12.dp, vertical = 6.dp),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                    .background(p.glass, CircleShape).border(1.dp, p.line, CircleShape).padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Outlined.TouchApp, contentDescription = null, tint = p.ink2, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(hint.uppercase(), style = Type.labelSm.copy(letterSpacing = 0.14.em), color = p.ink2, maxLines = 1)
+                Text(hint, style = Type.labelSm, color = p.ink2, maxLines = 1)
             }
         }
     }
 }
 
-/** The stage lights in the colour of what Rivet is doing: cyan working, amber waiting on you, green done, crimson listening or stuck. */
+/** The stage lights in the colour of what Emrys is doing: glacier working, honey waiting on you, sage done, coral listening or stuck. */
 @Composable
 internal fun moodColor(activity: Activity): Color? {
     val p = LocalPalette.current
@@ -117,25 +116,19 @@ internal fun moodColor(activity: Activity): Color? {
     }
 }
 
-/** A dark line of shade inside the top edge of a framed stage, as if it were set into the screen. */
-private fun Modifier.topShade() = drawWithContent {
-    drawContent()
-    drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent), endY = 20.dp.toPx()), size = Size(size.width, 20.dp.toPx()))
-}
-
-/** radial-gradient(60% 55% at 50% 42%, [from] → [to]). */
-private fun DrawScope.backdrop(from: Color, to: Color) {
-    val c = Offset(size.width * 0.5f, size.height * 0.42f)
-    val rx = size.width * 0.6f
-    val ry = size.height * 0.55f
+/** A soft spotlight falling from above the stage: a tall, faint porcelain ellipse centred high. */
+private fun DrawScope.spotlight(ink: Color) {
+    val c = Offset(size.width * 0.5f, size.height * 0.30f)
+    val rx = size.width * 0.55f
+    val ry = size.height * 0.75f
     scale(1f, ry / rx, pivot = c) {
-        drawCircle(Brush.radialGradient(listOf(from, to), center = c, radius = rx), radius = rx, center = c)
+        drawCircle(Brush.radialGradient(listOf(ink.copy(alpha = 0.055f), ink.copy(alpha = 0.02f), Color.Transparent), center = c, radius = rx), radius = rx, center = c)
     }
 }
 
-/** The mood light on the floor: an ellipse 38% × 34% at 50% 70%. */
+/** The mood light on the floor: an ellipse 38% × 34% at 50% 72%. */
 private fun DrawScope.floorGlow(color: Color) {
-    val c = Offset(size.width * 0.5f, size.height * 0.7f)
+    val c = Offset(size.width * 0.5f, size.height * 0.72f)
     val rx = size.width * 0.38f
     val ry = size.height * 0.34f
     scale(1f, ry / rx, pivot = c) {
@@ -143,33 +136,20 @@ private fun DrawScope.floorGlow(color: Color) {
     }
 }
 
-/** The still turntable: a disc, two rings and 72 ticks, seen from a low pitch. */
-private fun DrawScope.turntable(disc: Color, ink: Color) {
-    val rx = min(size.width * 0.42f, size.height * 0.9f)
-    val ry = rx * 0.26f
-    val c = Offset(size.width * 0.5f, size.height - ry - size.height * 0.1f)
-    drawOval(Brush.radialGradient(listOf(Color.Black.copy(alpha = 0.45f), Color.Transparent), center = c + Offset(0f, ry * 0.3f), radius = rx * 1.1f), topLeft = Offset(c.x - rx * 1.1f, c.y - ry * 1.1f), size = Size(rx * 2.2f, ry * 2.6f))
-    drawOval(disc, topLeft = Offset(c.x - rx, c.y - ry), size = Size(rx * 2, ry * 2))
-    drawOval(ink.copy(alpha = 0.09f), topLeft = Offset(c.x - rx, c.y - ry), size = Size(rx * 2, ry * 2), style = Stroke(1.dp.toPx()))
-    listOf(0.72f, 0.37f).forEach { k ->
-        drawOval(ink.copy(alpha = 0.09f), topLeft = Offset(c.x - rx * k, c.y - ry * k), size = Size(rx * 2 * k, ry * 2 * k), style = Stroke(1.dp.toPx()))
+/** The pool of light the robot stands in, seen from a low pitch: a soft porcelain wash and two faint concentric rings. */
+private fun DrawScope.floorRings(ink: Color) {
+    val rx = min(size.width * 0.36f, size.height * 0.8f)
+    val ry = rx * 0.22f
+    val c = Offset(size.width * 0.5f, size.height - ry - size.height * 0.12f)
+    scale(1f, ry / rx, pivot = c) {
+        drawCircle(Brush.radialGradient(listOf(ink.copy(alpha = 0.07f), Color.Transparent), center = c, radius = rx * 1.15f), radius = rx * 1.15f, center = c)
     }
-    val tick = ink.copy(alpha = 0.30f)
-    for (i in 0 until 72) {
-        val a = i * 2 * PI / 72
-        val inner = if (i % 6 == 0) 0.84f else 0.91f
-        val dx = cos(a).toFloat()
-        val dy = sin(a).toFloat()
-        drawLine(
-            tick,
-            Offset(c.x + dx * rx * inner, c.y + dy * ry * inner),
-            Offset(c.x + dx * rx * 0.97f, c.y + dy * ry * 0.97f),
-            strokeWidth = if (i % 6 == 0) 1.2.dp.toPx() else 0.8.dp.toPx(),
-        )
-    }
+    drawOval(ink.copy(alpha = 0.10f), topLeft = Offset(c.x - rx, c.y - ry), size = Size(rx * 2, ry * 2), style = Stroke(1.dp.toPx()))
+    val k = 0.62f
+    drawOval(ink.copy(alpha = 0.06f), topLeft = Offset(c.x - rx * k, c.y - ry * k), size = Size(rx * 2 * k, ry * 2 * k), style = Stroke(1.dp.toPx()))
 }
 
-/** Pill-dot step indicator with "STEP 0n / 0N" on the right. */
+/** The step dots, the current one a short porcelain capsule, with "Step 2 of 4" on the right. */
 @Composable
 fun StepIndicator(step: Int, total: Int, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
@@ -177,16 +157,17 @@ fun StepIndicator(step: Int, total: Int, modifier: Modifier = Modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             for (i in 1..total) {
                 val on = i == step
-                val w by animateDpAsState(if (on) 20.dp else 6.dp, tween(Motion.BASE, easing = Motion.Emphasized), label = "step")
-                Box(Modifier.width(w).height(6.dp).clip(RoundedCornerShape(50)).background(if (on) p.accent else p.dot))
+                val w by animateDpAsState(if (on) 18.dp else 5.dp, tween(Motion.BASE, easing = Motion.Emphasized), label = "step")
+                val c by animateColorAsState(if (on) p.ink else p.dot, tween(Motion.BASE), label = "step-colour")
+                Box(Modifier.width(w).height(5.dp).clip(RoundedCornerShape(50)).background(c))
             }
         }
         Spacer(Modifier.weight(1f))
-        Text("STEP %02d / %02d".format(step, total), style = Type.labelMd, color = p.ink2)
+        Text("Step $step of $total", style = Type.labelLg.copy(fontFeatureSettings = "tnum"), color = p.ink2)
     }
 }
 
-/** The sticky glass header of the voice setup: back (or a text action), the step counter, and the ElevenLabs badge. */
+/** The sticky glass header of the voice setup: back (or a text action), the step counter, and the ElevenLabs credit. */
 @Composable
 fun StickyHeader(
     counter: String,
@@ -206,13 +187,13 @@ fun StickyHeader(
                 startText != null -> TextKey(startText.first, startText.second)
             }
             Spacer(Modifier.width(6.dp))
-            Text(counter, style = Type.eyebrow, color = p.ink2, maxLines = 1)
+            Text(counter, style = Type.tele, color = p.ink2, maxLines = 1)
             Spacer(Modifier.weight(1f))
             if (badge) {
-                val small = RoundedCornerShape(4.dp)
+                val pill = RoundedCornerShape(50)
                 Text(
-                    "ELEVENLABS", style = Type.labelSm.copy(letterSpacing = 0.1.em), color = p.ink2,
-                    modifier = Modifier.clip(small).background(p.edgeSoft).border(1.dp, p.edge, small).padding(horizontal = 10.dp, vertical = 4.dp),
+                    "ElevenLabs", style = Type.labelMd, color = p.ink2,
+                    modifier = Modifier.clip(pill).border(1.dp, p.line, pill).padding(horizontal = 12.dp, vertical = 5.dp),
                 )
                 Spacer(Modifier.width(8.dp))
             }

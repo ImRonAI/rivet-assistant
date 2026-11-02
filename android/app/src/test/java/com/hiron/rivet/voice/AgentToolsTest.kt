@@ -155,7 +155,7 @@ class AgentToolsTest {
         val alerts = File("../../brain/src/rivet_brain/alerts.py").readText()
         for (line in listOf(
             "Your phone places the call now. You do the talking.", "Sent from the app the message came from.",
-            "Rivet checks the button still says this before it taps.", "Rivet can't tell what this does, so it asks first.",
+            "Emrys checks the button still says this before it taps.", "Emrys can't tell what this does, so it asks first.",
             "in the app on screen", "to your calendar",
         )) {
             assertTrue(line, line in alerts)
@@ -195,10 +195,10 @@ class AgentToolsTest {
         assertEquals("Ada", input.getString("contact"))
         assertEquals(5, input.getInt("limit"))
 
-        val (_, failing) = tools(yes, ToolResult.error("Rivet doesn't have permission for this on the phone (READ_SMS)."))
+        val (_, failing) = tools(yes, ToolResult.error("Emrys doesn't have permission for this on the phone (READ_SMS)."))
         val failed = failing.getValue("sms_list").execute(emptyMap())
         assertFalse(failed!!.success)
-        assertEquals("Rivet doesn't have permission for this on the phone (READ_SMS).", failed.error)
+        assertEquals("Emrys doesn't have permission for this on the phone (READ_SMS).", failed.error)
 
         val nested = AgentTools.json(mapOf("a" to listOf(1.5, "x"), "b" to mapOf("c" to true)))
         assertEquals(JSONArray().put(1.5).put("x").toString(), nested.getJSONArray("a").toString())

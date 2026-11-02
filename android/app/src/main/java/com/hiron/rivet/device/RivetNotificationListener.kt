@@ -121,8 +121,8 @@ class RivetNotificationListener : NotificationListenerService() {
         }
 
         private fun notConnected() = ToolResult.error(
-            "Rivet can't see notifications yet. Ask the user to open Rivet › Settings › Permissions › Notification access " +
-                "and turn Rivet on.",
+            "Emrys can't see notifications yet. Ask the user to open Emrys › Settings › Permissions › Notification access " +
+                "and turn Emrys on.",
         )
     }
 }

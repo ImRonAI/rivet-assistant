@@ -7,9 +7,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
 import android.widget.RemoteViews
 import com.hiron.rivet.MainActivity
 import com.hiron.rivet.R
@@ -25,17 +22,17 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** The 4x1 search bar: search or ask, or tap the orange key to talk. */
+/** The 4x1 search bar: search or ask, or tap the voice key to talk. */
 class SearchWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = RivetWidgets.render(context, manager, ids, panel = false)
 }
 
-/** The 4x2 panel: connection status, Rivet's latest reply, the search bar and quick keys. */
+/** The 4x2 panel: connection status, Emrys's latest reply, the search bar and quick keys. */
 class PanelWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = RivetWidgets.render(context, manager, ids, panel = true)
 }
 
-/** What the widgets show; kept in preferences so a widget drawn in a fresh process still has Rivet's last word. */
+/** What the widgets show; kept in preferences so a widget drawn in a fresh process still has Emrys's last word. */
 data class WidgetSnapshot(val connection: Connection, val lastReply: String, val waiting: Int)
 
 object RivetWidgets {
@@ -79,10 +76,10 @@ object RivetWidgets {
     fun views(context: Context, snap: WidgetSnapshot, panel: Boolean): RemoteViews {
         val views = RemoteViews(context.packageName, if (panel) R.layout.widget_panel else R.layout.widget_search)
         val (colour, label) = when {
-            snap.waiting > 0 -> R.color.rivet_amber to "${snap.waiting} WAITING"
-            snap.connection == Connection.Online -> R.color.rivet_ok to "ONLINE"
-            snap.connection == Connection.Connecting -> R.color.rivet_amber to "CONNECTING…"
-            else -> R.color.rivet_crimson to "OFFLINE"
+            snap.waiting > 0 -> R.color.rivet_amber to "${snap.waiting} waiting"
+            snap.connection == Connection.Online -> R.color.rivet_ok to "Online"
+            snap.connection == Connection.Connecting -> R.color.rivet_amber to "Connecting…"
+            else -> R.color.rivet_crimson to "Offline"
         }
         val dot = context.getColor(colour)
         views.setInt(R.id.status, "setColorFilter", dot)
@@ -90,9 +87,7 @@ object RivetWidgets {
         views.setOnClickPendingIntent(R.id.head, open(context, null, 0))
         views.setOnClickPendingIntent(R.id.mic, open(context, ACTION_LISTEN, 2))
         if (panel) {
-            views.setTextViewText(R.id.mark, mark(context.getColor(R.color.rivet_accent)))
             views.setTextViewText(R.id.status_text, label)
-            views.setTextColor(R.id.status_text, dot)
             views.setTextViewText(
                 R.id.last,
                 when {
@@ -111,8 +106,6 @@ object RivetWidgets {
         }
         return views
     }
-
-    private fun mark(accent: Int) = SpannableString("RIVET").apply { setSpan(ForegroundColorSpan(accent), 3, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
 
     private fun open(context: Context, action: String?, code: Int, data: Uri? = null): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).setAction(action).setData(data)

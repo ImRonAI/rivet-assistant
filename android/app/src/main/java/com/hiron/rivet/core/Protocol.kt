@@ -122,7 +122,7 @@ object Protocol {
                 o.optString("status", "answering"), callLines(o.optJSONArray("lines")), o.optBoolean("snapshot", false),
             )
             "call.take_over.failed" -> ServerEvent.CallTakeOverFailed(
-                o.optString("call_id"), o.optStringOrNull("error") ?: "Rivet couldn't transfer the call",
+                o.optString("call_id"), o.optStringOrNull("error") ?: "Emrys couldn't transfer the call",
             )
             "call.ended" -> ServerEvent.CallEnded(
                 o.optString("call_id"), o.optString("from"), o.optString("caller_name"), o.optDoubleOrNull("started_at"),
@@ -130,7 +130,7 @@ object Protocol {
                 o.optStringOrNull("outcome") ?: "unknown", o.optBoolean("taken_over", false),
             )
             "rules" -> ServerEvent.Rules(RuleCodec.set(o))
-            "rules.refused" -> ServerEvent.RulesRefused(RuleRequest.of(o.optStringOrNull("request")), o.optStringOrNull("error") ?: "Rivet couldn't change that rule.")
+            "rules.refused" -> ServerEvent.RulesRefused(RuleRequest.of(o.optStringOrNull("request")), o.optStringOrNull("error") ?: "Emrys couldn't change that rule.")
             "rules.applied" -> Decision.of(o.optStringOrNull("decision"))?.let {
                 ServerEvent.RulesApplied(it, o.optString("key"), o.optString("label"), o.optString("tool"))
             } ?: ServerEvent.Unknown(type)
@@ -140,7 +140,7 @@ object Protocol {
             "model" -> ServerEvent.Model(
                 BrainModel.of(o.optStringOrNull("model")), o.optJSONArray("available").strings().mapNotNull(BrainModel::of).toSet(),
             )
-            "model.refused" -> ServerEvent.ModelRefused(o.optStringOrNull("error") ?: "Rivet couldn't change the model.")
+            "model.refused" -> ServerEvent.ModelRefused(o.optStringOrNull("error") ?: "Emrys couldn't change the model.")
             "session.ready" -> ServerEvent.SessionReady
             "pong" -> ServerEvent.Pong
             "error" -> ServerEvent.Error(o.optString("error", "error"))
@@ -237,7 +237,7 @@ object Protocol {
                 turnId = turnId,
                 tool = r.optString("tool", a.optString("name")),
                 tier = Tier.of(r.optStringOrNull("tier")),
-                headline = r.optStringOrNull("headline") ?: r.optStringOrNull("summary") ?: "Rivet wants to use a tool",
+                headline = r.optStringOrNull("headline") ?: r.optStringOrNull("summary") ?: "Emrys wants to use a tool",
                 blocks = blocks(r.optJSONArray("blocks")),
                 because = a.optStringOrNull("because")?.takeIf { it.isNotBlank() },
                 preview = r.optString("preview"),

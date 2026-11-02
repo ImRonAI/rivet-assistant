@@ -163,7 +163,7 @@ class Messaging(private val context: Context) {
             telecom.placeCall(Uri.fromParts("tel", number.trim(), null), Bundle())
             ToolResult.ok(JSONObject().put("calling", number.trim()))
         } catch (e: SecurityException) {
-            ToolResult.error("Rivet isn't allowed to place calls. Ask the user to allow Phone in Rivet › Settings › Permissions.")
+            ToolResult.error("Emrys isn't allowed to place calls. Ask the user to allow Phone in Emrys › Settings › Permissions.")
         }
     }
 

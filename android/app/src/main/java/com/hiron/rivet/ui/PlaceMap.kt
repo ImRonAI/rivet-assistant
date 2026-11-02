@@ -25,8 +25,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
@@ -56,9 +59,9 @@ object MapPage {
 }
 
 /**
- * [pins] on an OpenFreeMap map (MapLibre GL in a WebView). Under it, numbered pins drawn on graphite show until the
- * map draws, and wherever WebGL doesn't. [interactive] false takes no gestures, so the map never fights a
- * scrolling list; [onSelect] hears a tapped pin.
+ * [pins] on an OpenFreeMap map (MapLibre GL in a WebView). Under it, numbered pins drawn on a quiet noir dot grid
+ * show until the map draws, and wherever WebGL doesn't. [interactive] false takes no gestures, so the map never
+ * fights a scrolling list; [onSelect] hears a tapped pin.
  */
 @Composable
 fun PlaceMap(pins: List<MapPin>, interactive: Boolean, selected: Int?, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
@@ -75,35 +78,42 @@ fun PlaceMap(pins: List<MapPin>, interactive: Boolean, selected: Int?, onSelect:
     }
 }
 
-/** The pins laid out by longitude and latitude on a graphite grid. */
+/**
+ * The pins laid out by longitude and latitude on a faint dot grid that falls away into the page at its edges, in the
+ * map page's style: a noir glass disc with a porcelain hairline and figure, and the chosen one in porcelain with a
+ * halo light.
+ */
 @Composable
 private fun PinBoard(pins: List<MapPin>, selected: Int?, modifier: Modifier) {
     val p = LocalPalette.current
     val placed = remember(pins) { layout(pins) }
-    BoxWithConstraints(modifier.background(p.tile)) {
+    BoxWithConstraints(modifier.background(p.card)) {
         Canvas(Modifier.fillMaxSize()) {
-            val step = 28.dp.toPx()
-            var x = 0f
-            while (x < size.width) {
-                drawLine(p.line, Offset(x, 0f), Offset(x, size.height))
-                x += step
-            }
-            var y = 0f
+            val step = 22.dp.toPx()
+            val r = 1.dp.toPx()
+            var y = step / 2
             while (y < size.height) {
-                drawLine(p.line, Offset(0f, y), Offset(size.width, y))
+                var x = step / 2
+                while (x < size.width) {
+                    drawCircle(p.dot.copy(alpha = 0.10f), r, Offset(x, y))
+                    x += step
+                }
                 y += step
             }
+            drawRect(Brush.radialGradient(listOf(ComposeColor.Transparent, p.bg.copy(alpha = 0.7f)), center, size.maxDimension * 0.75f))
         }
         val pad = 24.dp
         placed.forEach { (pin, fx, fy) ->
             val on = pin.n == selected
             Box(
-                Modifier.offset(x = pad + (maxWidth - pad * 2) * fx - 13.dp, y = pad + (maxHeight - pad * 2) * fy - 13.dp)
-                    .size(26.dp).clip(CircleShape).background(if (on) p.accent else p.high)
-                    .border(2.dp, if (on) p.white else p.accent, CircleShape),
+                Modifier.offset(x = pad + (maxWidth - pad * 2) * fx - 14.dp, y = pad + (maxHeight - pad * 2) * fy - 14.dp)
+                    .size(28.dp)
+                    .then(if (on) Modifier.glow(p.accent.copy(alpha = 0.55f), 14.dp).ring(p.accent.copy(alpha = 0.55f), CircleShape, true, gap = 3.dp) else Modifier)
+                    .clip(CircleShape).background(if (on) p.ink else p.glass)
+                    .border(1.dp, if (on) p.ink else p.ink.copy(alpha = 0.55f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("${pin.n}", style = Type.labelMd, color = if (on) p.accentInk else p.ink)
+                Text("${pin.n}", style = Type.labelMd.copy(fontFeatureSettings = "tnum", letterSpacing = 0.sp), color = if (on) p.accentInk else p.ink)
             }
         }
     }

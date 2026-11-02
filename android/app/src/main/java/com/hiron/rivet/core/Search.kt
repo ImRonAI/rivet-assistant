@@ -123,8 +123,8 @@ data class SearchResults(
 /** Why a search gave no results, in words for the user. */
 sealed class SearchError(override val message: String) : Exception(message) {
     class Busy(val retryAfter: Int?) : SearchError("Search is busy. Try again in a moment.")
-    data object NotSetUp : SearchError("Search isn't set up on Rivet's brain yet.")
-    data object Offline : SearchError("Rivet can't reach its brain right now. Check your connection.")
+    data object NotSetUp : SearchError("Search isn't set up on Emrys's brain yet.")
+    data object Offline : SearchError("Emrys can't reach its brain right now. Check your connection.")
     class Failed(message: String) : SearchError(message)
 }
 
@@ -138,7 +138,7 @@ data class SearchQuery(
     val maxTokens: Int? = null,
 )
 
-/** A result the user added to the conversation ("Add to Rivet"). */
+/** A result the user added to the conversation ("Add to Emrys"). */
 data class ContextItem(
     val kind: SearchKind,
     val title: String,

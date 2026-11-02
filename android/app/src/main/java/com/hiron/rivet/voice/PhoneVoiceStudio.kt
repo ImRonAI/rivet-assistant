@@ -285,7 +285,7 @@ class PhoneVoiceStudio(context: Context, private val settings: Settings) : Voice
         private const val MAX_RECORD_MS = 30_000
         private const val MAX_UPLOAD_BYTES = 20L * 1024 * 1024
         const val TOO_BIG = "That file is over 20 MB"
-        private const val COULD_NOT_READ = "Rivet couldn't read that file"
-        private const val COULD_NOT_SAVE = "Rivet couldn't save that recording"
+        private const val COULD_NOT_READ = "Emrys couldn't read that file"
+        private const val COULD_NOT_SAVE = "Emrys couldn't save that recording"
     }
 }

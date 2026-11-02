@@ -55,7 +55,7 @@ class NotificationsTest {
         val nid = Notifications.callId(id)
         Notifications.callAnswering(app, id, CallNote("+18015550100"))
         assertEquals(listOf(nid), inGroup(Notifications.Group.Calls).map { it.id })
-        assertEquals("Rivet is answering a call", text(active().single { it.id == nid }.notification, Notification.EXTRA_TITLE))
+        assertEquals("Emrys is answering a call", text(active().single { it.id == nid }.notification, Notification.EXTRA_TITLE))
 
         val call = LiveCall(id, "+18015550100", "+18015550100", true, 0, LiveCallStatus.Answering, listOf(CallLineText("caller", "Hi, it's Ada")))
         Notifications.callLive(app, call)

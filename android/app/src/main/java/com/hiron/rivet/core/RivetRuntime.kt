@@ -170,7 +170,7 @@ class RivetRuntime(private val app: Context, private val names: NameLookup = Con
     }
 
     /**
-     * "Add to Rivet": the ElevenLabs agent gets [item] at once; for the brain it waits as a chip, at most
+     * "Add to Emrys": the ElevenLabs agent gets [item] at once; for the brain it waits as a chip, at most
      * [CHIP_LIMIT], for the next turn.
      */
     fun addContext(item: ContextItem) {

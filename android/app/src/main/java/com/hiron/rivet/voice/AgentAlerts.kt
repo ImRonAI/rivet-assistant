@@ -20,7 +20,7 @@ import java.util.UUID
  */
 object AgentAlerts {
     private const val HEADLINE_LIMIT = 80
-    private const val NOT_CHECKED = "Rivet can't tell what this does, so it asks first."
+    private const val NOT_CHECKED = "Emrys can't tell what this does, so it asks first."
     private val DAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     private val ISO_DATE = Regex("""^\d{4}-\d{2}-\d{2}""")
@@ -71,11 +71,11 @@ object AgentAlerts {
                 text("description").takeIf { it.isNotEmpty() }?.let { AlertBlock.Quote("Notes", it) },
             )
             "screen_act" -> when {
-                text("action") != "tap" -> "Do something Rivet doesn't recognise in the app on screen" to listOf(AlertBlock.Note(NOT_CHECKED))
+                text("action") != "tap" -> "Do something Emrys doesn't recognise in the app on screen" to listOf(AlertBlock.Note(NOT_CHECKED))
                 text("label").isBlank() -> "Tap something without a label in the app on screen" to listOf(AlertBlock.Note(NOT_CHECKED))
-                else -> "Tap “${text("label")}” in the app on screen" to listOf(AlertBlock.Note("Rivet checks the button still says this before it taps."))
+                else -> "Tap “${text("label")}” in the app on screen" to listOf(AlertBlock.Note("Emrys checks the button still says this before it taps."))
             }
-            else -> "Use a tool Rivet doesn't know: $name" to listOf(AlertBlock.Note("Rivet has no rule for this tool, so it asks first."))
+            else -> "Use a tool Emrys doesn't know: $name" to listOf(AlertBlock.Note("Emrys has no rule for this tool, so it asks first."))
         }
     }
 

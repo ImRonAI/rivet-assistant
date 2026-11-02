@@ -6,7 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,8 +31,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -54,27 +56,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.hiron.rivet.R
+import java.util.Locale
 
-/** What the assistant overlay is doing; it picks the status LED, the readout colour and the keys. */
+/** What the assistant overlay is doing; it picks the status dot, the reply card's tone and the keys. */
 enum class AssistPhase { Ready, Listening, Working, Replying, Done, Waiting, Failed, NeedsMic, Locked }
 
 /** Everything the assistant overlay draws, as plain values, so it renders the same with or without a voice session. */
@@ -82,11 +89,11 @@ data class AssistUi(
     val phase: AssistPhase,
     /** What the user is saying (live while listening), or what they asked. */
     val heard: String = "",
-    /** Rivet's reply so far. */
+    /** Emrys's reply so far. */
     val reply: String = "",
-    /** The status in plain words, e.g. LISTENING or SEARCHING. */
+    /** The status in plain words, e.g. "Listening" or "Searching"; shown in sentence case whatever case it comes in. */
     val status: String = "",
-    /** Why Rivet didn't finish, or what the user can do next. */
+    /** Why Emrys didn't finish, or what the user can do next. */
     val note: String? = null,
     /** Actions waiting on the user's OK. */
     val waiting: Int = 0,
@@ -100,12 +107,21 @@ const val ASSIST_SCRIM_TAG = "assist-scrim"
 const val ASSIST_PANEL_TAG = "assist-panel"
 const val ASSIST_FIELD_TAG = "assist-field"
 
-/** How many recent microphone levels the meter shows when the plate is wide enough for all of them. */
+/** How many recent microphone levels the meter shows when the panel is wide enough for all of them. */
 private const val METER_BARS = 24
 
+/** The words as they are heard: a serif line, the user's own voice on the page. */
+private val Words = Type.step.copy(fontSize = 26.sp, lineHeight = 31.sp)
+
+/** A blocked overlay's headline. */
+private val BlockedTitle = Type.step.copy(fontSize = 24.sp, lineHeight = 29.sp)
+
+private const val CARET = "caret"
+
 /**
- * Rivet over another app: a scrim, and a sheet along the bottom with Rivet's head and status, the words as they
- * are heard, Rivet's reply as it streams, and the talk, type and open-app keys. Tapping the scrim closes it.
+ * Emrys over another app: a scrim, and a floating glass panel with the Emrys wordmark and status, the words in serif
+ * as they are heard, Emrys's reply as it streams, and the voice disc, type and open-app keys. Tapping the scrim
+ * closes it.
  */
 @Composable
 fun AssistOverlay(
@@ -120,11 +136,11 @@ fun AssistOverlay(
 ) {
     val shown = remember { MutableTransitionState(false) }.apply { targetState = true }
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-        // A sibling under the plate rather than its parent, so the plate's text is not read as part of this button.
+        // A sibling under the panel rather than its parent, so the panel's text is not read as part of this button.
         Box(
             Modifier.matchParentSize()
-                .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.32f), 0.5f to Color.Black.copy(alpha = 0.54f), 1f to Color.Black.copy(alpha = 0.88f)))
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close Rivet", onClick = onDismiss)
+                .background(Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.32f), 0.5f to Color.Black.copy(alpha = 0.56f), 1f to Color.Black.copy(alpha = 0.9f)))
+                .clickable(remember { MutableInteractionSource() }, indication = null, onClickLabel = "Close Emrys", onClick = onDismiss)
                 .testTag(ASSIST_SCRIM_TAG),
         )
         AnimatedVisibility(
@@ -132,7 +148,7 @@ fun AssistOverlay(
             modifier = Modifier.statusBarsPadding(),
             enter = slideInVertically(spring(dampingRatio = 0.85f, stiffness = 300f)) { it / 2 } + fadeIn(tween(Motion.BASE)),
         ) {
-            Plate(ui, onMic, onTyping, onSend, onOpen, onAllowMic)
+            Panel(ui, onMic, onTyping, onSend, onOpen, onAllowMic)
         }
     }
 }
@@ -149,8 +165,14 @@ private fun led(phase: AssistPhase, p: Palette) = when (phase) {
     AssistPhase.NeedsMic, AssistPhase.Locked -> Led(p.amb, false)
 }
 
+/** [status] in sentence case when it comes all in capitals ("OFFLINE · QUEUED" reads "Offline · queued"). */
+internal fun sentenceCase(status: String): String {
+    if (status != status.uppercase(Locale.ROOT)) return status
+    return status.lowercase(Locale.ROOT).replaceFirstChar { it.titlecase(Locale.ROOT) }
+}
+
 @Composable
-private fun Plate(
+private fun Panel(
     ui: AssistUi,
     onMic: () -> Unit,
     onTyping: (Boolean) -> Unit,
@@ -159,27 +181,30 @@ private fun Plate(
     onAllowMic: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val shape = RoundedCornerShape(28.dp)
     val led = led(ui.phase, p)
     val replies = ui.phase in setOf(AssistPhase.Working, AssistPhase.Replying, AssistPhase.Done, AssistPhase.Waiting) ||
         (ui.phase == AssistPhase.Failed && ui.note != null)
     Column(
         Modifier.widthIn(max = 560.dp).fillMaxWidth()
-            .shadow(28.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
+            // The panel floats clear of the screen's edges, the system bars and the keyboard.
+            .navigationBarsPadding().imePadding()
+            .padding(start = 10.dp, end = 10.dp, bottom = 10.dp)
+            .shadow(24.dp, shape, ambientColor = Color.Black, spotColor = Color.Black)
             .clip(shape)
             .background(p.raised)
-            .border(1.dp, Brush.verticalGradient(listOf(p.lineHi, p.line, Color.Transparent)), shape)
+            .border(1.dp, Brush.verticalGradient(listOf(p.lineHi, p.line)), shape)
             .drawWithContent {
                 drawContent()
-                val inset = 40.dp.toPx()
+                // A faint sheen along the top edge, the light catching the glass.
+                val inset = 48.dp.toPx()
                 drawLine(
-                    Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.10f), Color.Transparent), inset, size.width - inset),
+                    Brush.horizontalGradient(listOf(Color.Transparent, Color.White.copy(alpha = 0.12f), Color.Transparent), inset, size.width - inset),
                     Offset(inset, 0.75.dp.toPx()), Offset(size.width - inset, 0.75.dp.toPx()), 1.dp.toPx(),
                 )
             }
-            // Taps anywhere on the plate stay on it; only the scrim around it closes the overlay.
+            // Taps anywhere on the panel stay on it; only the scrim around it closes the overlay.
             .pointerInput(Unit) { detectTapGestures() }
-            .navigationBarsPadding().imePadding()
             .testTag(ASSIST_PANEL_TAG),
     ) {
         Header(ui.status, led)
@@ -188,7 +213,7 @@ private fun Plate(
         // With the keyboard open and nothing asked yet, the field is the whole body.
         val heard = !blocked && !(ui.typing && ui.heard.isBlank() && ui.phase == AssistPhase.Ready)
         if (blocked || heard || replies) {
-            Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 if (blocked) Blocked(ui)
                 if (heard) Heard(ui)
                 if (replies) Reply(ui, onOpen)
@@ -199,56 +224,52 @@ private fun Plate(
     }
 }
 
-/** Rivet's head in a lit well and the wordmark on the left; one status capsule on the right, as in the app's header. */
+/** The Emrys wordmark with "Assistant" under it on the left; one status capsule on the right, as in the app's masthead. */
 @Composable
 private fun Header(status: String, led: Led) {
     val p = LocalPalette.current
-    Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(start = 16.dp, end = 20.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(52.dp).drawBehind {
-                drawCircle(Brush.radialGradient(listOf(led.color.copy(alpha = if (led.live) 0.30f else 0.16f), Color.Transparent)), radius = size.minDimension / 2)
-            },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier.size(44.dp).clip(CircleShape).background(p.field).border(1.dp, p.edge, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(painterResource(R.drawable.rivet_head), contentDescription = "Rivet", modifier = Modifier.size(34.dp))
-            }
-        }
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                buildAnnotatedString {
-                    append("RIV")
-                    withStyle(SpanStyle(color = p.accent)) { append("E") }
-                    append("T")
-                },
-                style = Type.brand.copy(fontSize = 20.sp, lineHeight = 20.sp), color = p.ink, maxLines = 1,
-            )
-            CapsText("Assistant", Type.labelSm, p.ink2, maxLines = 1)
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(start = 22.dp, end = 18.dp, top = 14.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            EmrysWordmark(size = 26f)
+            Text("Assistant", style = Type.labelMd, color = p.ink2, maxLines = 1, modifier = Modifier.padding(start = 1.dp))
         }
         Spacer(Modifier.width(12.dp))
-        Capsule(status, led.color, led.live)
+        Capsule(sentenceCase(status), led.color, led.live)
     }
 }
 
-/** The user's words in large type, with a crimson caret and a level meter while the microphone is live. */
+/** The thin halo caret at the end of the words while the microphone is live; it breathes unless motion is reduced. */
+@Composable
+private fun caret(): Map<String, InlineTextContent> {
+    val p = LocalPalette.current
+    val a = pulse(low = 0.25f, periodMs = 1200)
+    return mapOf(
+        CARET to InlineTextContent(Placeholder(0.32.em, 0.86.em, PlaceholderVerticalAlign.TextCenter)) {
+            Canvas(Modifier.fillMaxSize()) {
+                val w = 2.dp.toPx()
+                drawRoundRect(p.accent.copy(alpha = a), Offset(size.width - w, 0f), Size(w, size.height), CornerRadius(w / 2))
+            }
+        },
+    )
+}
+
+/** The user's words in serif, with a halo caret and a level meter while the microphone is live. */
 @Composable
 private fun Heard(ui: AssistUi) {
     val p = LocalPalette.current
     val listening = ui.phase == AssistPhase.Listening
     val text = tail(ui.heard)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Eyebrow("YOU", tone = Tone.Neutral, dot = false)
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Eyebrow("You", tone = Tone.Neutral, dot = false)
         Text(
             buildAnnotatedString {
-                if (text.isBlank()) withStyle(SpanStyle(color = p.ink2)) { append(if (listening) "Listening…" else "Ask Rivet anything") } else append(text)
-                // A no-break space keeps the caret on the line with the last word.
-                if (listening) withStyle(SpanStyle(color = p.rec)) { append(" ▍") }
+                if (text.isBlank()) withStyle(SpanStyle(color = p.ink2)) { append(if (listening) "Listening…" else "Ask Emrys anything") } else append(text)
+                if (listening) appendInlineContent(CARET, " ▍")
             },
-            style = Type.headline, color = p.ink,
+            style = Words, color = p.ink, inlineContent = if (listening) caret() else emptyMap(),
         )
         if (listening) MicMeter(ui.level)
         if (ui.phase == AssistPhase.Ready && ui.note != null) InfoStrip(ui.note, Modifier.padding(top = 4.dp), icon = Icons.Outlined.Info, tone = Tone.Amber)
@@ -256,7 +277,7 @@ private fun Heard(ui: AssistUi) {
 }
 
 /**
- * The last few microphone levels as rounded bars, newest on the right. It shows as many of [METER_BARS] as fit,
+ * The last few microphone levels as rounded halo bars, newest on the right. It shows as many of [METER_BARS] as fit,
  * so a narrow phone or a large font never clips it.
  */
 @Composable
@@ -268,11 +289,11 @@ private fun MicMeter(level: Float) {
         while (history.size > METER_BARS) history.removeAt(0)
     }
     Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("MIC", style = Type.labelSm, color = p.ink2)
-        Spacer(Modifier.width(12.dp))
+        Text("Mic", style = Type.labelMd, color = p.ink2)
+        Spacer(Modifier.width(14.dp))
         BoxWithConstraints(Modifier.weight(1f)) {
-            // Each bar is 6dp wide with an 8dp gap after it.
-            val fits = ((maxWidth + 8.dp) / 14.dp).toInt().coerceIn(1, METER_BARS)
+            // Each bar is 4dp wide with a 9dp gap after it.
+            val fits = ((maxWidth + 9.dp) / 13.dp).toInt().coerceIn(1, METER_BARS)
             LevelMeter(history.takeLast(fits), height = 28.dp, grouped = false)
         }
     }
@@ -284,58 +305,63 @@ private fun Blocked(ui: AssistUi) {
     val p = LocalPalette.current
     val locked = ui.phase == AssistPhase.Locked
     Row(verticalAlignment = Alignment.Top) {
-        IconWell(if (locked) Icons.Outlined.Lock else Icons.Outlined.MicOff, tone = Tone.Amber, size = 44.dp, iconSize = 22.dp)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(if (locked) "Your phone is locked" else "Rivet can't hear you yet", style = Type.headline, color = p.ink)
+        IconWell(if (locked) Icons.Outlined.Lock else Icons.Outlined.MicOff, tone = Tone.Amber, size = 44.dp, iconSize = 21.dp)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(if (locked) "Your phone is locked" else "Emrys can't hear you yet", style = BlockedTitle, color = p.ink)
             ui.note?.let { Text(it, style = Type.body, color = p.ink2) }
         }
     }
 }
 
-/** Rivet's side: a card like its chat bubbles, with an eyebrow that says what it is doing. */
+/** Emrys's side: a quiet glass card with an eyebrow that says what it is doing, and the reply in Geist. */
 @Composable
 private fun Reply(ui: AssistUi, onReview: () -> Unit) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
-    val alert = when (ui.phase) {
-        AssistPhase.Waiting -> p.amb
-        AssistPhase.Failed -> p.rec
-        else -> null
+    val shape = RoundedCornerShape(20.dp)
+    // Waiting and failing show as a tinted hairline, never a wash of colour.
+    val edge = when (ui.phase) {
+        AssistPhase.Waiting -> p.amb.copy(alpha = 0.4f)
+        AssistPhase.Failed -> p.rec.copy(alpha = 0.4f)
+        else -> p.line
     }
     val scroll = rememberScrollState()
     LaunchedEffect(ui.reply) { scroll.animateScrollTo(scroll.maxValue) }
-    RivetCard(
-        if (alert == null) Modifier else Modifier.glow(alert.copy(alpha = 0.10f), 24.dp, shape).border(1.dp, alert.copy(alpha = 0.5f), shape),
-    ) {
+    Column(Modifier.fillMaxWidth().clip(shape).background(p.card).border(1.dp, edge, shape).padding(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             when (ui.phase) {
                 AssistPhase.Working -> {
-                    Eyebrow("RIVET", tone = Tone.Cyan, live = true)
-                    Spacer(Modifier.width(10.dp))
+                    Eyebrow("Emrys", tone = Tone.Cyan, live = true)
+                    Spacer(Modifier.width(12.dp))
                     Thinking()
                 }
-                AssistPhase.Replying -> Eyebrow("RIVET", tone = Tone.Cyan, live = true)
+                AssistPhase.Replying -> Eyebrow("Emrys", tone = Tone.Cyan, live = true)
                 AssistPhase.Waiting -> {
-                    Eyebrow("NEEDS YOUR OK", Modifier.weight(1f), tone = Tone.Amber, live = true)
+                    Eyebrow("Needs your OK", Modifier.weight(1f), tone = Tone.Amber, live = true)
                     Spacer(Modifier.width(12.dp))
                     Keycap("Review", onReview, tone = KeyTone.Accent)
                 }
-                AssistPhase.Failed -> Eyebrow("RIVET · DIDN'T FINISH", tone = Tone.Red)
-                else -> Eyebrow("RIVET", tone = Tone.Cyan)
+                AssistPhase.Failed -> Eyebrow("Emrys · didn't finish", tone = Tone.Red)
+                else -> Eyebrow("Emrys", tone = Tone.Green)
             }
         }
         val body = when {
-            ui.reply.isNotBlank() -> ui.reply + if (ui.phase == AssistPhase.Replying) " ▍" else ""
+            ui.reply.isNotBlank() -> ui.reply
             ui.phase == AssistPhase.Done -> "Done."
             else -> null
         }
         if (body != null) {
-            Spacer(Modifier.size(10.dp))
-            Text(body, style = Type.bodyLg, color = p.ink, modifier = Modifier.heightIn(max = 220.dp).verticalScroll(scroll))
+            Spacer(Modifier.size(12.dp))
+            Text(
+                buildAnnotatedString {
+                    append(body)
+                    if (ui.phase == AssistPhase.Replying && ui.reply.isNotBlank()) withStyle(SpanStyle(color = p.cy)) { append(" ▍") }
+                },
+                style = Type.bodyLg, color = p.ink, modifier = Modifier.heightIn(max = 220.dp).verticalScroll(scroll),
+            )
         }
         if (ui.phase == AssistPhase.Failed && ui.note != null) {
-            Spacer(Modifier.size(10.dp))
+            Spacer(Modifier.size(12.dp))
             Text(ui.note, style = Type.bodyLg, color = p.ink)
             Spacer(Modifier.size(6.dp))
             Text("Tap the mic to try again, or type.", style = Type.body, color = p.ink2)
@@ -343,14 +369,14 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
     }
 }
 
-/** Three cyan dots that pulse one after another while Rivet works. */
+/** Three glacier dots that breathe one after another while Emrys works. */
 @Composable
 private fun Thinking() {
     val p = LocalPalette.current
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         repeat(3) { i ->
             val a = pulse(low = 0.25f, periodMs = 900 + i * 150)
-            Box(Modifier.size(6.dp).alpha(a).clip(CircleShape).background(p.cy))
+            Box(Modifier.size(5.dp).alpha(a).clip(CircleShape).background(p.cy))
         }
     }
 }
@@ -370,11 +396,11 @@ private fun TypeRow(onSend: (String) -> Unit) {
             draft = ""
         }
     }
-    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp), verticalAlignment = Alignment.Bottom) {
+    Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 22.dp), verticalAlignment = Alignment.Bottom) {
         RecessedField(
             draft, { draft = it },
             modifier = Modifier.weight(1f),
-            placeholder = "Ask Rivet anything",
+            placeholder = "Ask Emrys anything",
             singleLine = false,
             maxLines = 4,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -387,29 +413,43 @@ private fun TypeRow(onSend: (String) -> Unit) {
 }
 
 /**
- * The key row: the haloed talk key, Type and Open Rivet. When the overlay can't listen, the one action that
+ * The key row: the porcelain voice disc, Type and Open Emrys. When the overlay can't listen, the one action that
  * unblocks it (unlocking, or allowing the microphone) takes the full width above.
  */
 @Composable
 private fun Keys(ui: AssistUi, onMic: () -> Unit, onTyping: (Boolean) -> Unit, onOpen: () -> Unit, onAllowMic: () -> Unit) {
     val listening = ui.phase == AssistPhase.Listening
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 22.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when (ui.phase) {
-            AssistPhase.Locked -> PrimaryKey("Unlock and open Rivet", onOpen, leading = Icons.Outlined.LockOpen, trailingArrow = false)
+            AssistPhase.Locked -> PrimaryKey("Unlock and open Emrys", onOpen, leading = Icons.Outlined.LockOpen, trailingArrow = false)
             AssistPhase.NeedsMic -> PrimaryKey("Allow mic", onAllowMic, leading = Icons.Outlined.Mic, trailingArrow = false)
             else -> {}
         }
         if (ui.phase != AssistPhase.Locked) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (ui.phase != AssistPhase.NeedsMic) {
-                    HaloTalkKey(
-                        if (listening) TalkState.Listening else TalkState.Idle,
-                        onMic,
-                        if (listening) "Stop listening" else "Speak to Rivet",
+            val disc = ui.phase != AssistPhase.NeedsMic
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // "Open Emrys" keeps its words whole: on a narrow phone with large text it drops its icon first.
+                val measurer = rememberTextMeasurer()
+                val density = LocalDensity.current
+                val words = with(density) {
+                    measurer.measure("Type", Type.monoKey).size.width.toDp() + measurer.measure("Open Emrys", Type.key).size.width.toDp()
+                }
+                // The disc and its gap, each key's 18dp insets, the gap between them, and the icon with its gap.
+                val icon = (if (disc) 76.dp else 0.dp) + 36.dp * 2 + 12.dp + 26.dp + words <= maxWidth
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (disc) {
+                        HaloTalkKey(
+                            if (listening) TalkState.Listening else TalkState.Idle,
+                            onMic,
+                            if (listening) "Stop listening" else "Speak to Emrys",
+                        )
+                    }
+                    SysKey("Type", ui.typing, onTyping)
+                    SecondaryKey(
+                        "Open Emrys", onOpen, Modifier.weight(1f), radius = 24.dp,
+                        leading = if (icon) Icons.AutoMirrored.Outlined.OpenInNew else null,
                     )
                 }
-                SysKey("Type", ui.typing, onTyping)
-                SecondaryKey("Open Rivet", onOpen, Modifier.weight(1f), leading = Icons.AutoMirrored.Outlined.OpenInNew, radius = 24.dp)
             }
         }
     }

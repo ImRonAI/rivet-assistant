@@ -97,7 +97,7 @@ object CallText {
         return "Message from ${caller(event)}$suffix: ${event.message.ifBlank { "(no message)" }}"
     }
 
-    fun speaker(line: CallLineText): String = if (line.speaker == "caller") "Caller" else "Rivet"
+    fun speaker(line: CallLineText): String = if (line.speaker == "caller") "Caller" else "Emrys"
 
     fun line(line: CallLineText): String = "${speaker(line)}: ${line.text}"
 
@@ -185,7 +185,7 @@ object RivetStore {
         ).log(now, "error", event.error).let { if (event.lane == "default") it.dropPlaceholders() else it }
         is ServerEvent.Error -> state.copy(lastError = event.message).log(now, "error", event.message)
         is ServerEvent.DeviceCall -> state.log(now, "device", event.tool)
-        is ServerEvent.CallAnswering -> state.log(now, "call", "Rivet is answering a call from ${event.from.ifBlank { "an unknown number" }}")
+        is ServerEvent.CallAnswering -> state.log(now, "call", "Emrys is answering a call from ${event.from.ifBlank { "an unknown number" }}")
         is ServerEvent.CallMessage -> state.copy(liveCall = state.liveCall?.withMessage(event))
             .log(now, "call", CallText.describe(event))
         is ServerEvent.CallLive -> state.copy(liveCall = live(state.liveCall, event, now))
@@ -203,11 +203,11 @@ object RivetStore {
         val call = state.liveCall?.takeIf { it.callId == callId }
         return when {
             call == null || call.status == LiveCallStatus.Ended -> "That call has already ended."
-            call.status == LiveCallStatus.Transferring -> "Rivet is already transferring that call to you."
-            state.connection != Connection.Online -> "Rivet is offline, so it can't transfer the call."
+            call.status == LiveCallStatus.Transferring -> "Emrys is already transferring that call to you."
+            state.connection != Connection.Online -> "Emrys is offline, so it can't transfer the call."
             !isE164(ownNumber) -> "Add your own number, like +18015550100, in Settings › Call answering to take over calls."
             forwardsAllCalls ->
-                "All your calls forward to Rivet, so the transfer would come straight back. Forward only unanswered calls to take over."
+                "All your calls forward to Emrys, so the transfer would come straight back. Forward only unanswered calls to take over."
             else -> null
         }
     }
@@ -219,7 +219,7 @@ object RivetStore {
     fun answered(state: RivetState, ids: Set<String>): RivetState =
         state.copy(approvals = state.approvals.filterNot { it.id in ids }, activity = Activity.Thinking)
 
-    const val EXPIRED = "Nobody answered in time, so Rivet didn't do it."
+    const val EXPIRED = "Nobody answered in time, so Emrys didn't do it."
 
     /** The activity line for approvals Rivet asked for. */
     fun asked(approvals: List<ApprovalRequest>): String = "Asked: " + approvals.joinToString("; ") { it.headline }

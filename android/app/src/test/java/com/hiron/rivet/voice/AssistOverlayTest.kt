@@ -97,7 +97,7 @@ class AssistOverlayTest {
         shot("assist-listening")
 
         ui = AssistModel.ui(mine, sent.then(ServerEvent.Searching(listOf("calendar tomorrow"), "default")))
-        compose.onNodeWithText("SEARCHING").assertIsDisplayed()
+        compose.onNodeWithText("Searching").assertIsDisplayed()
         shot("assist-working")
 
         val streaming = sent.then(ServerEvent.TextDelta("Tomorrow afternoon you have a dentist cleaning at 2 PM, then ", "default"))
@@ -115,7 +115,7 @@ class AssistOverlayTest {
                 ),
             ),
         )
-        compose.onNodeWithText("DONE").assertIsDisplayed()
+        compose.onNodeWithText("Done").assertIsDisplayed()
         shot("assist-done")
 
         ui = AssistModel.ui(mine, sent.then(ServerEvent.TurnFailed("t1", "default", "the brain is offline")))
@@ -141,7 +141,7 @@ class AssistOverlayTest {
         shot("assist-typing")
 
         ui = AssistModel.ui(AssistLocal(locked = true), RivetState())
-        compose.onNodeWithText("Unlock and open Rivet").assertIsDisplayed()
+        compose.onNodeWithText("Unlock and open Emrys").assertIsDisplayed()
         shot("assist-locked")
     }
 
@@ -162,9 +162,9 @@ class AssistOverlayTest {
             }
         }
         compose.onNodeWithTag(ASSIST_PANEL_TAG).performClick()
-        compose.onNodeWithContentDescription("Speak to Rivet").performClick()
+        compose.onNodeWithContentDescription("Speak to Emrys").performClick()
         compose.onNodeWithText("Type").performClick()
-        compose.onNodeWithText("Open Rivet").performClick()
+        compose.onNodeWithText("Open Emrys").performClick()
         compose.onNodeWithTag(ASSIST_SCRIM_TAG).performTouchInput { click(topCenter.copy(y = 40f)) }
         assertEquals(listOf("mic", "typing:true", "open", "dismiss"), calls)
 
@@ -188,7 +188,7 @@ class AssistOverlayTest {
             ui = AssistModel.ui(AssistLocal(listening = true, partial = "Text Dana that Friday at 9", level = level), RivetState())
             compose.waitForIdle()
         }
-        compose.onNodeWithText("Open Rivet").assertIsDisplayed()
+        compose.onNodeWithText("Open Emrys").assertIsDisplayed()
         shot("assist-narrow-listening")
 
         ui = AssistModel.ui(AssistLocal(turnId = "t2", asked = "Text Dana that Friday at 9 works"), waiting)
@@ -197,15 +197,15 @@ class AssistOverlayTest {
 
         ui = AssistModel.ui(AssistLocal(needsMic = true), RivetState())
         compose.onNodeWithText("Allow mic").assertIsDisplayed()
-        compose.onNodeWithText("Open Rivet").assertIsDisplayed()
+        compose.onNodeWithText("Open Emrys").assertIsDisplayed()
         shot("assist-narrow-mic")
     }
 
     @Test
     fun theIdleOverlayInvitesAQuestion() {
         compose.setContent { RivetTheme { AssistOverlay(AssistUi(com.hiron.rivet.ui.AssistPhase.Ready, status = "READY")) } }
-        compose.onNodeWithText("Ask Rivet anything").assertIsDisplayed()
-        compose.onNodeWithText("READY").assertIsDisplayed()
+        compose.onNodeWithText("Ask Emrys anything").assertIsDisplayed()
+        compose.onNodeWithText("Ready").assertIsDisplayed()
     }
 }
 

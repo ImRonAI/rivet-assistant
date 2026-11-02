@@ -35,7 +35,7 @@ class Apps(private val context: Context, private val isVisible: () -> Boolean) {
             ?: return ToolResult.error("No installed app matches \"$app\". Use apps_list to see what's installed.")
         val intent = context.packageManager.getLaunchIntentForPackage(match.pkg)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ?: return ToolResult.error("${match.label} can't be launched.")
-        return launch(intent, "Open ${match.label}", "Rivet is ready to open ${match.label}.")
+        return launch(intent, "Open ${match.label}", "Emrys is ready to open ${match.label}.")
             .let { how -> ToolResult.ok(JSONObject().put("app", match.label).put("package", match.pkg).put("opened", how)) }
     }
 

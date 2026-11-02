@@ -23,11 +23,12 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The four first-run steps with the real runtime; saves build/screens/00a–00d for review. */
+/** The four first-run steps with the real runtime; saves build/screens/00a–00d (and the narrow 00an–00dn) for review. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
@@ -56,18 +57,19 @@ class OnboardingTest {
     @Test
     fun walksThroughEveryStep() {
         show()
+        compose.onNodeWithText("Meet Emrys.").assertIsDisplayed()
         compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
         compose.onNodeWithText("Set up step by step").assertIsDisplayed()
         compose.onNodeWithText("You stay in control").assertIsDisplayed()
         shot("00a-onboarding-meet")
 
         tap("Set up step by step")
-        compose.onNodeWithText("TALK OR TYPE").assertIsDisplayed()
-        compose.onNodeWithText("Rivet's own brain").assertExists()
+        compose.onNodeWithText("Talk or type.").assertIsDisplayed()
+        compose.onNodeWithText("Emrys's own brain").assertExists()
         shot("00b-onboarding-models")
 
-        tap("Save & Continue")
-        compose.onNodeWithText("DEFAULT ASSISTANT").assertIsDisplayed()
+        tap("Save & continue")
+        compose.onNodeWithText("Default assistant.").assertIsDisplayed()
         compose.onNodeWithText("Long-press power button").assertIsSelected()
         compose.onNodeWithText("Then hold the power button", substring = true).assertIsDisplayed()
         shot("00c-onboarding-assistant")
@@ -76,15 +78,34 @@ class OnboardingTest {
         compose.onNodeWithText("Then swipe up from a bottom corner", substring = true).assertIsDisplayed()
 
         tap("Skip for now")
-        compose.onNodeWithText("SYSTEM ACCESS").assertIsDisplayed()
-        compose.onNodeWithText("Complete Setup").assertIsDisplayed()
+        compose.onNodeWithText("System access.").assertIsDisplayed()
+        compose.onNodeWithText("Complete setup").assertIsDisplayed()
         shot("00d-onboarding-access")
 
         // Back walks one step back, not out of the app.
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
-        compose.onNodeWithText("DEFAULT ASSISTANT").assertIsDisplayed()
+        compose.onNodeWithText("Default assistant.").assertIsDisplayed()
         assertEquals(0, finished)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h740dp-xxhdpi")
+    fun everyStepFitsANarrowPhoneWithLargeText() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        show()
+        compose.onNodeWithText("Meet Emrys.").assertIsDisplayed()
+        compose.onNodeWithText("Use recommended settings").assertIsDisplayed()
+        shot("00an-onboarding-meet-narrow")
+        tap("Set up step by step")
+        compose.onNodeWithText("Talk or type.").assertIsDisplayed()
+        shot("00bn-onboarding-models-narrow")
+        tap("Save & continue")
+        compose.onNodeWithText("Default assistant.").assertIsDisplayed()
+        shot("00cn-onboarding-assistant-narrow")
+        tap("Skip for now")
+        compose.onNodeWithText("System access.").assertIsDisplayed()
+        shot("00dn-onboarding-access-narrow")
     }
 
     @Test
@@ -94,7 +115,7 @@ class OnboardingTest {
         settings.speakInOverlay = true
         show()
         tap("Use recommended settings")
-        compose.onNodeWithText("RECOMMENDED").assertIsDisplayed()
+        compose.onNodeWithText("Recommended").assertIsDisplayed()
         compose.onNodeWithText("Connect automatically").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(600)
         shot("onboarding-recommended")
@@ -142,7 +163,7 @@ class OnboardingTest {
     fun theVoiceLinkOpensVoiceSetup() {
         show()
         tap("Set up step by step")
-        tap("Choose Rivet's voice")
+        tap("Choose Emrys's voice")
         assertEquals(1, voiceSetups)
     }
 
@@ -150,10 +171,10 @@ class OnboardingTest {
     fun openAssistantSettingsGoesToAndroidAndMovesOn() {
         show()
         tap("Set up step by step")
-        tap("Save & Continue")
-        tap("Open Assistant Settings")
+        tap("Save & continue")
+        tap("Open assistant settings")
         assertEquals(AndroidSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS, shadowOf(compose.activity).nextStartedActivity.action)
-        compose.onNodeWithText("SYSTEM ACCESS").assertIsDisplayed()
+        compose.onNodeWithText("System access.").assertIsDisplayed()
     }
 
     @Test
@@ -163,11 +184,11 @@ class OnboardingTest {
         )
         show()
         tap("Set up step by step")
-        tap("Save & Continue")
+        tap("Save & continue")
         tap("Skip for now")
         compose.onNode(isToggleable() and hasText("Messages & actions")).assertIsOn()
         compose.onNode(isToggleable() and hasText("Screen context")).assertIsOn()
-        tap("Complete Setup")
+        tap("Complete setup")
         assertEquals(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS, shadowOf(compose.activity).nextStartedActivity.action)
         assertEquals(1, finished)
     }
@@ -176,7 +197,7 @@ class OnboardingTest {
     fun customizeLaterFinishesWithoutAsking() {
         show()
         tap("Set up step by step")
-        tap("Save & Continue")
+        tap("Save & continue")
         tap("Skip for now")
         compose.onNode(isToggleable() and hasText("Screen context")).performClick()
         compose.waitForIdle()

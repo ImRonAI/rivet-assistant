@@ -32,10 +32,10 @@ data class AssistLocal(
 /** The overlay's pure logic: what the recognizer reports, and what the panel shows for it and for Rivet's state. */
 object AssistModel {
     const val DIDNT_CATCH = "I didn't catch that. Tap the mic and try again."
-    const val NO_RECOGNIZER = "This phone has no speech recognizer Rivet can use. Type instead."
-    const val SET_UP_FIRST = "Rivet isn't connected to its brain yet. Open Rivet and finish setup in Settings."
-    const val MIC_NOTE = "Rivet needs the microphone to hear you here. Allow it once in the app, or type instead."
-    const val LOCKED_NOTE = "Unlock your phone to talk to Rivet. It can read and send your messages, so it waits until the phone is yours."
+    const val NO_RECOGNIZER = "This phone has no speech recognizer Emrys can use. Type instead."
+    const val SET_UP_FIRST = "Emrys isn't connected to its brain yet. Open Emrys and finish setup in Settings."
+    const val MIC_NOTE = "Emrys needs the microphone to hear you here. Allow it once in the app, or type instead."
+    const val LOCKED_NOTE = "Unlock your phone to talk to Emrys. It can read and send your messages, so it waits until the phone is yours."
 
     fun ui(local: AssistLocal, state: RivetState): AssistUi {
         val base = AssistUi(AssistPhase.Ready, typing = local.typing, status = "READY")

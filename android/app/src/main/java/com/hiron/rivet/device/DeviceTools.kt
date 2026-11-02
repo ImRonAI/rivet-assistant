@@ -67,14 +67,14 @@ class DeviceTools(
     val names: Set<String> get() = tools.keys
 
     suspend fun run(tool: String, input: JSONObject): ToolResult {
-        val entry = tools[tool] ?: return ToolResult.error("This phone has no tool named $tool. Update the Rivet app.")
+        val entry = tools[tool] ?: return ToolResult.error("This phone has no tool named $tool. Update the Emrys app.")
         val missing = entry.permissions.filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) {
             return ToolResult.error(
-                "Rivet doesn't have permission for this on the phone (${missing.joinToString { it.substringAfterLast('.') }}). " +
-                    "Ask the user to open Rivet › Settings › Permissions and allow it.",
+                "Emrys doesn't have permission for this on the phone (${missing.joinToString { it.substringAfterLast('.') }}). " +
+                    "Ask the user to open Emrys › Settings › Permissions and allow it.",
             )
         }
         return try {
@@ -94,7 +94,7 @@ class DeviceTools(
         settings.answeringNumber = number
         return ToolResult.ok(
             JSONObject().put("saved", number.trim()).put("forwarding_on", settings.forwardedTo.isNotBlank())
-                .put("note", "The user turns call answering on in Rivet › Settings › Call answering."),
+                .put("note", "The user turns call answering on in Emrys › Settings › Call answering."),
         )
     }
 

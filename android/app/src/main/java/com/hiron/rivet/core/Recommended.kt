@@ -16,7 +16,7 @@ object PermissionGroups {
         add(PermissionGroup("Contacts", "Find people by name", listOf(Manifest.permission.READ_CONTACTS)))
         add(PermissionGroup("Calendar", "Read and add events", listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)))
         add(PermissionGroup("Phone", "Place calls and read recent calls", listOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CALL_LOG)))
-        add(PermissionGroup("Microphone", "Talk to Rivet out loud", listOf(Manifest.permission.RECORD_AUDIO)))
+        add(PermissionGroup("Microphone", "Talk to Emrys out loud", listOf(Manifest.permission.RECORD_AUDIO)))
         if (Build.VERSION.SDK_INT >= 33) {
             add(PermissionGroup("Notifications", "Show approvals and reminders", listOf(Manifest.permission.POST_NOTIFICATIONS)))
         }
@@ -68,16 +68,16 @@ sealed interface Recommendation {
     /** One Android permission request for every missing group. */
     data class AskPermissions(val groups: List<PermissionGroup>) : Recommendation {
         override val id = RecId.Permissions
-        override val title = "Allow what Rivet uses"
+        override val title = "Allow what Emrys uses"
         override val change = "Android asks you once for: ${groups.joinToString(", ") { it.name }}"
-        override val undo = "Turn them off in Android Settings › Apps › Rivet › Permissions."
+        override val undo = "Turn them off in Android Settings › Apps › Emrys › Permissions."
     }
 
     /** Android doesn't let an app make itself the assistant; this opens the screen where the user picks Rivet. */
     data object OpenAssistantSettings : Recommendation {
         override val id = RecId.Assistant
-        override val title = "Make Rivet your assistant"
-        override val change = "Opens Android's default apps screen so you can pick Rivet. Android doesn't let apps set this themselves."
+        override val title = "Make Emrys your assistant"
+        override val change = "Opens Android's default apps screen so you can pick Emrys. Android doesn't let apps set this themselves."
         override val undo = "Pick another assistant in the same screen."
     }
 
@@ -85,7 +85,7 @@ sealed interface Recommendation {
     data class StopAsking(val candidate: DenyCandidate) : Recommendation {
         override val id = RecId.StopAsking
         override val title = "Stop asking about ${candidate.label}"
-        override val change = "You said no ${candidate.denials} times in the last 30 days. Rivet will always decline it."
+        override val change = "You said no ${candidate.denials} times in the last 30 days. Emrys will always decline it."
         override val undo = "Removes the rule."
     }
 }
@@ -127,7 +127,7 @@ object Recommended {
         if (!current.autoConnect) {
             add(
                 Recommendation.Setting(
-                    SettingId.AutoConnect, "Connect automatically", "Rivet reconnects by itself, also after your phone restarts.",
+                    SettingId.AutoConnect, "Connect automatically", "Emrys reconnects by itself, also after your phone restarts.",
                     "Turns automatic connection off again.", OFF, ON,
                 ),
             )
@@ -145,7 +145,7 @@ object Recommended {
             add(
                 Recommendation.Setting(
                     SettingId.OfferReplies, "Offer replies to new messages",
-                    "When a message arrives, Rivet drafts a reply and asks you before it sends anything.", "Stops offering replies.", OFF, ON,
+                    "When a message arrives, Emrys drafts a reply and asks you before it sends anything.", "Stops offering replies.", OFF, ON,
                 ),
             )
         }
@@ -158,7 +158,7 @@ object Recommended {
             add(
                 Recommendation.Setting(
                     SettingId.UnansweredCalls, "Answer only calls you miss",
-                    "Rivet's line takes the calls you don't pick up, which is what lets you take a call over.$carrier",
+                    "Emrys's line takes the calls you don't pick up, which is what lets you take a call over.$carrier",
                     "Goes back to answering every call (your carrier settings don't change).", "Every call", "Missed calls",
                 ),
             )
