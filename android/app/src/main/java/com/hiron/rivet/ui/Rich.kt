@@ -14,9 +14,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.em
 
 /**
- * Rivet's replies as readable text: the markdown the model writes (headings, bullets, bold, italics, code,
- * links) becomes styling instead of stray symbols, and citation markers like `[2]` become small cyan
- * superscripts. Anything unfinished mid-stream stays as typed until it closes.
+ * Emrys's replies as readable text: the markdown the model writes (headings, bullets, bold, italics, code,
+ * links) becomes styling instead of stray symbols, links read in the halo, and citation markers like `[2]` become
+ * small halo superscript figures. Anything unfinished mid-stream stays as typed until it closes.
  */
 object Rich {
     private val INLINE = Regex(
@@ -33,6 +33,11 @@ object Rich {
     private val BULLET = Regex("""^(\s*)[-*•]\s+""")
     private val HEADING = Regex("""^#{1,4}\s+""")
 
+    /** A citation figure: small Geist Medium with tabular figures, raised like a footnote mark. */
+    private val CITATION = SpanStyle(
+        fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 0.68.em, fontFeatureSettings = "tnum", baselineShift = BaselineShift.Superscript,
+    )
+
     /** The same text with the markup removed, for places that can't style it (widgets, notifications). */
     fun plain(text: String): String = format(text, DarkPalette).text
 
@@ -44,7 +49,7 @@ object Rich {
             if (heading != null) line = line.substring(heading.range.last + 1)
             BULLET.find(line)?.let { m ->
                 append(m.groupValues[1])
-                withStyle(SpanStyle(color = p.accent)) { append("•  ") }
+                withStyle(SpanStyle(color = p.ink2)) { append("•  ") }
                 line = line.substring(m.range.last + 1)
             }
             if (heading != null) withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { inline(line, p) } else inline(line, p)
@@ -62,9 +67,7 @@ object Rich {
                 g[4] != null -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(g[4]!!.value) }
                 g[5] != null -> withStyle(SpanStyle(fontFamily = Mono, fontSize = 0.9.em, background = p.high)) { append(g[5]!!.value) }
                 g[6] != null -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(g[6]!!.value) }
-                g[7] != null -> withStyle(SpanStyle(fontFamily = Mono, fontSize = 0.7.em, color = p.cy, baselineShift = BaselineShift.Superscript)) {
-                    append(g[7]!!.value)
-                }
+                g[7] != null -> withStyle(CITATION.copy(color = p.accent)) { append(g[7]!!.value) }
                 else -> link(m.value.removePrefix("https://").removePrefix("http://").trimEnd('/'), m.value, p)
             }
             at = m.range.last + 1
@@ -73,6 +76,6 @@ object Rich {
     }
 
     private fun AnnotatedString.Builder.link(label: String, url: String, p: Palette) {
-        withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = p.cy, textDecoration = TextDecoration.Underline)))) { append(label) }
+        withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = p.accent, textDecoration = TextDecoration.Underline)))) { append(label) }
     }
 }

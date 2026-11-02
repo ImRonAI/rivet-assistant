@@ -182,10 +182,10 @@ class AppFlowTest {
 
         // The transcript sheet pulls up over the stage and back down.
         compose.onNodeWithContentDescription("Expand transcript").performClick()
-        until { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Show Rivet")).fetchSemanticsNodes().isNotEmpty() }
+        until { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("Show Emrys")).fetchSemanticsNodes().isNotEmpty() }
         compose.mainClock.advanceTimeBy(600)
         shot("03b-home-transcript-expanded")
-        compose.onNodeWithContentDescription("Show Rivet").performClick()
+        compose.onNodeWithContentDescription("Show Emrys").performClick()
         compose.mainClock.advanceTimeBy(600)
 
         // An approval pops the review sheet; "don't ask again" with Deny answers the brain with a standing deny.

@@ -2,6 +2,7 @@ package com.hiron.rivet.ui
 
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
@@ -19,6 +20,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -40,23 +44,26 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.NorthWest
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,22 +85,35 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hiron.rivet.core.Activity
 import com.hiron.rivet.core.ChatMessage
 import com.hiron.rivet.core.Connection
@@ -106,7 +126,7 @@ import kotlinx.coroutines.delay
 import java.util.Calendar
 import java.util.Date
 
-/** One-tap requests on the dock, the widget and the launcher shortcuts: the things people ask Rivet for most. */
+/** One-tap requests on the dock, the widget and the launcher shortcuts: the things people ask Emrys for most. */
 enum class Quick(val label: String, val tag: String, val prompt: String) {
     CatchUp("Catch me up", "ALL", "Catch me up: unread texts, missed calls, messages callers left, and anything waiting on me."),
     MyDay("My day", "CAL", "What's on my calendar today?"),
@@ -121,8 +141,15 @@ enum class Quick(val label: String, val tag: String, val prompt: String) {
 
 const val STAGE_HINT = "Drag to look · Tap to say hi"
 
+/** The page's side margins: 20dp, and 16dp on phones under 360dp wide. */
+@Composable
+private fun gutter(): Dp {
+    val wide = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    return if (wide > 0.dp && wide < 360.dp) 16.dp else 20.dp
+}
+
 /**
- * Home: Rivet on its stage with a greeting, the transcript sheet once there is a conversation, and the dock with
+ * Home: Emrys on its stage with a greeting, the transcript sheet once there is a conversation, and the dock with
  * quick requests and the composer.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -156,24 +183,24 @@ fun HomeScreen(
     val actions = remember(runtime) {
         ResultActions(add = runtime::addContext, seeAll = { results, kind -> onOpenResults(ResultsRequest(results.query, kind, results)) })
     }
-    // Rivet's own brain is offered when the ElevenLabs agent couldn't start and the brain can be reached.
+    // Emrys's own brain is offered when the ElevenLabs agent couldn't start and the brain can be reached.
     val useBrain = if (state.agentDown && runtime.settings.elevenLabsAgents && state.connection == Connection.Online) runtime::useOwnBrain else null
     CompositionLocalProvider(LocalResultActions provides actions) {
         Column(Modifier.fillMaxSize().background(p.bg)) {
             val idle = !talking && !keyboard && !callLive
-            val fade by animateDpAsState(if (idle) 240.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
+            val fade by animateDpAsState(if (idle) 260.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
             StageFrame(
                 Modifier.weight(stageShare).fillMaxWidth(),
                 framed = false,
                 hint = if (idle) STAGE_HINT else null,
                 mood = moodColor(state.activity),
             ) {
-                // While the greeting shows, Rivet stands in the upper part of the stage with the words under its feet.
+                // While the greeting shows, Emrys stands in the upper part of the stage with the words under its feet.
                 RobotView(runtime, Modifier.fillMaxSize(), focus = if (idle) RobotFocus.Greet else RobotFocus.Stage)
                 // The stage melts into what sits below it, and the greeting stays legible over the floor.
                 Box(
                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(fade)
-                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.45f to p.bg.copy(alpha = 0.72f), 1f to p.bg.copy(alpha = 0.96f))),
+                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.5f to p.bg.copy(alpha = 0.78f), 1f to p.bg)),
                 )
                 StageGreeting(idle, state, voice)
             }
@@ -188,12 +215,7 @@ fun HomeScreen(
             if (sheet) {
                 TranscriptSheet(state, expanded || keyboard, { expanded = it }, Modifier.weight((1f - stageShare).coerceAtLeast(0.01f)), useBrain)
             } else {
-                state.lastError?.let {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        InfoStrip(it, icon = Icons.Outlined.WarningAmber, tone = Tone.Red)
-                        useBrain?.let { use -> UseBrainKey(use) }
-                    }
-                }
+                state.lastError?.let { ErrorNote(it, useBrain, Modifier.padding(horizontal = gutter(), vertical = 8.dp)) }
                 if (stageShare < 1f) Spacer(Modifier.weight(1f - stageShare))
             }
             Dock(
@@ -211,11 +233,37 @@ fun HomeScreen(
     }
 }
 
-const val USE_BRAIN = "Use Rivet's own brain"
+const val USE_BRAIN = "Use Emrys's own brain"
 
+/** The porcelain key that hands the conversation to Emrys's own brain. */
 @Composable
-private fun UseBrainKey(onClick: () -> Unit) =
-    Keycap(USE_BRAIN, onClick, Modifier.padding(top = 8.dp), tone = KeyTone.Accent, icon = Icons.Outlined.Psychology)
+private fun UseBrainKey(onClick: () -> Unit) = Keycap(USE_BRAIN, onClick, tone = KeyTone.Accent, icon = Icons.Outlined.Psychology)
+
+/** Why something failed, as a coral dot and a plain sentence on glass, with Emrys's own brain offered under it when it can help. */
+@Composable
+private fun ErrorNote(error: String, useBrain: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, p.line, shape).padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        DotLine(error, p.rec)
+        useBrain?.let { UseBrainKey(it) }
+    }
+}
+
+/** A status dot set on the first line of a sentence that may wrap. */
+@Composable
+private fun DotLine(text: String, color: Color, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    Row(modifier) {
+        // The dot sits on the middle of the first line (the body style's line is 19sp high).
+        Box(Modifier.height(19.dp), contentAlignment = Alignment.Center) { SignalDot(color) }
+        Spacer(Modifier.width(12.dp))
+        Text(text, style = Type.body, color = p.ink)
+    }
+}
 
 const val STAGE_TAG = "stage"
 
@@ -226,15 +274,17 @@ private fun BoxScope.StageGreeting(visible: Boolean, state: RivetState, voice: B
         enter = fadeIn(tween(Motion.SLOW)) + slideInVertically(tween(Motion.SLOW, easing = Motion.Emphasized)) { it / 4 },
         exit = fadeOut(tween(Motion.QUICK)),
         // Clears the stage hint under it.
-        modifier = Modifier.align(Alignment.BottomStart).padding(start = 20.dp, end = 20.dp, bottom = 52.dp),
+        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(start = gutter(), end = gutter(), bottom = 60.dp),
     ) { Greeting(state, voice) }
 }
 
-/** The date and time, the big greeting, and one plain line on what to do next. */
+/** The greeting's serif, a size up from the type scale's: the hero line of the page. */
+private val GREETING = Type.greeting.copy(fontSize = 52.sp, lineHeight = 54.sp)
+
+/** The date and time as an eyebrow, the greeting set large in the serif, and one quiet line on what comes next. */
 @Composable
 private fun Greeting(state: RivetState, voice: Boolean) {
     val p = LocalPalette.current
-    val locale = LocalConfiguration.current.locales[0]
     val context = LocalContext.current
     val now by produceState(System.currentTimeMillis()) {
         while (true) {
@@ -243,11 +293,12 @@ private fun Greeting(state: RivetState, voice: Boolean) {
         }
     }
     val hour = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)
-    val words = when (hour) {
-        in 5..11 -> "GOOD MORNING"
-        in 12..16 -> "GOOD AFTERNOON"
-        in 17..21 -> "GOOD EVENING"
-        else -> "UP LATE"
+    // The second word is set in the serif's italic: the one emphasised word of the line.
+    val (lead, lift) = when (hour) {
+        in 5..11 -> "Good" to "morning"
+        in 12..16 -> "Good" to "afternoon"
+        in 17..21 -> "Good" to "evening"
+        else -> "Up" to "late"
     }
     val date = DateFormat.format("EEE d MMM", Date(now)).toString()
     val time = DateFormat.getTimeFormat(context).format(Date(now))
@@ -255,47 +306,56 @@ private fun Greeting(state: RivetState, voice: Boolean) {
         state.approvals.isNotEmpty() -> "${state.approvals.size} waiting on you" to p.amb
         state.connection == Connection.Offline -> "Not connected" to p.rec
         state.connection == Connection.Connecting -> "Connecting…" to p.amb
-        voice -> "Tap the mic or pick a key below." to p.ink2
-        else -> "Type below or pick a key." to p.ink2
+        voice -> "Tap the mic or pick a key below." to null
+        else -> "Type below or pick a key." to null
     }
-    Column {
-        Eyebrow("${date.uppercase(locale)} · ${time.uppercase(locale)}", tone = Tone.Accent)
-        Spacer(Modifier.height(6.dp))
-        HeroTitle(words, style = Type.greeting)
-        Spacer(Modifier.height(8.dp))
-        Text(note, style = Type.body, color = tone)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Eyebrow("$date · $time", dot = false)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            buildAnnotatedString {
+                append("$lead ")
+                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(lift) }
+                appendHaloStop()
+            },
+            style = GREETING, color = p.ink, textAlign = TextAlign.Center, inlineContent = haloStopContent(),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // Something that needs the user is a status: a dot in its colour and the words in porcelain.
+            if (tone != null) {
+                SignalDot(tone, live = tone == p.amb)
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(note, style = Type.bodyLg, color = if (tone != null) p.ink else p.ink2, textAlign = TextAlign.Center)
+        }
     }
 }
 
+/** Approvals waiting: a breathing honey dot and a sentence on glass, and the porcelain Review pill. */
 @Composable
 private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
     val p = LocalPalette.current
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(20.dp)
     Row(
-        Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth()
-            .glow(p.amb.copy(alpha = 0.10f), 24.dp, shape)
-            .clip(shape).background(p.card).border(1.dp, p.amb.copy(alpha = 0.5f), shape)
+        Modifier.padding(horizontal = gutter(), vertical = 8.dp).fillMaxWidth()
+            .clip(shape).background(p.hud).border(1.dp, p.amb.copy(alpha = 0.28f), shape)
             .clickable(onClick = onClick)
-            .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+            .padding(start = 20.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Pip(p.amb, live = true, size = 6.dp)
-                Spacer(Modifier.width(6.dp))
-                Eyebrow("NEEDS YOUR OK", tone = Tone.Amber, dot = false)
-            }
-            Text(
-                if (count == 1) "Rivet is waiting on 1 action" else "Rivet is waiting on $count actions",
-                style = Type.title, color = p.ink,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
+        SignalDot(p.amb, live = true)
+        Spacer(Modifier.width(14.dp))
+        Text(
+            if (count == 1) "Emrys is waiting on 1 action" else "Emrys is waiting on $count actions",
+            style = Type.title, color = p.ink, modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(14.dp))
         Keycap("Review", onClick, tone = KeyTone.Accent)
     }
 }
 
-/** The transcript as a sheet over the stage: tap or drag its header to pull it up over Rivet, or back down. */
+/** The transcript as a glass sheet over the stage: tap or drag its header to pull it up over Emrys, or back down. */
 @Composable
 private fun TranscriptSheet(state: RivetState, expanded: Boolean, onExpand: (Boolean) -> Unit, modifier: Modifier, useBrain: (() -> Unit)?) {
     val p = LocalPalette.current
@@ -303,8 +363,14 @@ private fun TranscriptSheet(state: RivetState, expanded: Boolean, onExpand: (Boo
     val working = state.activeTurn != null && state.messages.lastOrNull()?.let { it.fromUser || (it.streaming && it.text.isBlank()) } == true
     var drag by remember { mutableFloatStateOf(0f) }
     val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(Motion.BASE, easing = Motion.Emphasized), label = "chevron")
-    val shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-    Column(modifier.fillMaxWidth().clip(shape).background(p.raised).border(1.dp, p.line, shape)) {
+    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+    val gutter = gutter()
+    Column(
+        modifier.fillMaxWidth().clip(shape).background(p.raised)
+            // A faint porcelain sheen along the top edge, as light catches glass.
+            .background(Brush.verticalGradient(0f to p.ink.copy(alpha = 0.035f), 0.18f to Color.Transparent))
+            .border(1.dp, p.line, shape),
+    ) {
         Column(
             Modifier.fillMaxWidth()
                 .draggable(
@@ -318,26 +384,23 @@ private fun TranscriptSheet(state: RivetState, expanded: Boolean, onExpand: (Boo
                 .clickable { onExpand(!expanded) },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(Modifier.padding(top = 8.dp).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(p.dot))
-            Row(Modifier.fillMaxWidth().height(44.dp).padding(start = 16.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                val live = streaming || working
-                if (live) {
-                    Pip(p.cy, live = true)
-                    Spacer(Modifier.width(4.dp))
-                } else {
-                    Spacer(Modifier.width(4.dp))
-                }
-                Text("CONVERSATION", style = Type.labelSm, color = p.ink, maxLines = 1)
-                Spacer(Modifier.width(10.dp))
+            Box(Modifier.padding(top = 10.dp).size(width = 32.dp, height = 3.dp).clip(RoundedCornerShape(50)).background(p.dot))
+            Row(Modifier.fillMaxWidth().height(48.dp).padding(start = gutter, end = gutter - 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow("Conversation", dot = false)
                 val meta = when {
                     streaming -> "Replying…"
                     working -> "Thinking…"
                     else -> null
                 }
-                if (meta != null) Text(meta, style = Type.labelSm, color = p.ink2, maxLines = 1)
+                if (meta != null) {
+                    Spacer(Modifier.width(14.dp))
+                    SignalDot(p.cy, live = true)
+                    Spacer(Modifier.width(8.dp))
+                    Text(meta, style = Type.labelMd, color = p.ink2, maxLines = 1)
+                }
                 Spacer(Modifier.weight(1f))
                 Icon(
-                    Icons.Outlined.KeyboardArrowUp, contentDescription = if (expanded) "Show Rivet" else "Expand transcript",
+                    Icons.Outlined.KeyboardArrowUp, contentDescription = if (expanded) "Show Emrys" else "Expand transcript",
                     tint = p.ink2, modifier = Modifier.size(22.dp).rotate(turn),
                 )
             }
@@ -353,16 +416,17 @@ const val COMPOSER_TAG = "composer"
 internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier, working: Boolean = false, onUseBrain: (() -> Unit)? = null) {
     val p = LocalPalette.current
     val list = rememberLazyListState()
+    val gutter = gutter()
     // Newest at the bottom (reversed layout): streaming text stays in view while you're at the bottom and
     // never pulls you back down if you scrolled up; a new message brings you to the bottom.
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) list.animateScrollToItem(0)
     }
     if (messages.isEmpty()) {
-        Box(modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+        Box(modifier.fillMaxWidth().padding(horizontal = gutter + 8.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
             Text(
-                error ?: "Ask Rivet to text someone, check your calendar, reply to a message, or run a task.",
-                color = if (error != null) p.rec else p.ink2, style = Type.body,
+                error ?: "Ask Emrys to text someone, check your calendar, reply to a message, or run a task.",
+                color = if (error != null) p.rec else p.ink2, style = Type.bodyLg, textAlign = TextAlign.Center,
             )
         }
         return
@@ -371,14 +435,14 @@ internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifie
         modifier.fillMaxWidth().testTag(CHAT_TAG).fadeTop(list.canScrollForward),
         state = list,
         reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
+        verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.Bottom),
     ) {
-        item(key = "end") { Spacer(Modifier.height(4.dp)) }
-        if (working) item(key = "working") { Working(Modifier.animateItem()) }
+        item(key = "end") { Spacer(Modifier.height(6.dp)) }
+        if (working) item(key = "working") { Working(Modifier.animateItem().padding(horizontal = gutter)) }
         if (error != null) {
             item(key = "error") {
-                Column(Modifier.padding(horizontal = 16.dp)) {
-                    Text(error, color = p.rec, style = Type.body)
+                Column(Modifier.padding(horizontal = gutter), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DotLine(error, p.rec)
                     onUseBrain?.let { UseBrainKey(it) }
                 }
             }
@@ -386,11 +450,12 @@ internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifie
         items(messages.asReversed(), key = { it.id }) { m ->
             when {
                 m.search != null || m.searching != null -> SearchBlock(m.id, m.search, m.searching, Modifier.animateItem())
-                m.system -> SystemLine(m.text, Modifier.animateItem())
-                else -> Bubble(m, Modifier.animateItem())
+                m.system -> SystemLine(m.text, Modifier.animateItem().padding(horizontal = gutter))
+                m.fromUser -> UserBubble(m, Modifier.animateItem().padding(horizontal = gutter))
+                else -> Reply(m, Modifier.animateItem().padding(horizontal = gutter))
             }
         }
-        item(key = "start") { Spacer(Modifier.height(4.dp)) }
+        item(key = "start") { Spacer(Modifier.height(6.dp)) }
     }
 }
 
@@ -400,68 +465,98 @@ private fun Modifier.fadeTop(on: Boolean): Modifier = if (!on) {
 } else {
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
         drawContent()
-        drawRect(Brush.verticalGradient(0f to Color.Transparent, 24.dp.toPx() / size.height to Color.Black), blendMode = BlendMode.DstIn)
+        drawRect(Brush.verticalGradient(0f to Color.Transparent, 28.dp.toPx() / size.height to Color.Black), blendMode = BlendMode.DstIn)
     }
 }
 
-/** Rivet has the message and is working on it, before any reply text arrives. */
+/** Emrys has the message and is working on it, before any reply text arrives: a glacier dot and a band of light crossing the word. */
 @Composable
 private fun Working(modifier: Modifier) {
     val p = LocalPalette.current
-    val phase = if (rememberReduceMotion()) {
+    val sweep = if (rememberReduceMotion()) {
         null
     } else {
-        rememberInfiniteTransition(label = "working").animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "working").value
+        // The light crosses in the first 2.4 s of each 3.2 s, then rests past the word.
+        rememberInfiniteTransition(label = "working").animateFloat(0f, 1.33f, infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "sweep")
     }
-    Row(modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Eyebrow("RIVET", tone = Tone.Cyan)
-        Spacer(Modifier.width(10.dp))
-        repeat(3) { i ->
-            // Each dot brightens in turn.
-            val a = phase?.let { 0.3f + 0.7f * bump((it - i * 0.18f + 1f) % 1f) } ?: 1f
-            Box(Modifier.padding(end = 5.dp).size(6.dp).alpha(a).clip(CircleShape).background(p.cy))
-        }
+    Row(modifier.heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
+        SignalDot(p.cy, live = true)
+        Spacer(Modifier.width(12.dp))
+        Text("Thinking", style = Type.bodyLg, color = p.ink2, modifier = Modifier.shimmer(sweep, p.ink))
     }
 }
 
-/** 0 → 1 → 0 over the first half of [t], then rest. */
-private fun bump(t: Float): Float = if (t < 0.5f) 1f - kotlin.math.abs(t * 4f - 1f) else 0f
+/** A soft band of [light] crossing the content from left to right as [sweep] runs from 0 to 1, after ElevenLabs UI's ShimmeringText. */
+private fun Modifier.shimmer(sweep: State<Float>?, light: Color): Modifier = if (sweep == null) {
+    this
+} else {
+    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
+        drawContent()
+        val band = size.width * 0.4f
+        val x = -band + (size.width + band * 2) * sweep.value
+        drawRect(
+            Brush.horizontalGradient(listOf(Color.Transparent, light, Color.Transparent), startX = x - band, endX = x + band),
+            blendMode = BlendMode.SrcAtop,
+        )
+    }
+}
 
-/** A small line from the app, such as what was just added to the conversation. */
+/** A small line from the app, such as what was just added to the conversation: quiet and centred. */
 @Composable
 private fun SystemLine(text: String, modifier: Modifier) {
     val p = LocalPalette.current
-    Text(text, style = Type.mono, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp))
+    Text(
+        text, style = Type.labelMd, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp),
+    )
+}
+
+/** The user's own words: a halo-tinted bubble on the right, with the results that went with them. */
+@Composable
+private fun UserBubble(m: ChatMessage, modifier: Modifier) {
+    val p = LocalPalette.current
+    val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 8.dp, bottomStart = 22.dp)
+    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier.padding(start = 40.dp).widthIn(max = 300.dp).clip(shape).background(p.accentSoft)
+                .border(1.dp, if (m.failed) p.rec.copy(alpha = 0.6f) else p.accent.copy(alpha = 0.18f), shape)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (m.text.isNotBlank()) ReplyText(AnnotatedString(m.text), caret = false)
+            Attachments(m)
+        }
+        if (m.failed) NotDelivered()
+    }
+}
+
+/** Emrys's reply: formatted text set straight on the page, with no bubble, and a glacier caret while it streams in. */
+@Composable
+private fun Reply(m: ChatMessage, modifier: Modifier) {
+    val p = LocalPalette.current
+    Column(modifier.fillMaxWidth().padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val body = remember(m.text) { Rich.format(m.text.ifBlank { "…" }, p) }
+        ReplyText(body, caret = m.streaming)
+        Attachments(m)
+        if (m.failed) NotDelivered()
+    }
+}
+
+/** The results that went with a message, one quiet line each behind a link mark. */
+@Composable
+private fun Attachments(m: ChatMessage) {
+    val p = LocalPalette.current
+    m.attachments.forEach {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Link, contentDescription = null, tint = p.accent, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(it.title, style = Type.labelLg, color = p.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable
-private fun Bubble(m: ChatMessage, modifier: Modifier) {
-    val p = LocalPalette.current
-    val radius = 18.dp
-    val tail = 6.dp
-    Column(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        horizontalAlignment = if (m.fromUser) Alignment.End else Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        val shape = if (m.fromUser) RoundedCornerShape(radius, radius, tail, radius) else RoundedCornerShape(radius, radius, radius, tail)
-        Column(
-            Modifier.widthIn(max = 300.dp).clip(shape)
-                .background(if (m.fromUser) p.accentSoft else p.card)
-                .border(1.dp, if (m.failed) p.rec.copy(alpha = 0.6f) else if (m.fromUser) p.accent.copy(alpha = 0.30f) else p.edge, shape)
-                .padding(horizontal = 14.dp, vertical = 11.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (!m.fromUser) Eyebrow("RIVET", tone = Tone.Cyan, live = m.streaming)
-            if (!m.fromUser || m.text.isNotBlank()) {
-                val body = remember(m.text, m.fromUser) { if (m.fromUser) AnnotatedString(m.text) else Rich.format(m.text.ifBlank { "…" }, p) }
-                ReplyText(body, caret = m.streaming)
-            }
-            m.attachments.forEach { Text("+ ${it.title}", style = Type.mono, color = p.accent, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-        }
-        if (m.failed) StatusTag("NOT DELIVERED", Tone.Red)
-    }
-}
+private fun NotDelivered() = StatusTag("Not delivered", Tone.Red)
 
 /** The message text as one node; while it streams, a blinking caret is drawn after its last character. */
 @Composable
@@ -479,9 +574,9 @@ private fun ReplyText(body: AnnotatedString, caret: Boolean) {
             val l = layout
             if (caret && l != null && l.lineCount > 0) {
                 val line = l.lineCount - 1
-                val top = l.getLineTop(line) + 3.dp.toPx()
-                val bottom = l.getLineBottom(line) - 3.dp.toPx()
-                drawRect(p.cy.copy(alpha = blink), Offset(l.getLineRight(line) + 3.dp.toPx(), top), Size(2.dp.toPx(), bottom - top))
+                val top = l.getLineTop(line) + 4.dp.toPx()
+                val bottom = l.getLineBottom(line) - 4.dp.toPx()
+                drawRect(p.cy.copy(alpha = blink), Offset(l.getLineRight(line) + 3.dp.toPx(), top), Size(1.5.dp.toPx(), bottom - top))
             }
         },
     )
@@ -489,17 +584,19 @@ private fun ReplyText(body: AnnotatedString, caret: Boolean) {
 
 const val SUGGESTIONS_TAG = "suggestions"
 
-/** A result waiting to go with the next message to Rivet's own brain; × takes it off. */
+/** A result waiting to go with the next message to Emrys's own brain, in the halo of the user's own words; × takes it off. */
 @Composable
 private fun AttachedChip(item: ContextItem, onRemove: () -> Unit) {
     val p = LocalPalette.current
     val pill = RoundedCornerShape(50)
     Row(
-        Modifier.heightIn(min = 48.dp).widthIn(max = 240.dp).clip(pill).background(p.accentSoft).border(1.dp, p.accent.copy(alpha = 0.35f), pill)
-            .padding(start = 14.dp),
+        Modifier.heightIn(min = 48.dp).widthIn(max = 260.dp).clip(pill).background(p.accentSoft).border(1.dp, p.accent.copy(alpha = 0.22f), pill)
+            .padding(start = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("+ ${item.title}", style = Type.chip, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Icon(Icons.Outlined.Link, contentDescription = null, tint = p.accent, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(item.title, style = Type.labelLg, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         Box(
             Modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = "Remove") { onRemove() }
                 .semantics { contentDescription = "Remove ${item.title}" },
@@ -508,7 +605,173 @@ private fun AttachedChip(item: ContextItem, onRemove: () -> Unit) {
     }
 }
 
-/** The dock: a task latch and quick requests, then the composer with its talk or send key. */
+/** A quick request: a soft outline pill in Geist, its touch area kept at 48dp. */
+@Composable
+private fun QuickPill(text: String, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val pill = RoundedCornerShape(50)
+    Box(
+        Modifier.minimumInteractiveComponentSize()
+            .clickable(interactionSource = source, indication = null, role = Role.Button) {
+                haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.height(38.dp).clip(pill).background(if (pressed) p.cardHi else Color.Transparent)
+                .border(1.dp, if (pressed) p.ink.copy(alpha = 0.28f) else p.lineHi, pill).padding(horizontal = 16.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text(text, style = Type.labelLg, color = p.ink, maxLines = 1) }
+    }
+}
+
+/**
+ * The Task latch: a quiet toggle pill. Off, a faint well with a grey bolt; on, it takes the halo, since what follows
+ * is the user's goal for a background task.
+ */
+@Composable
+private fun TaskLatch(on: Boolean, onToggle: () -> Unit) {
+    val p = LocalPalette.current
+    val haptics = LocalHapticFeedback.current
+    val source = remember { MutableInteractionSource() }
+    val pill = RoundedCornerShape(50)
+    val fill by animateColorAsState(if (on) p.accentSoft else p.edgeSoft, tween(Motion.BASE), label = "task")
+    val line by animateColorAsState(if (on) p.accent.copy(alpha = 0.5f) else p.line, tween(Motion.BASE), label = "task-line")
+    Box(
+        Modifier.minimumInteractiveComponentSize().semantics { selected = on }
+            .clickable(interactionSource = source, indication = null, role = Role.Button) {
+                haptics.performHapticFeedback(if (on) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+                onToggle()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            Modifier.height(38.dp).clip(pill).background(fill).border(1.dp, line, pill).padding(start = 12.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Bolt, contentDescription = null, tint = if (on) p.accent else p.ink2, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Task", style = Type.labelLg, color = if (on) p.ink else p.ink2, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * What is being typed, helped along: Brave's suggestions as a quiet list on glass, each filling in the field, and
+ * Brave's spelling correction under them.
+ */
+@Composable
+private fun TypingList(query: String, suggestions: List<String>, corrected: String?, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    val shape = RoundedCornerShape(20.dp)
+    Column(modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, p.line, shape).padding(vertical = 4.dp)) {
+        if (suggestions.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().testTag(SUGGESTIONS_TAG)) {
+                suggestions.forEachIndexed { i, s ->
+                    if (i > 0) Rule(Modifier.padding(start = 52.dp, end = 16.dp), color = p.line)
+                    TypingRow(Icons.Outlined.Search, { onPick(s) }, trailing = Icons.Outlined.NorthWest) {
+                        // The letters already typed stay grey; the rest of the suggestion is in porcelain.
+                        val typed = query.trim()
+                        Text(
+                            buildAnnotatedString {
+                                if (typed.isNotEmpty() && s.startsWith(typed, ignoreCase = true)) {
+                                    withStyle(SpanStyle(color = p.ink2)) { append(s.substring(0, typed.length)) }
+                                    append(s.substring(typed.length))
+                                } else {
+                                    append(s)
+                                }
+                            },
+                            style = Type.bodyLg, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+        if (corrected != null) {
+            if (suggestions.isNotEmpty()) Rule(Modifier.padding(horizontal = 16.dp), color = p.line)
+            TypingRow(Icons.Outlined.Spellcheck, { onPick(corrected) }) {
+                Text(
+                    buildAnnotatedString {
+                        append("Did you mean ")
+                        withStyle(SpanStyle(color = p.accent, fontWeight = FontWeight.Medium)) { append(corrected) }
+                        append("?")
+                    },
+                    style = Type.bodyLg, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TypingRow(icon: ImageVector, onClick: () -> Unit, trailing: ImageVector? = null, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).background(if (pressed) p.edgeSoft else Color.Transparent)
+            .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
+            .padding(start = 18.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = p.ink2, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(16.dp))
+        Box(Modifier.weight(1f)) { content() }
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            Icon(trailing, contentDescription = null, tint = p.ink2.copy(alpha = 0.7f), modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+/**
+ * The composer: a rounded field card on a hairline that takes a halo ring, border and caret while focused.
+ * [fieldModifier] goes on the text field itself.
+ */
+@Composable
+private fun ComposerField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    onSend: () -> Unit,
+    modifier: Modifier = Modifier,
+    fieldModifier: Modifier = Modifier,
+) {
+    val p = LocalPalette.current
+    val source = remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(26.dp)
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.then(fieldModifier),
+        singleLine = false,
+        maxLines = 5,
+        textStyle = Type.bodyLg.copy(color = p.ink),
+        cursorBrush = SolidColor(p.accent),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+        keyboardActions = KeyboardActions(onSend = { onSend() }),
+        interactionSource = source,
+        decorationBox = { inner ->
+            Box(
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).ring(p.accent.copy(alpha = 0.16f), shape, focused, gap = 2.dp)
+                    .clip(shape).background(p.field)
+                    .border(1.dp, if (focused) p.accent.copy(alpha = 0.55f) else p.lineHi, shape)
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (value.isEmpty()) Text(placeholder, style = Type.bodyLg, color = p.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                inner()
+            }
+        },
+    )
+}
+
+/** The dock: the Task latch and quick requests, then the composer with its talk or send key. */
 @Composable
 private fun Dock(
     keyboard: Boolean,
@@ -522,6 +785,7 @@ private fun Dock(
     onListen: () -> Unit,
 ) {
     val p = LocalPalette.current
+    val gutter = gutter()
     var text by rememberSaveable { mutableStateOf("") }
     var asTask by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
@@ -543,48 +807,38 @@ private fun Dock(
         }
     }
     val help = rememberTypingHelp(text, !asTask, suggester)
-    Column(Modifier.fillMaxWidth().background(p.bg)) {
-        Rule(color = p.line)
+    Column(Modifier.fillMaxWidth().background(p.bg).padding(top = 4.dp)) {
         if (chips.isNotEmpty()) {
-            ChipRail(Modifier.padding(top = 12.dp), start = 16.dp) {
+            ChipRail(Modifier.padding(top = 10.dp), start = gutter) {
                 items(chips, key = { it.url }) { chip -> AttachedChip(chip) { onRemoveChip(chip) } }
             }
         }
         val suggestions = help.suggestions.take(5).takeIf { text.trim().length >= 2 }.orEmpty()
-        if (suggestions.isNotEmpty()) {
-            ChipRail(Modifier.padding(top = 12.dp).testTag(SUGGESTIONS_TAG), start = 16.dp) {
-                items(suggestions, key = { it }) { s -> PillChip(s, { text = s }, Modifier.minimumInteractiveComponentSize(), leading = Icons.Outlined.Search) }
-            }
-        } else if (!keyboard) {
-            ChipRail(Modifier.padding(top = 12.dp), start = 16.dp) {
-                item(key = "task") {
-                    PillChip(
-                        "Task", { asTask = !asTask }, Modifier.minimumInteractiveComponentSize().semantics { selected = asTask },
-                        leading = Icons.Outlined.Bolt, selected = asTask,
-                    )
-                }
-                items(Quick.entries, key = { it.name }) { q -> PillChip(q.label, { onSend(q.prompt, false) }, Modifier.minimumInteractiveComponentSize()) }
+        if (suggestions.isEmpty() && !keyboard) {
+            ChipRail(Modifier.padding(top = 6.dp), start = gutter) {
+                item(key = "task") { TaskLatch(asTask) { asTask = !asTask } }
+                item(key = "rule") { Box(Modifier.padding(horizontal = 4.dp).size(width = 1.dp, height = 20.dp).background(p.lineHi)) }
+                items(Quick.entries, key = { it.name }) { q -> QuickPill(q.label, { onSend(q.prompt, false) }) }
             }
         }
-        help.corrected?.let { DidYouMean(it, { picked -> text = picked }, Modifier.padding(horizontal = 20.dp)) }
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.Bottom) {
-            RecessedField(
+        if (suggestions.isNotEmpty() || help.corrected != null) {
+            TypingList(text, suggestions, help.corrected, { picked -> text = picked }, Modifier.padding(start = gutter, end = gutter, top = 10.dp))
+        }
+        Row(Modifier.fillMaxWidth().padding(start = gutter, end = gutter - 4.dp, top = 10.dp, bottom = 14.dp), verticalAlignment = Alignment.Bottom) {
+            ComposerField(
                 text, { text = it },
+                placeholder = if (asTask) "Describe the goal for a background task…" else "Ask Emrys anything",
+                onSend = { send() },
                 modifier = Modifier.weight(1f),
-                placeholder = if (asTask) "Describe the goal for a background task…" else "Ask Rivet anything",
-                singleLine = false,
-                maxLines = 5,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { send() }),
                 fieldModifier = Modifier.focusRequester(focus).testTag(COMPOSER_TAG),
             )
             Spacer(Modifier.width(10.dp))
             // A field-high slot: the talk key's halo spills past it without changing the row's height.
-            Box(Modifier.size(width = 52.dp, height = 48.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(width = 56.dp, height = 52.dp), contentAlignment = Alignment.Center) {
                 val unbounded = Modifier.wrapContentSize(unbounded = true)
                 when {
                     sendable -> SendKey(send, unbounded)
-                    voice -> HaloTalkKey(if (listening) TalkState.Listening else TalkState.Idle, onListen, "Speak to Rivet", unbounded)
+                    voice -> HaloTalkKey(if (listening) TalkState.Listening else TalkState.Idle, onListen, "Speak to Emrys", unbounded)
                     else -> Box(
                         unbounded.alpha(0.4f).clearAndSetSemantics {
                             contentDescription = "Send"
