@@ -45,9 +45,9 @@ import com.hiron.rivet.core.RivetState
 const val MINI_STAGE_TAG = "mini-stage"
 
 /**
- * Rivet in a short band at the top of a screen that isn't Home, so it stays in view. Tapping it runs [onOpen]
- * when given (back to Home); without it the band only shows Rivet. It steps aside while the keyboard is up and
- * on short windows. [layer] is where the band sits.
+ * Emrys in a short glass band at the top of a screen that isn't Home, so it stays in view. Tapping it runs
+ * [onOpen] when given (back to Home); without it the band only shows Emrys. It steps aside while the keyboard is up
+ * and on short windows. [layer] is where the band sits.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -78,8 +78,8 @@ fun MiniStage(
             Modifier.testTag(MINI_STAGE_TAG).fillMaxWidth().background(p.bg)
                 .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp).height(h),
         ) {
-            StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, mood = moodColor(state.activity)) {
-                // A leaving band lets go of the page at once, so the screen it uncovers gets Rivet back.
+            StageFrame(Modifier.fillMaxSize(), framed = true, hint = null, mood = moodColor(state.activity), radius = 22.dp) {
+                // A leaving band lets go of the page at once, so the screen it uncovers gets Emrys back.
                 if (shown) RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Card, layer = layer)
             }
             // The cover sits over the WebView, so a drag or pinch in the band never orbits the robot.
@@ -94,7 +94,7 @@ fun MiniStage(
     }
 }
 
-private const val OPEN_LABEL = "Open Rivet"
+private const val OPEN_LABEL = "Open Emrys"
 private val FULL_BAND = 96.dp
 private val COMPACT_BAND = 72.dp
 
@@ -105,24 +105,24 @@ private fun bandHeight(window: Dp): Dp? = when {
     else -> null
 }
 
-/** What Rivet is doing, in one plain sentence for the band's screen reader label. */
+/** What Emrys is doing, in one plain sentence for the band's screen reader label. */
 internal fun stageStatus(state: RivetState): String = when (state.connection) {
-    Connection.Offline -> "Rivet is offline."
-    Connection.Connecting -> "Rivet is connecting."
+    Connection.Offline -> "Emrys is offline."
+    Connection.Connecting -> "Emrys is connecting."
     Connection.Online -> when (state.liveCall?.status) {
-        LiveCallStatus.Answering, LiveCallStatus.Transferring -> "Rivet is answering a call."
+        LiveCallStatus.Answering, LiveCallStatus.Transferring -> "Emrys is answering a call."
         LiveCallStatus.Ended, null -> when (state.activity) {
-            Activity.Idle -> "Rivet is ready."
-            Activity.Listening -> "Rivet is listening."
-            Activity.Thinking -> "Rivet is thinking."
-            Activity.Searching -> "Rivet is searching the web."
-            Activity.Working -> "Rivet is working on it."
-            Activity.Texting -> "Rivet is writing a text."
-            Activity.Emailing -> "Rivet is writing an email."
-            Activity.Calling -> "Rivet is on a call."
-            Activity.Waiting -> "Rivet needs your OK."
-            Activity.Done -> "Rivet is done."
-            Activity.Failed -> "Rivet didn't finish."
+            Activity.Idle -> "Emrys is ready."
+            Activity.Listening -> "Emrys is listening."
+            Activity.Thinking -> "Emrys is thinking."
+            Activity.Searching -> "Emrys is searching the web."
+            Activity.Working -> "Emrys is working on it."
+            Activity.Texting -> "Emrys is writing a text."
+            Activity.Emailing -> "Emrys is writing an email."
+            Activity.Calling -> "Emrys is on a call."
+            Activity.Waiting -> "Emrys needs your OK."
+            Activity.Done -> "Emrys is done."
+            Activity.Failed -> "Emrys didn't finish."
         }
     }
 }
