@@ -96,6 +96,7 @@ class RivetAgent(
     private var lips = Job()
     private var lastChunk: Job? = null
     private var lastMode: AgentMode? = null
+    private val levels = AgentLevels(robot)
 
     /** The mode of the session that is starting or running; null when there is none. */
     @Volatile
@@ -195,6 +196,10 @@ class RivetAgent(
         hush()
         val ending = session
         session = null
+        if (mode == AgentMode.Voice) {
+            levels.reset()
+            robot(RobotCommand("voice", listOf(null)))
+        }
         mode = null
         ending?.let(::end)
         update { if (it.activity == Activity.Listening) it.copy(activity = Activity.Idle) else it }
@@ -232,10 +237,15 @@ class RivetAgent(
                     if (mode != heard) {
                         heard = mode
                         if (mode == ConversationMode.LISTENING) robot(RobotCommand("quiet", emptyList()))
+                        if (voice) robot(RobotCommand("voice", listOf(if (mode == ConversationMode.LISTENING) "listening" else "speaking")))
                         activity(if (mode == ConversationMode.LISTENING) Activity.Listening else Activity.Idle)
                     }
                 }
             },
+            // Real levels for the stage's voice layer: the agent's voice as the call hears it, and how surely the user
+            // is speaking (the agent's voice activity score). Only voice sessions have audio.
+            onAudioLevelChanged = { level -> if (voice) onMain(gen) { levels.output(level) } },
+            onVadScore = { score -> if (voice) onMain(gen) { levels.input(score) } },
             onStatusChange = { status ->
                 if (status == ConversationStatus.DISCONNECTED || status == ConversationStatus.ERROR) onMain(gen) { activity(Activity.Idle) }
             },
@@ -307,6 +317,49 @@ class RivetAgent(
 
     companion object {
         const val NEEDS_MICROPHONE = "Rivet needs the microphone to talk. Tap the mic to allow it."
+    }
+}
+
+/**
+ * Passes a voice session's real audio levels to the robot stage (`window.rivet.levels(output, input)`, 0..1, null for
+ * a level not heard yet). The SDK reports the agent's level every 50 ms, so only a change of [STEP] hundredths or more
+ * is sent; a value that isn't a number is ignored. Main thread only.
+ */
+internal class AgentLevels(private val robot: (RobotCommand) -> Unit) {
+    // In hundredths, so a step is compared exactly.
+    private var output: Int? = null
+    private var input: Int? = null
+
+    fun output(level: Float) {
+        hundredths(level)?.let { send(it, input) }
+    }
+
+    fun input(score: Float) {
+        hundredths(score)?.let { send(output, it) }
+    }
+
+    /** Forgets the levels; the next session starts from nothing heard. */
+    fun reset() {
+        output = null
+        input = null
+    }
+
+    private fun send(nextOutput: Int?, nextInput: Int?) {
+        if (moved(output, nextOutput) || moved(input, nextInput)) {
+            output = nextOutput
+            input = nextInput
+            robot(RobotCommand("levels", listOf(nextOutput?.div(100.0), nextInput?.div(100.0))))
+        }
+    }
+
+    private fun moved(before: Int?, after: Int?) =
+        (before == null) != (after == null) || (before != null && after != null && kotlin.math.abs(after - before) >= STEP)
+
+    private fun hundredths(value: Float): Int? = value.takeIf { it.isFinite() }?.let { Math.round(it.coerceIn(0f, 1f) * 100) }
+
+    companion object {
+        /** The smallest change sent, in hundredths. */
+        const val STEP = 2
     }
 }
 

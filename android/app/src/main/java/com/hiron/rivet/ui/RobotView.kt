@@ -33,6 +33,22 @@ import org.json.JSONObject
 private const val ORIGIN = "https://appassets.androidplatform.net"
 private const val PAGE = "$ORIGIN/assets/rivet/index.html"
 
+/** The noise texture the stage's ElevenLabs Orb loads by this exact URL; the page gets the bundled copy. */
+internal const val ORB_NOISE_URL = "https://storage.googleapis.com/eleven-public-cdn/images/perlin-noise.png"
+private const val ORB_NOISE_ASSET = "rivet/vendor/perlin-noise.png"
+
+/**
+ * The one request outside the app's assets the robot page may make: a GET for [ORB_NOISE_URL], answered from the
+ * bundled copy (assets/rivet/vendor/SOURCE.txt). three.js loads it as a `crossorigin="anonymous"` image, so the
+ * answer allows the page's origin; without it WebGL can't use the texture. Anything else is null, so it stays blocked.
+ */
+internal fun stageAsset(context: Context, method: String, url: String): WebResourceResponse? {
+    if (method != "GET" || url != ORB_NOISE_URL) return null
+    return WebResourceResponse(
+        "image/png", null, 200, "OK", mapOf("Access-Control-Allow-Origin" to ORIGIN), context.assets.open(ORB_NOISE_ASSET),
+    )
+}
+
 /** How the page frames Rivet; [wire] is the `window.rivet.focus` mode it sends. */
 enum class RobotFocus(val wire: String) {
     /** A full-height stage (Home with a conversation). */
@@ -151,9 +167,9 @@ fun RobotView(
 }
 
 /**
- * Owns the WebView. Pages load only from the app's assets (no network, no file access) and talk back only
- * through the `RivetHost` listener for the asset origin. Commands sent before the page says `ready` are
- * dropped in favour of a full state replay once it does.
+ * Owns the WebView. Pages load only from the app's assets (no network, no file access; the Orb's noise texture
+ * comes from them too, see [stageAsset]) and talk back only through the `RivetHost` listener for the asset origin.
+ * Commands sent before the page says `ready` are dropped in favour of a full state replay once it does.
  */
 internal class RobotHost(
     context: Context,
@@ -179,7 +195,9 @@ internal class RobotHost(
             .build()
         webViewClient = object : WebViewClientCompat() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                loader.shouldInterceptRequest(request.url) ?: WebResourceResponse("text/plain", "utf-8", 404, "blocked", null, null)
+                loader.shouldInterceptRequest(request.url)
+                    ?: stageAsset(context, request.method, request.url.toString())
+                    ?: WebResourceResponse("text/plain", "utf-8", 404, "blocked", null, null)
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
 

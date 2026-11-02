@@ -14,6 +14,27 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 `app/src/main/assets/rivet/index.html` is generated from `robot/Rivet_the_Robot.html` and `robot/bridge.js`:
 `python3 tools/build_robot_asset.py` rebuilds it, and `--check` fails if it is stale.
 
+### The stage layer (ElevenLabs UI)
+
+The robot page carries a voice layer from `stage-ui/`, a small Vite + React + Tailwind v4 project set up for shadcn.
+The ElevenLabs UI components `orb`, `shimmering-text` and `matrix` are installed verbatim with the official CLI and
+never edited; `npm run verify:components` checks them byte for byte against upstream `elevenlabs/ui@3a28ebab`. Our own
+code composes them: the Orb as a soft backlight behind Emrys, a shimmering caption while Emrys works, and the Matrix
+light language in the robot's armor and floor slots and on the mini band (`src/matrix/`, `docs/design/EMRYS_MATRIX.md`).
+It reads `window.rivet.stageInfo()` and `speech()` from `robot/bridge.js`, which also takes the real voice signals the
+app sends (`rivet.voice` and `rivet.levels`, from `voice/RivetAgent.kt`).
+
+The layer is built into `app/src/main/assets/rivet/vendor/stage-ui.{js,css}` and checked in, so the asset builder
+needs no Node. After changing it:
+
+```bash
+cd stage-ui && npm ci && npm run build && npm test   # Playwright on the real page
+cd .. && python3 tools/build_robot_asset.py
+```
+
+The Orb's noise texture is bundled (`assets/rivet/vendor/perlin-noise.png`, provenance in `SOURCE.txt`) and
+`ui/RobotView.kt` answers its one URL from it; every other request outside the app's assets stays blocked.
+
 ## Install (sideload)
 
 1. Copy the APK to the phone and open it, allowing installs from that source; or `adb install app-release.apk`.
@@ -37,6 +58,9 @@ There is no emulator in the build environment, so these are checked on a real ph
 - [ ] Rivet stays in view on Activity, Settings and the voice setup (a short band under the header); tapping the band on Activity or Settings opens Home.
 - [ ] Switching tabs never reloads the robot (no turntable flash on Home after the first load); the mouth keeps moving with read-aloud replies and ElevenLabs speech on every tab.
 - [ ] With Remove animations on, the band appears and disappears without motion and the robot's idle sway and showreel stay off.
+- [ ] The stage layer: a soft Orb glows behind Emrys in the mood colour (also in airplane mode), the caption reads
+      "Thinking", "Working", … while it works, the Matrix lights the chest, visor, gauntlets and floor, and the mini
+      band shows the state's glyph; in an ElevenLabs voice session the Orb follows the agent's voice.
 - [ ] "What's on my calendar tomorrow?" lists events (calendar_list).
 - [ ] "Text <contact> I'm running late": contacts_search, then an approval card; Approve sends; the text appears in Messages.
 - [ ] Deny the same request: nothing is sent and Rivet says so.

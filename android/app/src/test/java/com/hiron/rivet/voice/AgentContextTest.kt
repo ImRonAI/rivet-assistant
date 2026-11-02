@@ -10,6 +10,7 @@ import com.hiron.rivet.core.GatewayConfig
 import com.hiron.rivet.core.ImageItem
 import com.hiron.rivet.core.Protocol
 import com.hiron.rivet.core.RivetState
+import com.hiron.rivet.core.RobotCommand
 import com.hiron.rivet.core.RuleSet
 import com.hiron.rivet.core.SearchKind
 import com.hiron.rivet.core.WebItem
@@ -39,10 +40,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Contextual updates on the ElevenLabs path: "Add to Rivet" and the conversation so far, their words, and that they
- * reach a session started for them.
+ * reach a session started for them; and what a voice session tells the robot stage (whose turn it is, real levels).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -258,5 +260,112 @@ class AgentContextTest {
         checkNotNull(config).onConnect?.invoke("conv-1")
         idleUntil { session.sent.size == 2 }
         assertEquals("update:" + AgentHistory.recap(earlier), session.sent.last())
+    }
+
+    @Test
+    fun levelsReachTheStageOnlyWhenTheyMove() {
+        val sent = mutableListOf<RobotCommand>()
+        val levels = AgentLevels { sent += it }
+        levels.output(0.42f)
+        levels.output(0.43f) // under a step: the stage keeps 0.42
+        levels.output(0.44f)
+        levels.output(Float.NaN) // not a level
+        levels.input(0.9f)
+        levels.output(1.7f) // held to 1
+        levels.reset()
+        levels.input(0.0f)
+        assertEquals(
+            listOf(
+                RobotCommand("levels", listOf(0.42, null)),
+                RobotCommand("levels", listOf(0.44, null)),
+                RobotCommand("levels", listOf(0.44, 0.9)),
+                RobotCommand("levels", listOf(1.0, 0.9)),
+                RobotCommand("levels", listOf(null, 0.0)),
+            ),
+            sent,
+        )
+        assertEquals("window.rivet && window.rivet.levels(0.44,0.9);", sent[2].script())
+        assertEquals("window.rivet && window.rivet.levels(null,0.0);", sent[4].script())
+    }
+
+    @Test
+    fun aVoiceSessionTellsTheStageWhoseTurnItIsAndItsRealLevels() {
+        shadowOf(ApplicationProvider.getApplicationContext<Application>()).grantPermissions(Manifest.permission.RECORD_AUDIO)
+        server.enqueue(MockResponse().setBody(JSONObject().put("agent_id", "agent_voice").put("conversation_token", "token").toString()))
+        server.start()
+        val robot = CopyOnWriteArrayList<RobotCommand>()
+        var config: ConversationConfig? = null
+        val agent = RivetAgent(
+            ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
+            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            update = {}, robot = { robot += it }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            search = { Result.failure(IllegalStateException("unused")) },
+            connect = { c, _ ->
+                config = c
+                FakeSession()
+            },
+        )
+        fun idleUntil(done: () -> Boolean) {
+            val end = System.currentTimeMillis() + 10_000
+            while (!done() && System.currentTimeMillis() < end) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(20)
+            }
+        }
+        agent.start(AgentMode.Voice)
+        idleUntil { config != null }
+        val live = checkNotNull(config)
+        live.onModeChange?.invoke(ConversationMode.SPEAKING)
+        live.onModeChange?.invoke(ConversationMode.SPEAKING) // the SDK repeats the mode with every packet
+        live.onAudioLevelChanged?.invoke(0.42f)
+        live.onAudioLevelChanged?.invoke(0.43f)
+        live.onVadScore?.invoke(0.9f)
+        live.onModeChange?.invoke(ConversationMode.LISTENING)
+        val stage = { robot.filter { it.method == "voice" || it.method == "levels" } }
+        idleUntil { stage().size == 4 }
+        agent.stop()
+        assertEquals(
+            listOf(
+                RobotCommand("voice", listOf("speaking")),
+                RobotCommand("levels", listOf(0.42, null)),
+                RobotCommand("levels", listOf(0.42, 0.9)),
+                RobotCommand("voice", listOf("listening")),
+                RobotCommand("voice", listOf(null)),
+            ),
+            stage(),
+        )
+        assertEquals("window.rivet && window.rivet.voice(null);", stage().last().script())
+    }
+
+    @Test
+    fun aTextSessionSendsTheStageNoVoice() {
+        server.enqueue(MockResponse().setBody(JSONObject().put("agent_id", "agent_text").put("signed_url", "wss://example/signed").toString()))
+        server.start()
+        val robot = CopyOnWriteArrayList<RobotCommand>()
+        var config: ConversationConfig? = null
+        val agent = RivetAgent(
+            ApplicationProvider.getApplicationContext(), OkHttpClient(), { GatewayConfig(server.url("/").toString(), "t", "s1") },
+            run = { _, _ -> ToolResult.ok("") }, approve = { Protocol.Answer(false) }, rules = { RuleSet.EMPTY }, setRule = { _, _ -> },
+            update = {}, robot = { robot += it }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            search = { Result.failure(IllegalStateException("unused")) },
+            connect = { c, _ ->
+                config = c
+                FakeSession()
+            },
+        )
+        agent.switchMode(AgentMode.Text)
+        val end = System.currentTimeMillis() + 10_000
+        while (config == null && System.currentTimeMillis() < end) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+        val live = checkNotNull(config)
+        live.onModeChange?.invoke(ConversationMode.SPEAKING)
+        live.onAudioLevelChanged?.invoke(0.5f)
+        live.onVadScore?.invoke(0.5f)
+        shadowOf(Looper.getMainLooper()).idle()
+        agent.stop()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(robot.none { it.method == "voice" || it.method == "levels" })
     }
 }
