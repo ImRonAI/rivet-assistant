@@ -227,7 +227,7 @@ class ReviewScreensTest {
     fun recommendedSettingsSheet() {
         var applied: List<Recommendation>? = null
         page { RecommendedSheet(recommendations, onApply = { applied = it }, onDismiss = {}) }
-        compose.onNodeWithText("Rivet suggests 7 changes:").assertIsDisplayed()
+        compose.onNodeWithText("Emrys suggests 7 changes").assertIsDisplayed()
         compose.mainClock.advanceTimeBy(600)
         shot(compose, compose.activity, "review-recommended-sheet")
         compose.onNodeWithContentDescription("Quiet assistant overlay").performClick()
@@ -247,7 +247,7 @@ class ReviewScreensTest {
     fun nothingToRecommend() {
         var dismissed = false
         page { RecommendedSheet(emptyList(), onApply = {}, onDismiss = { dismissed = true }) }
-        compose.onNodeWithText("Everything already matches Rivet's recommendations.").assertIsDisplayed()
+        compose.onNodeWithText("Everything already matches Emrys's recommendations.").assertIsDisplayed()
         compose.onNodeWithText("Done").performClick()
         assertTrue(dismissed)
     }

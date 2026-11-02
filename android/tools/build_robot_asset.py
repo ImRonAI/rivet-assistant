@@ -19,13 +19,13 @@ BRIDGE = ROOT / "robot" / "bridge.js"
 OUT = ROOT / "app" / "src" / "main" / "assets" / "rivet" / "index.html"
 
 FONTS = [
-    ("Big Shoulders Display", 700, "big_shoulders_display_bold"),
-    ("Big Shoulders Display", 800, "big_shoulders_display_extrabold"),
-    ("IBM Plex Mono", 400, "ibm_plex_mono_regular"),
-    ("IBM Plex Mono", 500, "ibm_plex_mono_medium"),
-    ("IBM Plex Sans", 400, "ibm_plex_sans_regular"),
-    ("IBM Plex Sans", 500, "ibm_plex_sans_medium"),
-    ("IBM Plex Sans", 600, "ibm_plex_sans_semibold"),
+    ("Instrument Serif", 400, "normal", "instrument_serif_regular"),
+    ("Instrument Serif", 400, "italic", "instrument_serif_italic"),
+    ("Geist", 400, "normal", "geist_regular"),
+    ("Geist", 500, "normal", "geist_medium"),
+    ("Geist", 600, "normal", "geist_semibold"),
+    ("Geist Mono", 400, "normal", "geist_mono_regular"),
+    ("Geist Mono", 500, "normal", "geist_mono_medium"),
 ]
 EMBEDDED_CSS = (
     "html.embedded .hud,html.embedded .dock,html.embedded .hint{display:none}"
@@ -41,9 +41,9 @@ def build(source: str, bridge: str) -> str:
     for link in links:
         source = source.replace(link, "", 1)
     faces = "".join(
-        f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:normal;font-display:swap;"
+        f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:{style};font-display:swap;"
         f"src:url(fonts/{file}.ttf) format('truetype')}}"
-        for family, weight, file in FONTS
+        for family, weight, style, file in FONTS
     )
     source = source.replace("<style>", f"<style>{faces}{EMBEDDED_CSS}", 1)
     source = source.replace("<html", '<html class="embedded"', 1) if "<html class=" not in source else source

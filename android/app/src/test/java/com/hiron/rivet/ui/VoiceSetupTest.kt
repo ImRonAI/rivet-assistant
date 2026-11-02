@@ -140,7 +140,7 @@ class VoiceSetupTest {
         compose.onNode(hasSetTextAction()).performTextInput("x".repeat(300))
         compose.onNodeWithText("280 / 280").assertExists()
         compose.onNodeWithText("Clear").performClick()
-        compose.onNodeWithText("Vintage Radio").performClick()
+        compose.onNodeWithText("Vintage radio").performClick()
         val fill = "A warm, slightly crackly mid-century radio announcer who speaks clearly and kindly."
         compose.onNodeWithText(fill).assertExists()
         compose.onNodeWithText("${fill.length} / 280").assertExists()
@@ -157,19 +157,19 @@ class VoiceSetupTest {
         val studio = FakeStudio(label = "Copper")
         show(studio, VoiceScreen.Presets)
         compose.onNodeWithText("Choose from 8 ready-made voices.").assertExists()
-        compose.onNodeWithText("ACTIVE").assertExists()
+        compose.onNodeWithText("Active").assertExists()
         shot(compose, compose.activity, "v3-voice-presets")
-        compose.onNodeWithText("DEEP").performClick()
+        compose.onNodeWithText("Deep").performClick()
         compose.onNodeWithText("Copper").assertDoesNotExist()
         compose.onNodeWithText("Basalt").assertExists().performClick()
         compose.onNodeWithText("Basalt").assertExists()
-        compose.onNodeWithText("ALL").performClick()
+        compose.onNodeWithText("All").performClick()
         compose.onNodeWithText("Copper").assertExists()
         compose.onNodeWithText("Continue").performClick()
         val choice = studio.chosen.single() as VoiceChoice.Preset
         assertEquals("basalt", choice.preset.id)
         compose.onNodeWithText("Basalt").assertExists()
-        compose.onNodeWithText("RIVET'S VOICE.").assertExists()
+        compose.onNodeWithText("Emrys's voice.").assertExists()
     }
 
     @Test
@@ -194,14 +194,14 @@ class VoiceSetupTest {
         compose.mainClock.autoAdvance = false
         show(studio, VoiceScreen.Record)
         advance(1_000)
-        compose.onNodeWithText("TAP TO RECORD").assertExists()
+        compose.onNodeWithText("Tap to record").assertExists()
         shot(compose, compose.activity, "v4-voice-record")
 
         compose.onNodeWithContentDescription("Start recording").performClick()
         assertEquals(1, studio.recorder.starts)
         advance(14_000)
-        compose.onNodeWithText("CAPTURING.").assertExists()
-        compose.onNodeWithText("LEVEL GOOD").assertExists()
+        compose.onNodeWithText("Capturing.").assertExists()
+        compose.onNodeWithText("Level good").assertExists()
         shot(compose, compose.activity, "v5-voice-capturing")
         compose.onNodeWithText("Show the line to read").assertExists()
 
@@ -209,7 +209,7 @@ class VoiceSetupTest {
         advance(1_000)
         compose.mainClock.autoAdvance = true
         assertEquals(1, studio.recorder.stops)
-        compose.onNodeWithText("SAMPLE REVIEW.").assertExists()
+        compose.onNodeWithText("Sample review.").assertExists()
         compose.onNodeWithText("00:24").assertExists()
         compose.onNodeWithContentDescription("Play").performClick()
         shot(compose, compose.activity, "v6-voice-review")
@@ -231,7 +231,7 @@ class VoiceSetupTest {
         compose.onNodeWithText("Cancel sample").performClick()
         advance(1_000)
         assertEquals(1, studio.recorder.cancels)
-        compose.onNodeWithText("RECORD SAMPLE.").assertExists()
+        compose.onNodeWithText("Record sample.").assertExists()
     }
 
     @Test
@@ -245,7 +245,7 @@ class VoiceSetupTest {
         advance(31_000)
         advance(1_000)
         assertEquals(1, studio.recorder.stops)
-        compose.onNodeWithText("SAMPLE REVIEW.").assertExists()
+        compose.onNodeWithText("Sample review.").assertExists()
     }
 
     @Test
@@ -269,12 +269,12 @@ class VoiceSetupTest {
                 }
             }
         }
-        compose.onNodeWithText("READY FOR A FILE").assertExists()
+        compose.onNodeWithText("Ready for a file").assertExists()
         compose.onNodeWithText("Continue").assertIsNotEnabled()
         shot(compose, compose.activity, "v7-voice-upload")
-        compose.onNodeWithText("CHOOSE AUDIO").performClick()
+        compose.onNodeWithText("Choose audio").performClick()
         compose.onNodeWithText("morning-note.mp3").assertExists()
-        compose.onNodeWithText("FILE LOOKS GOOD").assertExists()
+        compose.onNodeWithText("File looks good").assertExists()
         shot(compose, compose.activity, "v7b-voice-upload-picked")
         compose.onNodeWithText("Continue").assertIsEnabled().performClick()
         assertEquals(VoiceChoice.Uploaded(file, "morning-note.mp3"), studio.chosen.single())
@@ -296,7 +296,7 @@ class VoiceSetupTest {
         }
         val back = compose.onNodeWithContentDescription("Back").getUnclippedBoundsInRoot()
         val slot = compose.onNodeWithTag("slot").getUnclippedBoundsInRoot()
-        val title = compose.onNodeWithText("RIVET'S VOICE.").getUnclippedBoundsInRoot()
+        val title = compose.onNodeWithText("Emrys's voice.").getUnclippedBoundsInRoot()
         assertTrue("the slot sits under the header", slot.top >= back.bottom)
         assertTrue("the page starts under the slot", title.top >= slot.bottom)
         assertEquals(112.dp, slot.bottom - slot.top)
