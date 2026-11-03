@@ -35,29 +35,42 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   (https://rivet.ron-ai.dev/computer/mcp, bearer-gated). The workspace also holds webhook tools that use the owner's
   ElevenLabs key.
 - **Background tasks** (`deploy/vm/computer/hooks.py`, the `hooks` container at https://hooks.oubliai.com; deployed
-  2026-11-03, not run live yet):
+  2026-11-03, live run the same day below):
   1. Either agent calls the async webhook tool `start_background_task`, and `POST /api/task` answers `started` at once.
      It takes `task` and `conversation_id` (from `system__conversation_id`), and `title`, `done_when` and the eight
      `perm_*` when the tool sends them; a missing `perm_*` asks first. A conversation that ends with work it didn't
      hand off starts it through its post-call `background_task` data collection item instead.
   2. hooks.py records the job in `/config/workspace/jobs/<conversation>/<n>/job.json` and holds a text conversation with
      the Task agent "Rivet (Task)" (`agent_4901m6gdwby2fetbqddcpfkevvpp`): the text agent without the client tools or
-     `start_background_task`, text only, 3600 s long. It speaks the documented WebSocket protocol rather than the SDK's
+     `start_background_task`, text only, 7200 s long. It speaks the documented WebSocket protocol rather than the SDK's
      `AsyncConversation`, whose `start_session` and `end_session` have no type annotations. The brief (`Title`, `Task`,
      `Done when`) is the first message, the `perm_*` are dynamic variables, the conversation id is the job's `session`,
      and the agent's replies go to `session.log`.
   3. The Task agent works through emrys-computer, oubliai-telnyx and the search webhooks, checks `done_when` itself and
-     calls `end_call`. Its post-call webhook, matched to the job by `session`, carries the report as data collection:
+     calls `end_call` (not attached yet, see Remaining work 5). Its post-call webhook, matched to the job by `session`, carries the report as data collection:
      `outcome` (ready, not_ready, needs_owner), `result`, `where`, `checked`, `blocker`. A session that ends without an
      outcome reports not_ready with ElevenLabs' termination reason; one that never starts reports why.
   4. Once the conversation the task came from has ended (its post-call webhook, or 600 s at most), the voice agent calls
-     the owner from +17608769757 with the dynamic variables `original_request`, `source_summary`, `job_outcome`,
+     the owner from +17608769757 with the job's eight `perm_*` (its tools require them) and `original_request`, `source_summary`, `job_outcome`,
      `job_result`, `job_where`, `job_checked` and `job_blocker` (each `none` by default), an empty first message so it
      waits for the owner's hello, and its procedure "Report background task results"
      (`agtprc_2801m6ge2jbzebp8126nvrbc7520`) started: it checks the work with its own tools, then says whether it's
      ready. A refused call is placed once more after 60 s; every attempt's `success` and `message` are in `job.json`.
      A callback (`job_outcome` not `none`) never starts a task from its own post-call data, so a misread report can't
      loop.
+
+  Live run, 2026-11-03: a request typed in Emrys on the emulator reached the text agent
+  (`conv_4501m6grm404fpdsebhe55vknaba`), which called `start_background_task` with a title, `done_when` and all eight
+  `perm_*`. The Task agent (`conv_3701m6grnh7mea2vxc8c6nhrqere`) wrote `/config/workspace/toolbox-versions.md` through
+  emrys-computer in 22 s, every version matching the commands, and checked it. With no `end_call` it called
+  `create_dub` with `name: "end_call"` (HTTP 400, nothing made), and the session stayed open until ElevenLabs ended it
+  5414 s in ("Conversation timed out after the last agent message"). The post-call report (`ready`, with result, where
+  and checked) reached hooks.py, which placed the callback at once because the text chat had ended. The callback
+  (`conv_8601m6gxtz4jfberz3cr1wzkk4tm`) was answered, then ended after 7 s with error 1008 "Missing required dynamic
+  variables in tools" for the eight `perm_*`, which the callback didn't send. hooks.py passes them on the callback (`58b5f83`,
+  deployed the same day with `docker compose -p emrys build computer` and `up -d --no-deps hooks`, so only hooks was
+  recreated; the previous file is `computer/hooks.py.before-callback-perms-20261103-211725`). After that deploy both
+  endpoints answer 401 without their secrets and a task without `task` gets 422. No callback has been placed with it yet.
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
@@ -161,10 +174,10 @@ uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-
 3. **Docs:** `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the brain.
 4. **VM leftovers:** `/opt/emrys/data`, `src/`, `brain.env` and the `emrys-brain:14bcf2b` image stay until the owner
    removes them.
-5. **Background tasks:** the Task agent needs the post-call webhook "Emrys post-call" (without it no report arrives
-   and nobody is called back) and `enable_auth`; `start_background_task` still sends only `task` and
-   `conversation_id`; the voice agent has no `background_task` item; `job_dir` is still on both agents. Those are the
-   owner's ElevenLabs agent's changes. Then one live task calls the owner.
+5. **Background tasks:** the Task agent has no `end_call` built-in tool (its `built_in_tools` is empty), so each session
+   waits until ElevenLabs ends it after the agent's last message (90 minutes in the live run) and the agent reaches for
+   other tools to end it. Attaching it is the owner's change. Not checked since the 2026-11-03 config read: the voice
+   agent's `background_task` item and `job_dir` on both agents. Then a callback that reports to the owner.
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 
