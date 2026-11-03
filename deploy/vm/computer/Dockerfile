@@ -6,7 +6,7 @@ ENV npm_config_cache=/opt/npm-cache
 # So does OpenCode's Playwright MCP, with Chromium's system libraries; Chromium itself is in the laptop's home
 # (~/.cache/ms-playwright, from `npx playwright@<its version> install chromium`), next to OpenCode.
 RUN UV_PYTHON_INSTALL_DIR=/opt/python uv venv /opt/bridge --python 3.12 \
-    && uv pip install --python /opt/bridge/bin/python fastmcp==4.1.0 elevenlabs==2.74.1 \
+    && uv pip install --python /opt/bridge/bin/python fastmcp==4.1.0 elevenlabs==2.75.0 \
     && npm exec --yes --package=@wonderwhy-er/desktop-commander@0.3.1 -- node -e "" \
     && npm exec --yes --package=@playwright/mcp@0.0.83 -- node -e "" \
     && npx --yes playwright@1.64.0-alpha-1790635538000 install-deps chromium \
