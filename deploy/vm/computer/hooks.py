@@ -325,8 +325,9 @@ async def call_back(job_id: str) -> None:
     report = job.report
     if report is None:
         return
-    # The names the callback procedure reads.
+    # The permissions the voice agent's tools require, then the names the callback procedure reads.
     variables = {
+        **job.permissions,
         "original_request": job.task,
         "source_summary": job.source_summary or "",
         "job_outcome": report.outcome,
