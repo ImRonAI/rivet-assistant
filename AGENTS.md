@@ -4,9 +4,9 @@ Guidance for any AI agent (or person) working in this repository. Read this firs
 `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the deleted brain; trust
 this file where they disagree.
 
-Emrys is an Android phone assistant built by Ron AI (founder Tim Hunter, https://www.hi-ron.com,
-support@hi-ron.com). It handles texts, email drafts, calls, apps, reminders and tasks on the phone through the owner's
-ElevenLabs agents. Its face is the Emrys robot (`android/robot/Emrys_the_Robot.html`).
+Emrys is an Android phone assistant built by Oubli AI (founder Tim Hunter, https://oubliai.com, tim@oubliai.com). It
+handles texts, email drafts, calls, apps, reminders and tasks on the phone through the owner's ElevenLabs agents. Its
+face is the Emrys robot (`android/robot/Emrys_the_Robot.html`).
 
 ## How it works
 
