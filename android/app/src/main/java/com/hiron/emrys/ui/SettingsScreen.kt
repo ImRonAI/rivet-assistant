@@ -195,9 +195,9 @@ private fun About() {
             Text("Version ${BuildConfig.VERSION_NAME} · build ${BuildConfig.VERSION_CODE}", style = Type.mono, color = p.ink2)
         }
         RowRule()
-        Readout("Made by", "Ron AI · hi-ron.com", Modifier.padding(horizontal = RowInset, vertical = 14.dp))
+        Readout("Made by", "Oubli AI · oubliai.com", Modifier.padding(horizontal = RowInset, vertical = 14.dp))
         RowRule()
-        Readout("Support", "support@hi-ron.com", Modifier.padding(horizontal = RowInset, vertical = 14.dp))
+        Readout("Support", "tim@oubliai.com", Modifier.padding(horizontal = RowInset, vertical = 14.dp))
     }
 }
 
