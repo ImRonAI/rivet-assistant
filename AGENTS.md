@@ -38,7 +38,8 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   2026-11-03, live run the same day below):
   1. Either agent calls the async webhook tool `start_background_task`, and `POST /api/task` answers `started` at once.
      It takes `task` and `conversation_id` (from `system__conversation_id`), and `title`, `done_when` and the eight
-     `perm_*` when the tool sends them; a missing `perm_*` asks first. A conversation that ends with work it didn't
+     `perm_*` when the tool sends them; a missing `perm_*` asks first. The tool's description says Emrys phones the
+     owner with the result itself, so the brief leaves calling back out. A conversation that ends with work it didn't
      hand off starts it through its post-call `background_task` data collection item instead.
   2. hooks.py records the job in `/config/workspace/jobs/<conversation>/<n>/job.json` and holds a text conversation with
      the Task agent "Rivet (Task)" (`agent_4901m6gdwby2fetbqddcpfkevvpp`): the text agent without the client tools or
@@ -47,13 +48,15 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
      `Done when`) is the first message, the `perm_*` are dynamic variables, the conversation id is the job's `session`,
      and the agent's replies go to `session.log`.
   3. The Task agent works through emrys-computer, oubliai-telnyx and the search webhooks, checks `done_when` itself and
-     calls `end_call` (not attached yet, see Remaining work 5). Its post-call webhook, matched to the job by `session`, carries the report as data collection:
-     `outcome` (ready, not_ready, needs_owner), `result`, `where`, `checked`, `blocker`. A session that ends without an
+     calls ElevenLabs' built-in `end_call` (attached 2026-11-04). Its post-call webhook, matched to the job by `session`, carries the report as data collection:
+     `outcome` (ready, not_ready, needs_owner), `result`, `where`, `checked`, `blocker`, and `opening` (owner-approved
+     2026-11-04), the line the callback starts with: why Emrys is calling back and how the task went. A session that ends without an
      outcome reports not_ready with ElevenLabs' termination reason; one that never starts reports why.
   4. Once the conversation the task came from has ended (its post-call webhook, or 600 s at most), the voice agent calls
      the owner from +17608769757 with the job's eight `perm_*` (its tools require them) and `original_request`, `source_summary`, `job_outcome`,
-     `job_result`, `job_where`, `job_checked` and `job_blocker` (each `none` by default), an empty first message so it
-     waits for the owner's hello, and its procedure "Report background task results"
+     `job_result`, `job_where`, `job_checked` and `job_blocker` (each `none` by default), the report's `opening` as its
+     first message (empty for a session that never started, so it waits for the owner's hello), and its procedure
+     "Report background task results"
      (`agtprc_2801m6ge2jbzebp8126nvrbc7520`) started: it checks the work with its own tools, then says whether it's
      ready. A refused call is placed once more after 60 s; every attempt's `success` and `message` are in `job.json`.
      A callback (`job_outcome` not `none`) never starts a task from its own post-call data, so a misread report can't
@@ -70,7 +73,55 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   variables in tools" for the eight `perm_*`, which the callback didn't send. hooks.py passes them on the callback (`58b5f83`,
   deployed the same day with `docker compose -p emrys build computer` and `up -d --no-deps hooks`, so only hooks was
   recreated; the previous file is `computer/hooks.py.before-callback-perms-20261103-211725`). After that deploy both
-  endpoints answer 401 without their secrets and a task without `task` gets 422. No callback has been placed with it yet.
+  endpoints answer 401 without their secrets and a task without `task` gets 422.
+
+  Second live run, 2026-11-04 00:27 UTC, with the fix: a task typed in Emrys (text chat
+  `conv_4901m6hz7jgsep0a8shh65chmjcc`) reached hooks in 20 s with all eight `perm_*`, and the Task agent
+  (`conv_8101m6hz849rew8stvgpmjv42888`) wrote `/config/workspace/callback.md` (`date -u`, `uname -r`, both matching a
+  fresh run) within seconds and reported ready, saying it had no way to end the session. Restarting the hooks container
+  closed the session; its post-call report (`ready`) arrived within a second, and the callback waited for the text chat
+  to end (about 9 minutes). Both callback attempts (`conv_2301m6hzt0xwe0qs274p47c6pvdn`,
+  `conv_9501m6hzw9ynfmq8dedychk4eph3`) were refused with "[quota_exceeded] You've run out of credits", so the fix
+  hasn't been heard on a call yet.
+
+  Third live run, 2026-11-04 04:37 UTC, with `opening` (`2d36d67`): the same request plus "call me back when it is
+  done" (text chat `conv_1501m6jdhvhke59trn18azx9xdmk`). The text agent wrote calling the owner back into the brief,
+  since neither its prompt nor `start_background_task` says Emrys calls back with the report. The Task agent
+  (`conv_7901m6jdk6tmfwjr59qwdcp5sbqd`) wrote and checked `callback.md` in 6 s, then, as its prompt allows a call the
+  brief asks for, placed its own TeXML call from +17608769757 through oubliai-telnyx (`CreateTexmlCall`, queued 04:40)
+  that read out the result, and ended its session with `end_call` at 287 s. The post-call report (`ready`) copied that
+  call's script into `opening`, result and "Goodbye" included. hooks.py placed the callback when the text chat ended
+  (`conv_3201m6je4b8kfeg8tx18xv5w76wx`, 04:47): it opened with that line, reached voicemail, and the voice agent ended
+  it with `voicemail_detection` after 6 s without leaving a message.
+
+  Fourth live run, 04:55 UTC, after the owner's OK to do whatever makes the calling agent know what it's doing:
+  `start_background_task`'s description says Emrys phones the owner itself, and `opening` says to write the line
+  fresh, why Emrys is calling and how it went, with no introduction or goodbye. The same request (text chat
+  `conv_2001m6jejz48fjs97zykg7ykxfbq`) gave a brief ending "Do not call or text the owner, because reporting back
+  happens automatically". The Task agent (`conv_6901m6jem6ewewwvy5xa0jv5g1a3`) wrote and checked `callback.md` and
+  ended with `end_call` in 10 s, with no call of its own. The one callback (`conv_7201m6jet80sft0rjxqf9dzn2crw`,
+  04:59, answered) opened "I'm calling back about writing the UTC date and kernel version to callback.md. That's all
+  done and checked."; the owner hung up 10 s in, so nothing after the opening was tested.
+- **Calls Emrys places** (owner-approved 2026-11-04): asked to call the owner back or to call someone, either agent
+  hands the conversation to the voice agent on the phone with the webhook tool `call_as_emrys`
+  (`tool_8901m6j86w2mfqa8ew5hkxvrgqs9`, on both agents). It posts to ElevenLabs' own
+  `/v1/convai/sip-trunk/outbound-call` with the workspace secret `xi_api_key`: the voice agent calls from
+  +17608769757 with the eight `perm_*`, `call_thread` (the conversation so far, `system__conversation_history`) and,
+  written by the calling agent, `to_number` (the owner's number is in the tool's description, not in git),
+  `call_to`, `call_reason` and the call's `first_message`, the line Emrys says when they pick up. The call starts the
+  voice agent's procedure "Continue a conversation by phone" (`agtprc_0501m6j84vnafrcs0naakt8506da`), which reads
+  those variables (placeholders `none`). Both prompts say Emrys can phone out, that a `sip_trunk` call is one Emrys
+  placed when an active procedure says so, and when to use `call_as_emrys` rather than `phone_call`.
+
+  The first message carries the reason because the voice agent runs Eleven Realtime v1 Max, whose quick replies
+  didn't act on the started procedure. Live, 2026-11-04 03:11 UTC, with an empty first message
+  (`conv_9301m6j8kcdde2ztjmercs82v6m9`): the thread, reason and `perm_*` all arrived, yet the first two replies were
+  "I was wondering when you'd call" and "I don't actually have a reason for calling"; only the third, reasoned reply
+  used the reason. On that call the agent also called `device_status`, which can't run on a phone call, and then said
+  the phone was "plugged in and charging", which no tool returned. With the text agent's first message
+  (`conv_7601m6j92ff3e849z3d8d95qe203`, 03:19 UTC) the call opened "Hey, calling you back about your Wi-Fi. Your
+  phone's connected to Wi-Fi right now, and the battery's at 100 percent", the owner said thanks, and the agent ended
+  the call with `end_call`. Neither text chat started a background task from its post-call data.
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
@@ -97,9 +148,10 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   on-device action is a new client tool.
 - **The ElevenLabs agents' configuration belongs to the owner.** Never change their model, backups, prompt, tools, MCP
   servers, secrets or overrides, and never run sessions that override their settings. Reading it is fine.
-- **Models are the owner's choice, in the dashboard.** The text agent and the Task agent run `claude-opus-5-5` and the
-  voice agent `gpt-6-astra` (owner, 2026-11-03: the task needs the most capable model). Don't add Claude or Anthropic
-  models anywhere else in the product.
+- **Models are the owner's choice, in the dashboard.** The text agent and the Task agent run `claude-opus-5-5` (owner,
+  2026-11-03: the task needs the most capable model). The voice agent is in Realtime mode on Eleven Realtime v1 Max
+  (`realtime_model: eleven_realtime_v1_max`), which manages its LLM, so its stored `gpt-6-astra` isn't used (read
+  2026-11-04). Don't add Claude or Anthropic models anywhere else in the product.
 - **No live side effects without the owner's approval:** sends, calls, purchases, Telnyx writes, DNS changes, real
   email. Deploying committed changes to the workspace VM doesn't need a separate OK (owner, 2026-10-31).
 - **Never commit secrets.** `android/emrys.local.properties` (the baked answering number) is gitignored; the VM's env
@@ -144,7 +196,9 @@ uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-
     and phone access.
   - **Home** (`HomeScreen.kt`): the masthead and status, the robot stage, a serif greeting, the transcript sheet, a
     thinking row while the agent works, and the dock: quick keys (Catch me up, My day, Texts, Calls), the composer
-    (text agent) and the voice disc (voice agent, asking for the microphone first).
+    (text agent) and the voice disc (voice agent, asking for the microphone first). During a voice session
+    (`EmrysState.voice`) Emrys stays on its stage and the chat folds under it as a Transcript header that opens the
+    same chat view as typing; checked on the emulator 2026-11-04.
   - **Approval sheet** (`ApprovalSheet.kt`): see `request_approval` above.
   - **Activity** (`ActivityScreen.kt`): pending reminders, then the activity log grouped by day.
   - **Settings** (`SettingsScreen.kt`): 1 Voice (the talk key), 2 Permissions (a switch per `perm_*` action: "Always
@@ -174,11 +228,12 @@ uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-
 3. **Docs:** `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the brain.
 4. **VM leftovers:** `/opt/emrys/data`, `src/`, `brain.env` and the `emrys-brain:14bcf2b` image stay until the owner
    removes them.
-5. **Background tasks:** the Task agent has no `end_call` built-in tool (its `built_in_tools` is empty), so each session
-   waits until ElevenLabs ends it after the agent's last message (90 minutes in the live run) and the agent reaches for
-   other tools to end it. Attaching it is the owner's change. Not checked since the 2026-11-03 config read: the voice
-   agent's `background_task` item and `job_dir` on both agents. Then a callback that reports to the owner.
-6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
+5. **Background tasks:** a callback the owner talks through past its opening line; a session that never started
+   still calls with an empty first message. Not checked since the 2026-11-03 config read: the voice agent's
+   `background_task` item and `job_dir` on both agents.
+6. **A stated result no tool returned:** on a phone call the voice agent called a phone tool that can't run there and
+   then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
+7. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 
 ## Before launch (checklist)
