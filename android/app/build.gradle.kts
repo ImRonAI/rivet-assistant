@@ -87,6 +87,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     implementation(libs.elevenlabs.android)
+    implementation(libs.mcp.server)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.kotlinx.serialization.json)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 
@@ -94,6 +97,8 @@ dependencies {
     testImplementation(libs.org.json)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
+    testImplementation(libs.mcp.client)
+    testImplementation(libs.ktor.client.cio)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
 }
