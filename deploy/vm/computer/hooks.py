@@ -90,6 +90,8 @@ class Report(BaseModel):
     where: str
     checked: str
     blocker: str
+    # What the voice agent says as the owner picks up: why it's calling back.
+    opening: str = ""
 
 
 class Call(BaseModel):
@@ -165,6 +167,7 @@ class Conversation(BaseModel):
             where=self.collected("where"),
             checked=self.collected("checked"),
             blocker=blocker,
+            opening=self.collected("opening"),
         )
 
 
@@ -345,9 +348,10 @@ async def call_back(job_id: str) -> None:
                 agent_phone_number_id=PHONE_NUMBER,
                 to_number=os.environ["EMRYS_OWNER_NUMBER"],
                 conversation_initiation_client_data=ConversationInitiationClientDataRequestInput(
-                    # No greeting: the agent waits for the owner's hello, then follows the callback procedure.
+                    # The Task agent's opening line, so every reply on the call knows why Emrys called. Without one the
+                    # agent waits for the owner's hello.
                     conversation_config_override=ConversationConfigClientOverrideInput(
-                        agent=AgentConfigOverrideInput(first_message=""),
+                        agent=AgentConfigOverrideInput(first_message=report.opening),
                     ),
                     dynamic_variables=variables,
                     start_procedure_ids=[CALLBACK_PROCEDURE],
