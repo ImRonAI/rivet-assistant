@@ -1,0 +1,85 @@
+/* The chat page's styles: Tailwind with Preflight, scanning src (the page and the components it uses) and the Streamdown
+   packages, whose class names live in their dist files. The tokens the ElevenLabs and AI Elements components read
+   carry Noir's values (ui/Theme.kt `DarkPalette`); the app is dark only. */
+@import "tailwindcss" source("..");
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/cjk/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
+@source "../../node_modules/@streamdown/math/dist/*.js";
+@source "../../node_modules/@streamdown/mermaid/dist/*.js";
+
+@custom-variant dark (&:is(.dark *));
+
+@font-face { font-family: "Geist"; font-weight: 400; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_regular.ttf") format("truetype"); }
+@font-face { font-family: "Geist"; font-weight: 500; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_medium.ttf") format("truetype"); }
+@font-face { font-family: "Geist"; font-weight: 600; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_semibold.ttf") format("truetype"); }
+@font-face { font-family: "Geist Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_mono_regular.ttf") format("truetype"); }
+@font-face { font-family: "Geist Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_mono_medium.ttf") format("truetype"); }
+
+@theme inline {
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+/* bg, ink, ink2, raised, tile, high, card, lineHi, accent and rec. */
+:root {
+  color-scheme: dark;
+  --radius: 0.75rem;
+  --background: #0a0a0c;
+  --foreground: #f3f2ee;
+  --card: #111114;
+  --card-foreground: #f3f2ee;
+  --popover: #141417;
+  --popover-foreground: #f3f2ee;
+  --primary: #f3f2ee;
+  --primary-foreground: #0a0a0c;
+  --secondary: #242429;
+  --secondary-foreground: #f3f2ee;
+  --muted: #1a1a1e;
+  --muted-foreground: #9e9da4;
+  --accent: #242429;
+  --accent-foreground: #f3f2ee;
+  --destructive: #f07b6c;
+  --border: rgb(243 242 238 / 0.14);
+  --input: rgb(243 242 238 / 0.14);
+  --ring: #b7c2ff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    @apply bg-background text-foreground font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+  a {
+    @apply underline-offset-2;
+  }
+}

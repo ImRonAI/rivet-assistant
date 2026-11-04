@@ -4,9 +4,9 @@ Guidance for any AI agent (or person) working in this repository. Read this firs
 `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the deleted brain; trust
 this file where they disagree.
 
-Emrys is an Android phone assistant built by Ron AI (founder Tim Hunter, https://www.hi-ron.com,
-support@hi-ron.com). It handles texts, email drafts, calls, apps, reminders and tasks on the phone through the owner's
-ElevenLabs agents. Its face is the Emrys robot (`android/robot/Emrys_the_Robot.html`).
+Emrys is an Android phone assistant built by Oubli AI (founder Tim Hunter, https://oubliai.com, tim@oubliai.com). It
+handles texts, email drafts, calls, apps, reminders and tasks on the phone through the owner's ElevenLabs agents. Its
+face is the Emrys robot (`android/robot/Emrys_the_Robot.html`).
 
 ## How it works
 
@@ -34,6 +34,94 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   MCP servers `oubliai-telnyx` (https://oubli-catolabs.fastmcp.app/mcp) and `emrys-computer`
   (https://rivet.ron-ai.dev/computer/mcp, bearer-gated). The workspace also holds webhook tools that use the owner's
   ElevenLabs key.
+- **Background tasks** (`deploy/vm/computer/hooks.py`, the `hooks` container at https://hooks.oubliai.com; deployed
+  2026-11-03, live run the same day below):
+  1. Either agent calls the async webhook tool `start_background_task`, and `POST /api/task` answers `started` at once.
+     It takes `task` and `conversation_id` (from `system__conversation_id`), and `title`, `done_when` and the eight
+     `perm_*` when the tool sends them; a missing `perm_*` asks first. The tool's description says Emrys phones the
+     owner with the result itself, so the brief leaves calling back out. A conversation that ends with work it didn't
+     hand off starts it through its post-call `background_task` data collection item instead.
+  2. hooks.py records the job in `/config/workspace/jobs/<conversation>/<n>/job.json` and holds a text conversation with
+     the Task agent "Rivet (Task)" (`agent_4901m6gdwby2fetbqddcpfkevvpp`): the text agent without the client tools or
+     `start_background_task`, text only, 7200 s long. It speaks the documented WebSocket protocol rather than the SDK's
+     `AsyncConversation`, whose `start_session` and `end_session` have no type annotations. The brief (`Title`, `Task`,
+     `Done when`) is the first message, the `perm_*` are dynamic variables, the conversation id is the job's `session`,
+     and the agent's replies go to `session.log`.
+  3. The Task agent works through emrys-computer, oubliai-telnyx and the search webhooks, checks `done_when` itself and
+     calls ElevenLabs' built-in `end_call` (attached 2026-11-04). Its post-call webhook, matched to the job by `session`, carries the report as data collection:
+     `outcome` (ready, not_ready, needs_owner), `result`, `where`, `checked`, `blocker`, and `opening` (owner-approved
+     2026-11-04), the line the callback starts with: why Emrys is calling back and how the task went. A session that ends without an
+     outcome reports not_ready with ElevenLabs' termination reason; one that never starts reports why.
+  4. Once the conversation the task came from has ended (its post-call webhook, or 600 s at most), the voice agent calls
+     the owner from +17608769757 with the job's eight `perm_*` (its tools require them) and `original_request`, `source_summary`, `job_outcome`,
+     `job_result`, `job_where`, `job_checked` and `job_blocker` (each `none` by default), the report's `opening` as its
+     first message (empty for a session that never started, so it waits for the owner's hello), and its procedure
+     "Report background task results"
+     (`agtprc_2801m6ge2jbzebp8126nvrbc7520`) started: it checks the work with its own tools, then says whether it's
+     ready. A refused call is placed once more after 60 s; every attempt's `success` and `message` are in `job.json`.
+     A callback (`job_outcome` not `none`) never starts a task from its own post-call data, so a misread report can't
+     loop.
+
+  Live run, 2026-11-03: a request typed in Emrys on the emulator reached the text agent
+  (`conv_4501m6grm404fpdsebhe55vknaba`), which called `start_background_task` with a title, `done_when` and all eight
+  `perm_*`. The Task agent (`conv_3701m6grnh7mea2vxc8c6nhrqere`) wrote `/config/workspace/toolbox-versions.md` through
+  emrys-computer in 22 s, every version matching the commands, and checked it. With no `end_call` it called
+  `create_dub` with `name: "end_call"` (HTTP 400, nothing made), and the session stayed open until ElevenLabs ended it
+  5414 s in ("Conversation timed out after the last agent message"). The post-call report (`ready`, with result, where
+  and checked) reached hooks.py, which placed the callback at once because the text chat had ended. The callback
+  (`conv_8601m6gxtz4jfberz3cr1wzkk4tm`) was answered, then ended after 7 s with error 1008 "Missing required dynamic
+  variables in tools" for the eight `perm_*`, which the callback didn't send. hooks.py passes them on the callback (`58b5f83`,
+  deployed the same day with `docker compose -p emrys build computer` and `up -d --no-deps hooks`, so only hooks was
+  recreated; the previous file is `computer/hooks.py.before-callback-perms-20261103-211725`). After that deploy both
+  endpoints answer 401 without their secrets and a task without `task` gets 422.
+
+  Second live run, 2026-11-04 00:27 UTC, with the fix: a task typed in Emrys (text chat
+  `conv_4901m6hz7jgsep0a8shh65chmjcc`) reached hooks in 20 s with all eight `perm_*`, and the Task agent
+  (`conv_8101m6hz849rew8stvgpmjv42888`) wrote `/config/workspace/callback.md` (`date -u`, `uname -r`, both matching a
+  fresh run) within seconds and reported ready, saying it had no way to end the session. Restarting the hooks container
+  closed the session; its post-call report (`ready`) arrived within a second, and the callback waited for the text chat
+  to end (about 9 minutes). Both callback attempts (`conv_2301m6hzt0xwe0qs274p47c6pvdn`,
+  `conv_9501m6hzw9ynfmq8dedychk4eph3`) were refused with "[quota_exceeded] You've run out of credits", so the fix
+  hasn't been heard on a call yet.
+
+  Third live run, 2026-11-04 04:37 UTC, with `opening` (`2d36d67`): the same request plus "call me back when it is
+  done" (text chat `conv_1501m6jdhvhke59trn18azx9xdmk`). The text agent wrote calling the owner back into the brief,
+  since neither its prompt nor `start_background_task` says Emrys calls back with the report. The Task agent
+  (`conv_7901m6jdk6tmfwjr59qwdcp5sbqd`) wrote and checked `callback.md` in 6 s, then, as its prompt allows a call the
+  brief asks for, placed its own TeXML call from +17608769757 through oubliai-telnyx (`CreateTexmlCall`, queued 04:40)
+  that read out the result, and ended its session with `end_call` at 287 s. The post-call report (`ready`) copied that
+  call's script into `opening`, result and "Goodbye" included. hooks.py placed the callback when the text chat ended
+  (`conv_3201m6je4b8kfeg8tx18xv5w76wx`, 04:47): it opened with that line, reached voicemail, and the voice agent ended
+  it with `voicemail_detection` after 6 s without leaving a message.
+
+  Fourth live run, 04:55 UTC, after the owner's OK to do whatever makes the calling agent know what it's doing:
+  `start_background_task`'s description says Emrys phones the owner itself, and `opening` says to write the line
+  fresh, why Emrys is calling and how it went, with no introduction or goodbye. The same request (text chat
+  `conv_2001m6jejz48fjs97zykg7ykxfbq`) gave a brief ending "Do not call or text the owner, because reporting back
+  happens automatically". The Task agent (`conv_6901m6jem6ewewwvy5xa0jv5g1a3`) wrote and checked `callback.md` and
+  ended with `end_call` in 10 s, with no call of its own. The one callback (`conv_7201m6jet80sft0rjxqf9dzn2crw`,
+  04:59, answered) opened "I'm calling back about writing the UTC date and kernel version to callback.md. That's all
+  done and checked."; the owner hung up 10 s in, so nothing after the opening was tested.
+- **Calls Emrys places** (owner-approved 2026-11-04): asked to call the owner back or to call someone, either agent
+  hands the conversation to the voice agent on the phone with the webhook tool `call_as_emrys`
+  (`tool_8901m6j86w2mfqa8ew5hkxvrgqs9`, on both agents). It posts to ElevenLabs' own
+  `/v1/convai/sip-trunk/outbound-call` with the workspace secret `xi_api_key`: the voice agent calls from
+  +17608769757 with the eight `perm_*`, `call_thread` (the conversation so far, `system__conversation_history`) and,
+  written by the calling agent, `to_number` (the owner's number is in the tool's description, not in git),
+  `call_to`, `call_reason` and the call's `first_message`, the line Emrys says when they pick up. The call starts the
+  voice agent's procedure "Continue a conversation by phone" (`agtprc_0501m6j84vnafrcs0naakt8506da`), which reads
+  those variables (placeholders `none`). Both prompts say Emrys can phone out, that a `sip_trunk` call is one Emrys
+  placed when an active procedure says so, and when to use `call_as_emrys` rather than `phone_call`.
+
+  The first message carries the reason because the voice agent runs Eleven Realtime v1 Max, whose quick replies
+  didn't act on the started procedure. Live, 2026-11-04 03:11 UTC, with an empty first message
+  (`conv_9301m6j8kcdde2ztjmercs82v6m9`): the thread, reason and `perm_*` all arrived, yet the first two replies were
+  "I was wondering when you'd call" and "I don't actually have a reason for calling"; only the third, reasoned reply
+  used the reason. On that call the agent also called `device_status`, which can't run on a phone call, and then said
+  the phone was "plugged in and charging", which no tool returned. With the text agent's first message
+  (`conv_7601m6j92ff3e849z3d8d95qe203`, 03:19 UTC) the call opened "Hey, calling you back about your Wi-Fi. Your
+  phone's connected to Wi-Fi right now, and the battery's at 100 percent", the owner said thanks, and the agent ended
+  the call with `end_call`. Neither text chat started a background task from its post-call data.
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
@@ -49,7 +137,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 | Verified | 109 unit and screen tests pass, Kotlin compiles with warnings as errors, lint has 0 errors. On the Android 15 emulator (2026-10-31) a typed question opened a session straight to the text agent (`conv_2801m68vtz0te2natfxrg5cyc6gp`): `user_id` and all eight `perm_*` arrived, the agent called `device_status`, the phone returned real data and the agent answered with the battery level. The arm64-only release APK, with the keep rule and the tag filter, installed on the emulator and opened a voice session with the voice agent ("Listening"; the agent's greeting appeared without its audio tags). |
 | Not verified | Talking to the voice agent through a real microphone (the emulator runs without audio, so only the connection and the agent's greeting were checked); `request_approval` from a live agent (the handler is registered, but on 2026-10-31 the tool was not attached to either agent — attaching it is the owner's call); anything on a physical phone. |
 | Attachments | Images and PDFs are not built: SDK 0.13.0 has no way to send files (`OutgoingEvent` has no multimodal message). The WebSocket protocol's `multimodal_message` with `file_input` exists only in the JS SDK and raw API. |
-| Workspace VM | Google Cloud `instance-20261029-122759` (us-central1-a, c4-standard-8, Debian 13, 50 GB, static IP 136.113.136.145). `/opt/emrys` runs Caddy 2.11.7, the laptop (linuxserver webtop, https://desktop.rivet.ron-ai.dev), OpenVSCode (https://code.rivet.ron-ai.dev) and the `computer` container (Desktop Commander 0.3.1 behind FastMCP's proxy at `/computer/mcp`, reachable only with `EMRYS_COMPUTER_TOKEN`). The laptop (`deploy/vm/laptop/Dockerfile`, image `emrys-laptop:ls219`) and the computer image (`node:26.13.0-bookworm`) both run `deploy/vm/toolbox/install.sh`, so the owner's terminal, Desktop Commander and the hooks jobs share one set of pinned, checksum-checked developer tools: Node 26.13.0 LTS with npm/npx, pnpm, yarn, the Vercel CLI, TypeScript and tsx, Python 3 with pip, venv and pipx, uv/uvx, Bun, Deno, Go, gh from GitHub's apt repository, build tools and common CLIs. Rust (rustup 1.29.2, stable, minimal profile plus clippy and rustfmt) is in the shared home (`~/.rustup`, `~/.cargo`, on PATH via `~/.bashrc`, `~/.profile` and the computer image's `PATH`). OpenCode on the laptop runs Mistral `zai-glm-5-3` at `reasoningEffort: max`. It is OpenCode 2.2.5 (2026-11-01, from the v2 installer with the npm tarball's integrity checked; 1.19.5 is kept as `/config/.opencode/opencode-1.19.5.bak`), with the shared background service disabled (`opencode service set disabled true`, in `~/.config/opencode/service.json`) so every container's `opencode` runs a private server with its own environment. It reads the V1 `opencode.json` as is, except `whitelist`, which V2 ignores. Its MCP servers are context7, deepwiki, github (GitHub's remote server with the `ItzOubliAI` fine-grained token read from `~/.config/opencode/github-token`, mode 600, only on the VM), playwright (Chromium in `~/.cache/ms-playwright`), vercel and linear; the last two need a one-time OAuth sign-in from the laptop desktop (`opencode`, then `/mcps`). The owner signed in on 2026-11-01 (Vercel user `iamronai`, Linear team Cato-labs `CAT`), and the hooks jobs use those sign-ins from the shared home; the owner approved the Vercel team `team_dQkiAxSaM1x2NGxpqfymb7kT` (`tim-hi-roncoms-projects`) for that sign-in through `authorize_team_access` the same day, and `get_team`/`list_projects` for it succeed from the hooks container. The computer image puts `/config/.opencode/bin` and `/config/.cargo/bin` on `PATH`. A fresh private server lists no MCP servers for its first seconds, so `opencode mcp list` prints "No MCP servers configured" and `opencode mcp auth <name>` cannot find the server; against a server that has been up 15 s the list is complete, and a real `opencode run` attaches them. The brain is off the VM (deployed 2026-10-31 from `deploy/vm`: `docker compose -p emrys up -d --remove-orphans` removed `emrys-brain-1`); `https://rivet.ron-ai.dev/` answers 404, `/computer/mcp` 401 without the token and Desktop Commander's `initialize` with it. The previous files are kept as `compose.yaml.before-brain-removal-*` and `conf/Caddyfile.before-brain-removal-*`, and `data/`, `src/` and `brain.env` are still on disk. Reach it with `gcloud compute ssh instance-20261029-122759 --project fair-expanse-493212-h8 --zone us-central1-a --tunnel-through-iap`. Env files (`brain.env`, `laptop.env`, `computer.env`, `elevenlabs.env`, `hooks.env`, `code-token`) live only on the VM. The `hooks` container (`deploy/vm/computer/hooks.py`, https://hooks.oubliai.com, DNS on Vercel) serves the agents' async webhook tool `POST /api/task` (bearer from the ElevenLabs workspace secret `emrys_hooks_authorization`) and the post-call webhook `POST /api/post-call` (HMAC, ElevenLabs webhook "Emrys post-call" `cb517c50a8ab47818657c68e60d80ada`); each job runs `opencode run --standalone --auto` in `/config/workspace/jobs/<conversation>/<n>`, then the voice agent calls the owner with `job_dir`. Deployed 2026-11-01. Both agents have the `start_background_task` tool and the post-call webhook; only the text agent has the `background_task` data collection item. Live run the same day: the text chat `conv_0701m6b181kpe78trarsr9jdbsx7` died on an LLM timeout, the post-call webhook started its task, and OpenCode built and deployed https://transilvanya-roses.vercel.app through the Vercel MCP (it exited 1 after its built-in web search was cancelled; a clean run exits 0). The callback reached the owner (`conv_1701m6b8m26me11ryhp498m9v4jq`) once the Telnyx connection's Caller ID Override was cleared. `hooks.py` does not check `outbound_call`'s `success`, and ElevenLabs' `call_initiation_failure` webhook is not enabled, so a refused callback leaves no trace on the VM. |
+| Workspace VM | Google Cloud `instance-20261029-122759` (us-central1-a, c4-standard-8, Debian 13, 50 GB, static IP 136.113.136.145). `/opt/emrys` runs Caddy 2.11.7, the laptop (linuxserver webtop, https://desktop.rivet.ron-ai.dev), OpenVSCode (https://code.rivet.ron-ai.dev) and the `computer` container (Desktop Commander 0.3.1 behind FastMCP's proxy at `/computer/mcp`, reachable only with `EMRYS_COMPUTER_TOKEN`). The laptop (`deploy/vm/laptop/Dockerfile`, image `emrys-laptop:ls219`) and the computer image (`node:26.13.0-bookworm`) both run `deploy/vm/toolbox/install.sh`, so the owner's terminal, Desktop Commander and the hooks jobs share one set of pinned, checksum-checked developer tools: Node 26.13.0 LTS with npm/npx, pnpm, yarn, the Vercel CLI, TypeScript and tsx, Python 3 with pip, venv and pipx, uv/uvx, Bun, Deno, Go, gh from GitHub's apt repository, build tools and common CLIs. Rust (rustup 1.29.2, stable, minimal profile plus clippy and rustfmt) is in the shared home (`~/.rustup`, `~/.cargo`, on PATH via `~/.bashrc`, `~/.profile` and the computer image's `PATH`). OpenCode on the laptop runs Mistral `zai-glm-5-3` at `reasoningEffort: max`. It is OpenCode 2.2.5 (2026-11-01, from the v2 installer with the npm tarball's integrity checked; 1.19.5 is kept as `/config/.opencode/opencode-1.19.5.bak`), with the shared background service disabled (`opencode service set disabled true`, in `~/.config/opencode/service.json`) so every container's `opencode` runs a private server with its own environment. It reads the V1 `opencode.json` as is, except `whitelist`, which V2 ignores. Its MCP servers are context7, deepwiki, github (GitHub's remote server with the `ItzOubliAI` fine-grained token read from `~/.config/opencode/github-token`, mode 600, only on the VM), playwright (Chromium in `~/.cache/ms-playwright`), vercel and linear; the last two need a one-time OAuth sign-in from the laptop desktop (`opencode`, then `/mcps`). The owner signed in on 2026-11-01 (Vercel user `iamronai`, Linear team Cato-labs `CAT`), and the hooks jobs use those sign-ins from the shared home; the owner approved the Vercel team `team_dQkiAxSaM1x2NGxpqfymb7kT` (`tim-hi-roncoms-projects`) for that sign-in through `authorize_team_access` the same day, and `get_team`/`list_projects` for it succeed from the hooks container. The computer image puts `/config/.opencode/bin` and `/config/.cargo/bin` on `PATH`. A fresh private server lists no MCP servers for its first seconds, so `opencode mcp list` prints "No MCP servers configured" and `opencode mcp auth <name>` cannot find the server; against a server that has been up 15 s the list is complete, and a real `opencode run` attaches them. The brain is off the VM (deployed 2026-10-31 from `deploy/vm`: `docker compose -p emrys up -d --remove-orphans` removed `emrys-brain-1`); `https://rivet.ron-ai.dev/` answers 404, `/computer/mcp` 401 without the token and Desktop Commander's `initialize` with it. The previous files are kept as `compose.yaml.before-brain-removal-*` and `conf/Caddyfile.before-brain-removal-*`, and `data/`, `src/` and `brain.env` are still on disk. Reach it with `gcloud compute ssh instance-20261029-122759 --project fair-expanse-493212-h8 --zone us-central1-a --tunnel-through-iap`. Env files (`brain.env`, `laptop.env`, `computer.env`, `elevenlabs.env`, `hooks.env`, `code-token`) live only on the VM. The `hooks` container (`deploy/vm/computer/hooks.py`, https://hooks.oubliai.com, DNS on Vercel) serves the agents' async webhook tool `POST /api/task` (bearer from the ElevenLabs workspace secret `emrys_hooks_authorization`) and the post-call webhook `POST /api/post-call` (HMAC, ElevenLabs webhook "Emrys post-call" `cb517c50a8ab47818657c68e60d80ada`). Deployed 2026-11-01 with OpenCode doing each job (`opencode run --standalone --auto`) and a callback carrying `job_dir`; the Task agent version (see Background tasks) replaced it on 2026-11-03 (`docker compose -p emrys build computer`, then `up -d computer hooks`; the previous files are kept as `*.before-task-agent-20261103-104022`). After that deploy, `/api/task` and `/api/post-call` answer 401 without their secrets, a task without `task` gets 422, and `/computer/mcp` still answers `initialize` with its token. Both agents have the `start_background_task` tool and the post-call webhook; only the text agent has the `background_task` data collection item. Live run the same day: the text chat `conv_0701m6b181kpe78trarsr9jdbsx7` died on an LLM timeout, the post-call webhook started its task, and OpenCode built and deployed https://transilvanya-roses.vercel.app through the Vercel MCP (it exited 1 after its built-in web search was cancelled; a clean run exits 0). The callback reached the owner (`conv_1701m6b8m26me11ryhp498m9v4jq`) once the Telnyx connection's Caller ID Override was cleared. The 2026-11-01 version did not check `outbound_call`'s `success`; the current one records every attempt in `job.json`. |
 | Telnyx outbound | ElevenLabs calls out through `sip.telnyx.com` as credential user `nursetimmy1988` with caller ID +17608769757. The connection's Caller ID Override must stay empty: when it held the owner's cell, Telnyx swapped that number in and refused every call with `403 Unverified origination number D51`. The phone number has "Store SIP messages" on, so `GET /v1/convai/conversations/<id>/sip-messages` shows the raw INVITE and Telnyx's reply. |
 | Telnyx | The answering number +17608769757 forwards to a Telnyx call-answering assistant set up earlier by the brain. The live-call transcript, Take over and summaries went with the brain; the app keeps the number, mode and carrier forwarding codes in Settings. |
 
@@ -60,7 +148,10 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   on-device action is a new client tool.
 - **The ElevenLabs agents' configuration belongs to the owner.** Never change their model, backups, prompt, tools, MCP
   servers, secrets or overrides, and never run sessions that override their settings. Reading it is fine.
-- **No Claude or Anthropic models in the product.** The agents' models are the owner's choice in the dashboard.
+- **Models are the owner's choice, in the dashboard.** The text agent and the Task agent run `claude-opus-5-5` (owner,
+  2026-11-03: the task needs the most capable model). The voice agent is in Realtime mode on Eleven Realtime v1 Max
+  (`realtime_model: eleven_realtime_v1_max`), which manages its LLM, so its stored `gpt-6-astra` isn't used (read
+  2026-11-04). Don't add Claude or Anthropic models anywhere else in the product.
 - **No live side effects without the owner's approval:** sends, calls, purchases, Telnyx writes, DNS changes, real
   email. Deploying committed changes to the workspace VM doesn't need a separate OK (owner, 2026-10-31).
 - **Never commit secrets.** `android/emrys.local.properties` (the baked answering number) is gitignored; the VM's env
@@ -90,6 +181,7 @@ Commands:
 cd android && python3 tools/build_robot_asset.py --check && python3 tools/build_icon.py --check
 JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease
 cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs files byte-identical to upstream
+uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
 ```
 
 ## Everything Emrys can do today
@@ -104,7 +196,9 @@ cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs fi
     and phone access.
   - **Home** (`HomeScreen.kt`): the masthead and status, the robot stage, a serif greeting, the transcript sheet, a
     thinking row while the agent works, and the dock: quick keys (Catch me up, My day, Texts, Calls), the composer
-    (text agent) and the voice disc (voice agent, asking for the microphone first).
+    (text agent) and the voice disc (voice agent, asking for the microphone first). During a voice session
+    (`EmrysState.voice`) Emrys stays on its stage and the chat folds under it as a Transcript header that opens the
+    same chat view as typing; checked on the emulator 2026-11-04.
   - **Approval sheet** (`ApprovalSheet.kt`): see `request_approval` above.
   - **Activity** (`ActivityScreen.kt`): pending reminders, then the activity log grouped by day.
   - **Settings** (`SettingsScreen.kt`): 1 Voice (the talk key), 2 Permissions (a switch per `perm_*` action: "Always
@@ -134,7 +228,12 @@ cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs fi
 3. **Docs:** `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the brain.
 4. **VM leftovers:** `/opt/emrys/data`, `src/`, `brain.env` and the `emrys-brain:14bcf2b` image stay until the owner
    removes them.
-5. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
+5. **Background tasks:** a callback the owner talks through past its opening line; a session that never started
+   still calls with an empty first message. Not checked since the 2026-11-03 config read: the voice agent's
+   `background_task` item and `job_dir` on both agents.
+6. **A stated result no tool returned:** on a phone call the voice agent called a phone tool that can't run there and
+   then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
+7. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 
 ## Before launch (checklist)

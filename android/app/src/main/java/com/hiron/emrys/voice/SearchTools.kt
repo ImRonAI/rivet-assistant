@@ -12,14 +12,12 @@ import com.hiron.emrys.core.VideoItem
 import com.hiron.emrys.core.WebItem
 import io.elevenlabs.ClientTool
 import io.elevenlabs.ClientToolResult
-import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 
 /**
- * The agents' seven search tools as client tools: each searches Brave from the phone ([search]), shows its results
- * on screen as cards, and tells the agent what is shown.
+ * The agents' seven search tools as client tools: each searches Brave from the phone ([search]), puts its results on
+ * the tool's step in the chat, and tells the agent what is shown.
  */
 object SearchTools {
     val NAMES = mapOf(
@@ -35,28 +33,16 @@ object SearchTools {
     fun build(
         search: suspend (SearchQuery) -> Result<SearchResults>,
         update: ((EmrysState) -> EmrysState) -> Unit,
-    ): Map<String, ClientTool> = NAMES.mapValues { (_, kind) ->
+    ): Map<String, ClientTool> = NAMES.mapValues { (name, kind) ->
         object : ClientTool {
             override suspend fun execute(parameters: Map<String, Any>): ClientToolResult {
                 val query = query(kind, parameters) ?: return ClientToolResult.failure("Say what to search for.")
-                val id = "agent-search:" + UUID.randomUUID().toString().take(12)
-                update { EmrysStore.searchStarted(it, id, kind) }
-                val result = try {
-                    search(query)
-                } catch (e: CancellationException) {
-                    update { EmrysStore.searchFailed(it, id, null) }
-                    throw e
-                }
-                return result.fold(
+                return search(query).fold(
                     onSuccess = { results ->
-                        update { EmrysStore.searchShown(it, id, results) }
+                        update { EmrysStore.searched(it, name, results) }
                         ClientToolResult.success(SearchSummary.forAgent(results))
                     },
-                    onFailure = { error ->
-                        val said = error.message ?: FAILED
-                        update { EmrysStore.searchFailed(it, id, "Search didn't work: $said") }
-                        ClientToolResult.failure(said)
-                    },
+                    onFailure = { error -> ClientToolResult.failure(error.message ?: FAILED) },
                 )
             }
         }
@@ -88,17 +74,17 @@ object SearchTools {
     private val FRESH = setOf(SearchKind.Web, SearchKind.News, SearchKind.Videos, SearchKind.Context)
 }
 
-/** What a search tool tells the agent about the cards on screen: numbered like the cards, at most [LIMIT] characters. */
+/** What a search tool tells the agent about the results on screen, numbered in order, in at most [LIMIT] characters. */
 object SearchSummary {
     const val LIMIT = 8_000
-    private const val NOTE = "The user sees these as numbered cards. Refer to them by number or name; don't read links aloud."
+    private const val NOTE = "The user sees these results in the chat. Refer to them by name; don't read links aloud."
 
     fun forAgent(results: SearchResults): String {
         if (results.kind == SearchKind.Answers) {
             val citations = results.citations.map { JSONObject().put("n", it.number).put("url", it.url).maybe("snippet", it.snippet?.take(200)) }
             return fit(citations) {
-                JSONObject().put("shown_on_screen", true).put("answer", results.answer.orEmpty().take(4_000)).put("citations", it)
-                    .put("note", "The answer is on screen with its numbered sources; give the gist in a sentence or two.")
+                JSONObject().put("shown_on_screen", false).put("answer", results.answer.orEmpty().take(4_000)).put("citations", it)
+                    .put("note", "Only the sources are shown in the chat; give the answer yourself in a sentence or two.")
             }
         }
         // Each page's text gets a share of the cap, so more pages means shorter extracts rather than fewer pages.

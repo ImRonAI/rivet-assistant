@@ -21,6 +21,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import com.hiron.emrys.R
@@ -106,40 +107,33 @@ class HomeScreenTest {
     }
 
     @Test
-    fun aShortConversationKeepsEmrysInView() {
+    fun aConversationTakesTheWholeScreen() {
         home(
             mutableStateOf(
-                EmrysState(
-                    activity = EmrysActivity.Done,
-                    messages = listOf(
-                        ChatMessage("m1", true, "What's on my calendar tomorrow?"),
-                        ChatMessage("m2", false, "You have **two things** tomorrow: the dentist at 10 and lunch with Sam at 12:30."),
-                    ),
-                ),
+                EmrysState(activity = EmrysActivity.Thinking, messages = listOf(ChatMessage("m1", true, "What's on my calendar tomorrow?"))),
             ),
         )
-        compose.onNodeWithText("Conversation").assertExists()
-        compose.onNodeWithText("Thinking…").assertDoesNotExist()
-        shot("g2-home-conversation")
+        // The chat page itself runs in the app's WebView; ChatEventsTest and the on-device run cover what it shows.
+        compose.onNodeWithTag(STAGE_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(CHAT_TAG).assertExists()
+        compose.onNodeWithText("New chat").assertExists()
+        compose.onNodeWithText(Quick.CatchUp.label).assertDoesNotExist()
+        compose.onNodeWithTag(COMPOSER_TAG).assertExists()
     }
 
     @Test
-    fun aTurnInFlightShowsEmrysThinking() {
+    fun aVoiceConversationKeepsEmrysOnStageWithItsTranscriptFolded() {
         home(
             mutableStateOf(
-                EmrysState(
-                    activity = EmrysActivity.Thinking,
-                    messages = listOf(
-                        ChatMessage("m1", true, "Find a quiet coffee place near the office"),
-                        ChatMessage("m2", false, "There are three good ones within a short walk. Blue Anchor opens at 7 [1], and Fieldwork has long tables [2]."),
-                        ChatMessage("m3", true, "Book the one with long tables for 10?"),
-                    ),
-                ),
+                EmrysState(voice = true, activity = EmrysActivity.Listening, messages = listOf(ChatMessage("m1", true, "What's on my calendar tomorrow?"))),
             ),
         )
-        compose.onNodeWithText("Thinking…").assertExists()
-        // The header's status and the line in the chat.
-        compose.onAllNodesWithText("Thinking").assertCountEquals(2)
-        shot("g2-home-working")
+        compose.onNodeWithTag(STAGE_TAG).assertExists()
+        compose.onNodeWithTag(CHAT_TAG).assertDoesNotExist()
+        compose.onNodeWithText(Quick.CatchUp.label).assertDoesNotExist()
+        shot("g2-home-voice")
+        compose.onNodeWithText(TRANSCRIPT).performClick()
+        compose.onNodeWithTag(STAGE_TAG).assertExists()
+        compose.onNodeWithTag(CHAT_TAG).assertExists()
     }
 }

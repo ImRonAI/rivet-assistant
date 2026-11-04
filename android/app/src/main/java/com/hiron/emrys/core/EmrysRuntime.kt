@@ -124,6 +124,12 @@ class EmrysRuntime(private val app: Context) {
         }
     }
 
+    /** Ends the conversation: its session stops and the chat clears, back to Emrys on its stage. */
+    fun newChat() {
+        agent.stop()
+        update { it.copy(messages = emptyList(), activity = Activity.Idle, lastError = null) }
+    }
+
     fun listening(on: Boolean) = update { it.copy(activity = if (on) Activity.Listening else Activity.Idle) }
 
     /** Replays the robot's full state (after the page loads). */

@@ -21,7 +21,8 @@ anything. In short:
   to the VM laptop; the search widget's engine (task 5); Telnyx KV storage (task 6); routines (task 7); the on-phone pass.
 - **Before launch:** see the checklist in `AGENTS.md`.
 - **Never:**
-  - use Claude or Anthropic models in the product, including the ElevenLabs agents' LLM settings;
+  - add Claude or Anthropic models to the product beyond the agents' models, which are the owner's choice (the text and
+    Task agents run `claude-opus-5-5`, 2026-11-03);
   - commit secrets (`android/emrys.local.properties` and the VM's env files stay out of git);
   - send, call, buy, write to Telnyx, deploy, or touch real email without the owner's explicit approval.
 - **Before handing over an APK:** run the tests, lint and release build, review `android/build/screens/`, verify the APK, and run

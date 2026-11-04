@@ -130,8 +130,9 @@ private fun gutter(): Dp {
 }
 
 /**
- * Home: Emrys on its stage with a greeting, the transcript sheet once there is a conversation, and the dock with
- * quick requests and the composer.
+ * Home: Emrys on its stage with a greeting and the quick keys until there is a conversation, then the chat on its own
+ * full screen with New chat over it. A voice conversation keeps Emrys on its stage, with the same chat folded under it
+ * as its transcript. The composer stays at the bottom of all three.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -144,27 +145,23 @@ fun HomeScreen(
 ) {
     val p = LocalPalette.current
     val keyboard = WindowInsets.isImeVisible
-    val talking = state.messages.isNotEmpty()
+    val heard = state.voice && state.messages.isNotEmpty()
+    val talking = state.messages.isNotEmpty() && !state.voice
     val voice = runtime.settings.voiceModel
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val sheet = talking
-    // The robot owns the screen until there is a conversation, then shares it with the transcript sheet.
-    val target = when {
-        !sheet -> 1f
-        keyboard -> 0.2f
-        expanded -> 0.24f
-        state.messages.size == 1 -> 0.62f
-        else -> 0.5f
-    }
-    val stageShare by animateFloatAsState(target, spring(dampingRatio = 0.85f, stiffness = 300f), label = "stage")
     Column(Modifier.fillMaxSize().background(p.bg)) {
-            val idle = !talking && !keyboard
-            val fade by animateDpAsState(if (idle) 260.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
-            StageFrame(
-                Modifier.weight(stageShare).fillMaxWidth(),
-                framed = false,
-                hint = if (idle) STAGE_HINT else null,
+        if (talking) {
+            Row(
+                Modifier.fillMaxWidth().height(48.dp).padding(start = gutter(), end = gutter() - 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                Eyebrow("Conversation", dot = false)
+                Spacer(Modifier.weight(1f))
+                Keycap("New chat", runtime::newChat)
+            }
+        } else {
+            val idle = !keyboard && !heard
+            val fade by animateDpAsState(if (idle) 260.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
+            StageFrame(Modifier.weight(1f).fillMaxWidth(), framed = false, hint = if (idle) STAGE_HINT else null) {
                 // While the greeting shows, Emrys stands in the upper part of the stage with the words under its feet.
                 RobotView(runtime, Modifier.fillMaxSize(), focus = if (idle) RobotFocus.Greet else RobotFocus.Stage)
                 // The stage melts into what sits below it, and the greeting stays legible over the floor.
@@ -174,23 +171,45 @@ fun HomeScreen(
                 )
                 StageGreeting(idle, state, voice)
             }
-            AnimatedVisibility(state.approvals.isNotEmpty()) {
-                ApprovalBanner(state.approvals.size, onReviewApprovals)
-            }
-            if (sheet) {
-                TranscriptSheet(state, expanded || keyboard, { expanded = it }, Modifier.weight((1f - stageShare).coerceAtLeast(0.01f)))
-            } else {
-                state.lastError?.let { ErrorNote(it, Modifier.padding(horizontal = gutter(), vertical = 8.dp)) }
-                if (stageShare < 1f) Spacer(Modifier.weight(1f - stageShare))
-            }
-            Dock(
-                keyboard = keyboard,
-                voice = voice,
-                listening = state.activity == Activity.Listening,
-                focusRequests = focusRequests,
-                onSend = { runtime.ask(it) },
-                onListen = onListen,
-            )
+        }
+        AnimatedVisibility(state.approvals.isNotEmpty()) {
+            ApprovalBanner(state.approvals.size, onReviewApprovals)
+        }
+        if (talking) {
+            ChatView(state, Modifier.weight(1f).fillMaxWidth())
+        } else {
+            if (heard) Transcript(state)
+            state.lastError?.let { ErrorNote(it, Modifier.padding(horizontal = gutter(), vertical = 8.dp)) }
+        }
+        Dock(
+            quick = !talking && !heard && !keyboard,
+            voice = voice,
+            listening = state.activity == Activity.Listening,
+            focusRequests = focusRequests,
+            onSend = { runtime.ask(it) },
+            onListen = onListen,
+        )
+    }
+}
+
+const val TRANSCRIPT = "Transcript"
+
+/** A voice conversation's transcript: a quiet header under the stage that opens the chat, as typing shows it. */
+@Composable
+private fun Transcript(state: EmrysState) {
+    val p = LocalPalette.current
+    var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 180f else 0f, tween(Motion.QUICK), label = "turn")
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().height(48.dp).clickable(role = Role.Button) { open = !open }.padding(horizontal = gutter()),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Eyebrow(TRANSCRIPT, dot = false)
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.Outlined.KeyboardArrowUp, if (open) "Hide the transcript" else "Show the transcript", Modifier.rotate(turn), tint = p.ink2)
+        }
+        AnimatedVisibility(open) { ChatView(state, Modifier.fillMaxWidth().height(320.dp)) }
     }
 }
 
@@ -307,178 +326,7 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
     }
 }
 
-/** The transcript as a glass sheet over the stage: tap or drag its header to pull it up over Emrys, or back down. */
-@Composable
-private fun TranscriptSheet(state: EmrysState, expanded: Boolean, onExpand: (Boolean) -> Unit, modifier: Modifier) {
-    val p = LocalPalette.current
-    val working = state.activity == Activity.Thinking && state.messages.lastOrNull()?.fromUser == true
-    var drag by remember { mutableFloatStateOf(0f) }
-    val turn by animateFloatAsState(if (expanded) 180f else 0f, tween(Motion.BASE, easing = Motion.Emphasized), label = "chevron")
-    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    val gutter = gutter()
-    Column(
-        modifier.fillMaxWidth().clip(shape).background(p.raised)
-            // A faint porcelain sheen along the top edge, as light catches glass.
-            .background(Brush.verticalGradient(0f to p.ink.copy(alpha = 0.035f), 0.18f to Color.Transparent))
-            .border(1.dp, p.line, shape),
-    ) {
-        Column(
-            Modifier.fillMaxWidth()
-                .draggable(
-                    rememberDraggableState { drag += it },
-                    Orientation.Vertical,
-                    onDragStopped = {
-                        if (drag < -24f) onExpand(true) else if (drag > 24f) onExpand(false)
-                        drag = 0f
-                    },
-                )
-                .clickable { onExpand(!expanded) },
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(Modifier.padding(top = 10.dp).size(width = 32.dp, height = 3.dp).clip(RoundedCornerShape(50)).background(p.dot))
-            Row(Modifier.fillMaxWidth().height(48.dp).padding(start = gutter, end = gutter - 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("Conversation", dot = false)
-                val meta = if (working) "Thinking…" else null
-                if (meta != null) {
-                    Spacer(Modifier.width(14.dp))
-                    SignalDot(p.cy, live = true)
-                    Spacer(Modifier.width(8.dp))
-                    Text(meta, style = Type.labelMd, color = p.ink2, maxLines = 1)
-                }
-                Spacer(Modifier.weight(1f))
-                Icon(
-                    Icons.Outlined.KeyboardArrowUp, contentDescription = if (expanded) "Show Emrys" else "Expand transcript",
-                    tint = p.ink2, modifier = Modifier.size(22.dp).rotate(turn),
-                )
-            }
-        }
-        Chat(state.messages, state.lastError, Modifier.weight(1f), working = working)
-    }
-}
-
-const val CHAT_TAG = "chat"
 const val COMPOSER_TAG = "composer"
-
-@Composable
-internal fun Chat(messages: List<ChatMessage>, error: String?, modifier: Modifier, working: Boolean = false) {
-    val p = LocalPalette.current
-    val list = rememberLazyListState()
-    val gutter = gutter()
-    // Newest at the bottom (reversed layout): a new message brings you to the bottom.
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) list.animateScrollToItem(0)
-    }
-    if (messages.isEmpty()) {
-        Box(modifier.fillMaxWidth().padding(horizontal = gutter + 8.dp, vertical = 24.dp), contentAlignment = Alignment.Center) {
-            Text(
-                error ?: "Ask Emrys to text someone, check your calendar, or reply to a message.",
-                color = if (error != null) p.rec else p.ink2, style = Type.bodyLg, textAlign = TextAlign.Center,
-            )
-        }
-        return
-    }
-    LazyColumn(
-        modifier.fillMaxWidth().testTag(CHAT_TAG).fadeTop(list.canScrollForward),
-        state = list,
-        reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.Bottom),
-    ) {
-        item(key = "end") { Spacer(Modifier.height(6.dp)) }
-        if (working) item(key = "working") { Working(Modifier.animateItem().padding(horizontal = gutter)) }
-        if (error != null) {
-            item(key = "error") { DotLine(error, p.rec, Modifier.padding(horizontal = gutter)) }
-        }
-        items(messages.asReversed(), key = { it.id }) { m ->
-            when {
-                m.search != null || m.searching != null -> SearchBlock(m.id, m.search, m.searching, Modifier.animateItem())
-                m.system -> SystemLine(m.text, Modifier.animateItem().padding(horizontal = gutter))
-                m.fromUser -> UserBubble(m, Modifier.animateItem().padding(horizontal = gutter))
-                else -> Reply(m, Modifier.animateItem().padding(horizontal = gutter))
-            }
-        }
-        item(key = "start") { Spacer(Modifier.height(6.dp)) }
-    }
-}
-
-/** Older messages fade out under the sheet's header instead of being cut off by it. */
-private fun Modifier.fadeTop(on: Boolean): Modifier = if (!on) {
-    this
-} else {
-    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
-        drawContent()
-        drawRect(Brush.verticalGradient(0f to Color.Transparent, 28.dp.toPx() / size.height to Color.Black), blendMode = BlendMode.DstIn)
-    }
-}
-
-/** Emrys has the message and is working on it, before the reply arrives: a glacier dot and a band of light crossing the word. */
-@Composable
-private fun Working(modifier: Modifier) {
-    val p = LocalPalette.current
-    val sweep = if (rememberReduceMotion()) {
-        null
-    } else {
-        // The light crosses in the first 2.4 s of each 3.2 s, then rests past the word.
-        rememberInfiniteTransition(label = "working").animateFloat(0f, 1.33f, infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "sweep")
-    }
-    Row(modifier.heightIn(min = 32.dp), verticalAlignment = Alignment.CenterVertically) {
-        SignalDot(p.cy, live = true)
-        Spacer(Modifier.width(12.dp))
-        Text("Thinking", style = Type.bodyLg, color = p.ink2, modifier = Modifier.shimmer(sweep, p.ink))
-    }
-}
-
-/** A soft band of [light] crossing the content from left to right as [sweep] runs from 0 to 1, after ElevenLabs UI's ShimmeringText. */
-private fun Modifier.shimmer(sweep: State<Float>?, light: Color): Modifier = if (sweep == null) {
-    this
-} else {
-    graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithContent {
-        drawContent()
-        val band = size.width * 0.4f
-        val x = -band + (size.width + band * 2) * sweep.value
-        drawRect(
-            Brush.horizontalGradient(listOf(Color.Transparent, light, Color.Transparent), startX = x - band, endX = x + band),
-            blendMode = BlendMode.SrcAtop,
-        )
-    }
-}
-
-/** A small line from the app, such as what was just added to the conversation: quiet and centred. */
-@Composable
-private fun SystemLine(text: String, modifier: Modifier) {
-    val p = LocalPalette.current
-    Text(
-        text, style = Type.labelMd, color = p.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 24.dp),
-    )
-}
-
-/** The user's own words: a halo-tinted bubble on the right. */
-@Composable
-private fun UserBubble(m: ChatMessage, modifier: Modifier) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 8.dp, bottomStart = 22.dp)
-    Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-        Box(
-            Modifier.padding(start = 40.dp).widthIn(max = 300.dp).clip(shape).background(p.accentSoft)
-                .border(1.dp, p.accent.copy(alpha = 0.18f), shape)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-        ) { ReplyText(AnnotatedString(m.text)) }
-    }
-}
-
-/** Emrys's reply: formatted text set straight on the page, with no bubble. */
-@Composable
-private fun Reply(m: ChatMessage, modifier: Modifier) {
-    val p = LocalPalette.current
-    Box(modifier.fillMaxWidth().padding(end = 12.dp)) {
-        val body = remember(m.text) { Rich.format(m.text, p) }
-        ReplyText(body)
-    }
-}
-
-/** The message text as one node. */
-@Composable
-private fun ReplyText(body: AnnotatedString) = Text(body, color = LocalPalette.current.ink, style = Type.bodyLg)
 
 /** A quick request: a soft outline pill in Geist, its touch area kept at 48dp. */
 @Composable
@@ -547,10 +395,10 @@ private fun ComposerField(
     )
 }
 
-/** The dock: quick requests, then the composer with its talk or send key. */
+/** The dock: the quick requests when [quick], then the composer with its talk or send key. */
 @Composable
 private fun Dock(
-    keyboard: Boolean,
+    quick: Boolean,
     voice: Boolean,
     listening: Boolean,
     focusRequests: Int,
@@ -576,7 +424,7 @@ private fun Dock(
         }
     }
     Column(Modifier.fillMaxWidth().background(p.bg).padding(top = 4.dp)) {
-        if (!keyboard) {
+        if (quick) {
             ChipRail(Modifier.padding(top = 6.dp), start = gutter) {
                 items(Quick.entries, key = { it.name }) { q -> QuickPill(q.label, { onSend(q.prompt) }) }
             }

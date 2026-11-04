@@ -3,6 +3,7 @@ package com.hiron.emrys.voice
 import android.speech.SpeechRecognizer
 import com.hiron.emrys.core.Activity
 import com.hiron.emrys.core.EmrysState
+import com.hiron.emrys.core.Reply
 import com.hiron.emrys.ui.AssistPhase
 import com.hiron.emrys.ui.AssistUi
 
@@ -49,14 +50,16 @@ object AssistModel {
 
     private fun turn(messageId: String, asked: String, state: EmrysState, base: AssistUi): AssistUi {
         val at = state.messages.indexOfFirst { it.id == messageId }
-        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser && !it.system }
+        // Emrys's turn once it has said something; it may have thought or used tools first.
+        val reply = if (at < 0) null else state.messages.drop(at + 1).firstOrNull { !it.fromUser && !it.system && it.text.isNotBlank() }
+        val streaming = reply?.parts?.any { it is Reply && it.streaming } == true
         val waiting = state.approvals.size
         val shown = base.copy(heard = asked, reply = reply?.text.orEmpty(), waiting = waiting)
         return when {
             reply == null && state.activity == Activity.Failed ->
                 shown.copy(phase = AssistPhase.Failed, status = "DIDN'T FINISH", note = state.lastError ?: "I couldn't finish that.")
             waiting > 0 -> shown.copy(phase = AssistPhase.Waiting, status = "NEEDS YOU")
-            reply != null -> shown.copy(phase = AssistPhase.Done, status = "DONE")
+            reply != null && !streaming -> shown.copy(phase = AssistPhase.Done, status = "DONE")
             else -> shown.copy(phase = AssistPhase.Working, status = working(state))
         }
     }
