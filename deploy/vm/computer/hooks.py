@@ -90,7 +90,7 @@ class Report(BaseModel):
     where: str
     checked: str
     blocker: str
-    # What the voice agent says as the owner picks up: why it's calling back.
+    # What the voice agent says as the owner picks up: why it's calling back and how the task went.
     opening: str = ""
 
 
