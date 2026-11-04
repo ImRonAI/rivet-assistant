@@ -46,7 +46,7 @@ enum class AgentMode { Voice, Text }
  * Emrys's ElevenLabs agents, connected straight through the ElevenLabs Android SDK: [start] a voice or text
  * session, [sendText], [switchMode], [stop]. Every session starts with the user's id and their `perm_*` grants
  * as dynamic variables; the agents call the phone tools, `request_approval` and the search tools ([SearchTools])
- * as client tools.
+ * as client tools. The chat is built from the session's server messages ([ChatEvents]).
  */
 class EmrysAgent(
     private val context: Context,
@@ -78,6 +78,7 @@ class EmrysAgent(
         val messages = mutableListOf<String>().also { queued = it }
         firstMessage?.let(messages::add)
         this.mode = mode
+        update { it.copy(voice = mode == AgentMode.Voice) }
         starting = scope.launch(Dispatchers.Main) {
             var started: ConversationSession? = null
             try {
@@ -106,7 +107,7 @@ class EmrysAgent(
 
     /** Sends [text] to the text agent, starting a text session when none is running; returns the message's id. */
     fun sendText(text: String): String {
-        val id = say(fromUser = true, text)
+        val id = said(text)
         if (mode == AgentMode.Text && starting?.isActive == true) {
             queued += text
             return id
@@ -138,7 +139,7 @@ class EmrysAgent(
         if (mode == AgentMode.Voice) robot(RobotDirector.voice(VoiceTurn.None))
         mode = null
         ending?.let(::end)
-        update { if (it.activity == Activity.Listening) it.copy(activity = Activity.Idle) else it }
+        update { it.copy(activity = if (it.activity == Activity.Listening) Activity.Idle else it.activity, voice = false) }
     }
 
     private fun end(ending: ConversationSession) {
@@ -184,10 +185,19 @@ class EmrysAgent(
             },
             onInterruption = { onMain(gen) { hush() } },
             onAudioAlignment = { alignment -> onMain(gen) { lipSync(alignment) } },
-            onUserTranscriptEvent = { text, _ -> if (voice && text.isNotBlank()) say(fromUser = true, text) },
-            onAgentResponseEvent = { text, _ -> AgentTools.withoutAudioTags(text).let { if (it.isNotBlank()) say(fromUser = false, it) } },
+            // Every server message as it arrives, before the SDK parses it: the chat is built from these, in order.
+            onMessage = { source, message -> if (source == "ai") chat(gen, message, voice) },
             onError = { code, message -> note("ElevenLabs error $code${message?.let { ": $it" }.orEmpty()}") },
         )
+    }
+
+    private fun chat(gen: Int, message: String, voice: Boolean) {
+        val now = System.currentTimeMillis()
+        val event = runCatching { JSONObject(message) }.getOrNull() ?: return
+        onMain(gen) {
+            if (event.optString("type") == "user_transcript") ScreenOperator.resume()
+            update { ChatEvents.apply(it, event, now, voice) }
+        }
     }
 
     private fun onMain(gen: Int, block: () -> Unit) {
@@ -230,18 +240,12 @@ class EmrysAgent(
     fun hasMicrophone() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    /** Adds a line to the conversation; returns its id. */
-    private fun say(fromUser: Boolean, text: String): String {
+    /** Adds the user's typed message to the conversation; returns its id. */
+    private fun said(text: String): String {
         // The user asking Emrys anything lifts a Stop they pressed on the app operator.
-        if (fromUser) ScreenOperator.resume()
-        val message = ChatMessage("agent:" + UUID.randomUUID().toString().take(12), fromUser, text)
-        update {
-            it.copy(
-                messages = it.messages + message,
-                activity = if (fromUser) Activity.Thinking else Activity.Done,
-                lastError = if (fromUser) null else it.lastError,
-            )
-        }
+        ScreenOperator.resume()
+        val message = ChatMessage("agent:" + UUID.randomUUID().toString().take(12), true, text)
+        update { it.copy(messages = it.messages + message, activity = Activity.Thinking, lastError = null) }
         return message.id
     }
 

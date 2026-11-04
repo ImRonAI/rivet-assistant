@@ -18,10 +18,11 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Strict: everything the verbatim ElevenLabs components pass. They don't pass noUncheckedIndexedAccess,
-       exactOptionalPropertyTypes or noPropertyAccessFromIndexSignature, and tsc checks the files it imports. */
+    /* Strict: everything the verbatim ElevenLabs and AI Elements components pass. They don't pass
+       noUncheckedIndexedAccess, exactOptionalPropertyTypes or noPropertyAccessFromIndexSignature, and AI Elements'
+       Reasoning doesn't pass noImplicitReturns (an effect returns its cleanup on one path); tsc checks the files it
+       imports. */
     "strict": true,
-    "noImplicitReturns": true,
     "noImplicitOverride": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

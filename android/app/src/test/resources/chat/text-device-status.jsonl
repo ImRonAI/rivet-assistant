@@ -1,0 +1,29 @@
+{"t":1793524319949,"source":"ai","message":"{\"conversation_initiation_metadata_event\":{\"conversation_id\":\"conv_0101m6b62zsvf7ca3f2g8tpp5nwg\",\"agent_output_audio_format\":\"pcm_16000\",\"user_input_audio_format\":\"pcm_16000\",\"persistent_session_token\":null},\"type\":\"conversation_initiation_metadata\"}"}
+{"t":1793524321796,"source":"ai","message":"{\"ping_event\":{\"event_id\":2,\"ping_ms\":null},\"type\":\"ping\"}"}
+{"t":1793524321836,"source":"ai","message":"{\"mcp_connection_status\":{\"integrations\":[{\"integration_id\":\"cQmOZvdDjpkXswbDujJs\",\"integration_type\":\"mcp_server\",\"is_connected\":true,\"tool_count\":6},{\"integration_id\":\"SJR4vPhotIbNIP3pH0Ha\",\"integration_type\":\"mcp_server\",\"is_connected\":true,\"tool_count\":25}]},\"type\":\"mcp_connection_status\"}"}
+{"t":1793524321843,"source":"ai","message":"{\"mcp_connection_status\":{\"integrations\":[{\"integration_id\":\"cQmOZvdDjpkXswbDujJs\",\"integration_type\":\"mcp_server\",\"is_connected\":true,\"tool_count\":6},{\"integration_id\":\"SJR4vPhotIbNIP3pH0Ha\",\"integration_type\":\"mcp_server\",\"is_connected\":true,\"tool_count\":25}]},\"type\":\"mcp_connection_status\"}"}
+{"t":1793524323494,"source":"ai","message":"{\"ping_event\":{\"event_id\":3,\"ping_ms\":365},\"type\":\"ping\"}"}
+{"t":1793524324598,"source":"ai","message":"{\"client_tool_call\":{\"tool_name\":\"device_status\",\"tool_call_id\":\"toolu_vrtx_01Nj1ufoqqQhzdBLBQop6DMt\",\"parameters\":{},\"event_id\":1,\"expects_response\":true},\"type\":\"client_tool_call\"}"}
+{"t":1793524324601,"source":"ai","message":"{\"text_response_part\":{\"text\":\"\",\"type\":\"start\",\"event_id\":1,\"response_id\":\"e0b86382-c8b0-461e-ae64-bb169fab4ab4\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524324602,"source":"ai","message":"{\"text_response_part\":{\"text\":\"\",\"type\":\"stop\",\"event_id\":1,\"response_id\":\"e0b86382-c8b0-461e-ae64-bb169fab4ab4\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524325195,"source":"ai","message":"{\"ping_event\":{\"event_id\":4,\"ping_ms\":389},\"type\":\"ping\"}"}
+{"t":1793524325218,"source":"ai","message":"{\"agent_tool_response\":{\"tool_name\":\"device_status\",\"tool_call_id\":\"toolu_vrtx_01Nj1ufoqqQhzdBLBQop6DMt\",\"tool_type\":\"client\",\"is_error\":false,\"is_blocked\":false,\"event_id\":1,\"is_called\":true,\"status\":\"success\"},\"type\":\"agent_tool_response\"}"}
+{"t":1793524326895,"source":"ai","message":"{\"ping_event\":{\"event_id\":5,\"ping_ms\":414},\"type\":\"ping\"}"}
+{"t":1793524327209,"source":"ai","message":"{\"text_response_part\":{\"text\":\"\",\"type\":\"start\",\"event_id\":1,\"response_id\":\"a02f79fd-5bd5-4ef7-a03c-61a8e7e76518\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524327209,"source":"ai","message":"{\"text_response_part\":{\"text\":\"Your ph\",\"type\":\"delta\",\"event_id\":1,\"response_id\":\"a02f79fd-5bd5-4ef7-a03c-61a8e7e76518\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524327210,"source":"ai","message":"{\"text_response_part\":{\"text\":\"one is at 100%, and\",\"type\":\"delta\",\"event_id\":1,\"response_id\":\"a02f79fd-5bd5-4ef7-a03c-61a8e7e76518\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524327210,"source":"ai","message":"{\"text_response_part\":{\"text\":\" it's still plugged in.\",\"type\":\"delta\",\"event_id\":1,\"response_id\":\"a02f79fd-5bd5-4ef7-a03c-61a8e7e76518\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524327210,"source":"ai","message":"{\"text_response_part\":{\"text\":\"\",\"type\":\"stop\",\"event_id\":1,\"response_id\":\"a02f79fd-5bd5-4ef7-a03c-61a8e7e76518\"},\"type\":\"agent_chat_response_part\"}"}
+{"t":1793524327210,"source":"ai","message":"{\"agent_response_event\":{\"agent_response\":\"Your phone is at 100%, and it's still plugged in.\",\"event_id\":1,\"response_id\":\"a02f79fd-5bd5-4ef7-a03c-61a8e7e76518\",\"in_response_to_ids\":[\"6641f1a3-4011-4a39-8f71-3c3daae3bb05\"],\"response_type\":\"text\",\"attachments\":[]},\"type\":\"agent_response\"}"}
+{"t":1793524328598,"source":"ai","message":"{\"ping_event\":{\"event_id\":6,\"ping_ms\":417},\"type\":\"ping\"}"}
+{"t":1793524330297,"source":"ai","message":"{\"ping_event\":{\"event_id\":7,\"ping_ms\":449},\"type\":\"ping\"}"}
+{"t":1793524331999,"source":"ai","message":"{\"ping_event\":{\"event_id\":8,\"ping_ms\":417},\"type\":\"ping\"}"}
+{"t":1793524333699,"source":"ai","message":"{\"ping_event\":{\"event_id\":9,\"ping_ms\":464},\"type\":\"ping\"}"}
+{"t":1793524335399,"source":"ai","message":"{\"ping_event\":{\"event_id\":10,\"ping_ms\":389},\"type\":\"ping\"}"}
+{"t":1793524337106,"source":"ai","message":"{\"ping_event\":{\"event_id\":11,\"ping_ms\":450},\"type\":\"ping\"}"}
+{"t":1793524338802,"source":"ai","message":"{\"ping_event\":{\"event_id\":12,\"ping_ms\":386},\"type\":\"ping\"}"}
+{"t":1793524340509,"source":"ai","message":"{\"ping_event\":{\"event_id\":13,\"ping_ms\":434},\"type\":\"ping\"}"}
+{"t":1793524342204,"source":"ai","message":"{\"ping_event\":{\"event_id\":14,\"ping_ms\":434},\"type\":\"ping\"}"}
+{"t":1793524343905,"source":"ai","message":"{\"ping_event\":{\"event_id\":15,\"ping_ms\":434},\"type\":\"ping\"}"}
+{"t":1793524345692,"source":"ai","message":"{\"ping_event\":{\"event_id\":16,\"ping_ms\":491},\"type\":\"ping\"}"}
+{"t":1793524347305,"source":"ai","message":"{\"ping_event\":{\"event_id\":17,\"ping_ms\":502},\"type\":\"ping\"}"}
