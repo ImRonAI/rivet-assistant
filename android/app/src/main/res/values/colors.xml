@@ -2,23 +2,13 @@
 <!-- Emrys's Noir palette for the home-screen widgets, which draw with RemoteViews and can't use the Compose theme. -->
 <resources>
     <!-- emrys_bg lives in themes.xml with the window background. -->
-    <color name="emrys_raised">#FF141417</color>
-    <color name="emrys_field">#FF131316</color>
-    <color name="emrys_tile">#FF1A1A1E</color>
     <color name="emrys_ink">#FFF3F2EE</color>
     <color name="emrys_ink2">#FF9E9DA4</color>
     <color name="emrys_accent">#FFB7C2FF</color>
-    <color name="emrys_accent_hi">#FFCDD5FF</color>
     <color name="emrys_accent_ink">#FF0A0A0C</color>
     <color name="emrys_ok">#FF97D4A6</color>
     <color name="emrys_amber">#FFE8C07C</color>
-    <color name="emrys_crimson">#FFF07B6C</color>
-    <!-- Glass: the search bar's fill, its hairline and the light along its top edge. -->
+    <!-- Glass: the search bar's fill and its hairline. -->
     <color name="emrys_glass">#E6141417</color>
     <color name="emrys_edge">#17FFFFFF</color>
-    <color name="emrys_highlight">#12FFFFFF</color>
-    <color name="emrys_shadow">#66000000</color>
-    <!-- The talk key's halo rings. -->
-    <color name="emrys_halo">#26B7C2FF</color>
-    <color name="emrys_halo_outer">#10B7C2FF</color>
 </resources>
