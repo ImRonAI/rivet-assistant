@@ -1,190 +1,32 @@
 # Emrys
 
-Emrys is an Android phone assistant: email, texts, calls, apps, reminders and tasks, with a human
-approval before anything that sends, buys, changes or deletes. The face is the Emrys robot (SVG); the
-brain is a [Strands harness](https://strandsagents.com/docs/user-guide/harness/) agent on Perplexity's
-Agent API, connected to the Telnyx MCP server on Prefect Horizon.
+Emrys is an Android phone assistant by Oubli AI. It handles texts, email drafts, calls, apps, reminders and tasks on
+the phone through the owner's ElevenLabs agents. Its face is the Emrys robot.
+
+The app connects straight to two ElevenLabs agents (text and voice) with the official ElevenLabs Android SDK and answers
+their client tools on the phone. There is no backend between the phone and the agents. The agents also reach the
+owner's workspace VM (https://rivet.ron-ai.dev) and the Telnyx MCP server through MCP servers the owner configures in
+ElevenLabs.
+
+`AGENTS.md` is the source of truth: how it works, its status, the rules, and the remaining work. Read it first.
+
+## Repository
 
 ```
-Android app (Kotlin/Compose)                   Emrys brain (this repo: brain/)
-┌──────────────────────────────┐   WSS   ┌────────────────────────────────────────────────┐
-│ Emrys robot (WebView)        │◄───────►│ gateway: /v1/sessions/{id}, device token        │
-│ approval sheet, notifications│ events  │  └ SessionSupervisor (one per session)          │
-│ device tool executors + ledger│approvals│     └ lanes: conversation, GoalLoop tasks      │
-└──────────────────────────────┘ device  │        └ generation N: create_harness(...)     │
-                                         │           model: Perplexity Agent API          │
-                                         │           tools: Telnyx MCP, device proxies    │
-                                         │           interventions: EmrysApprovals        │
-                                         └───────────┬──────────────────────┬─────────────┘
-                                         Perplexity Agent API        Telnyx MCP (Horizon)
-                                         (web/people/image/finance   1,371 Telnyx operations
-                                          search run server-side)    via search/get_schema/execute
+android/   Kotlin/Compose app (minSdk 29, targetSdk 36): robot WebView, ElevenLabs stage layer, widgets, assistant overlay
+  robot/     the robot page and its bridge (built into assets by tools/build_robot_asset.py)
+  stage-ui/  ElevenLabs UI matrix, orb, shimmering text and the chat, bundled into app assets
+deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP, background-task hooks),
+           laptop/ (OpenCode config), toolbox/ (pinned developer tools)
+docs/      design/ (Noir design system, Matrix light language, sigil)
 ```
 
-## Status
+## Build
 
-| Phase | What | State |
-|---|---|---|
-| 0 | Perplexity contract probe (`brain/scripts/probe_perplexity.py`) | **Done**: real streams recorded in `brain/tests/fixtures/perplexity`, replayed by `test_recorded_streams.py` |
-| 1 | Brain: model, approvals, supervisor, gateway, chaos suite | **Built, tested, verified live** against Perplexity and the Telnyx MCP server (read-only) |
-| 2 | Android app: robot WebView, gateway client, chat, voice, approvals, activity, settings | **Built**: APK, JVM tests and lint green; needs an on-device pass (no emulator here) |
-| 3 | Device tools: SMS, replies in any messaging app, contacts, calendar, calls, reminders, email drafts; email over IMAP/SMTP | **Built** on both sides; phone tools verified live through the brain with a scripted phone; email tested against local TLS mail servers (not yet against a real mailbox) |
-| 4 | App operator (Accessibility): read screen, tap/type/scroll, Stop overlay, approval at commit points | **Built**; needs an on-device pass |
-| 5 | Calls: screening, and Emrys answering calls to the user's own number | **Built**: setup verified live up to the first Telnyx write; turning it on needs a Telnyx number Emrys may use (moving one that's in use, or buying one, needs your OK) |
-
-## How the brain works
-
-- **Model** (`models/perplexity.py`): `PerplexityAgentModel` subclasses Strands' `OpenAIResponsesModel`
-  for Perplexity's OpenAI Responses-compatible Agent API. Native tools (`web_search`, `fetch_url`,
-  `image_search`, `finance_search`, `people_search`) are kept in `params["tools"]` and sent on every
-  request; `max_steps`, the `models` fallback chain and `max_output_tokens` go in `extra_body`. It builds
-  function calls from output items (Perplexity sends no argument deltas), carries search results as
-  citations, replays `thought_signature`, and raises typed, retryable errors. An aux model (no native
-  tools) handles memory extraction, summaries and the GoalLoop judge.
-- **Agent** (`factory.py`): `create_harness()` with no shell/file/code/subagent tools, todos, the auto
-  context manager, file memory, snapshot sessions on fenced storage, the Telnyx `MCPClient` (Horizon
-  bearer read per request, `telnyx_` prefix, failure is fatal) and `EmrysApprovals`.
-- **Approvals** (`approvals.py`): deterministic and fail-closed. Telnyx `execute` code is parsed and every
-  `call_tool` target is looked up in a catalog generated from OubliTelnyxMCP's own tool construction
-  (`scripts/gen_telnyx_ops.py`): GET runs, anything else asks; purchases and deletes are high tier. Each
-  approval says in plain words what will happen, to whom and why (`alerts.py`). "Don't ask again" makes a
-  standing rule per action and recipient (`rules.py`), kept in the session's storage: an always-allow skips the
-  question, an always-decline refuses without asking and tells the model why. Purchases, deletes, unrecognised
-  actions, app taps and Telnyx code can only be always declined, and always-allows are suspended for a turn once
-  it has read untrusted content (messages, mail, web pages, screens).
-- **Supervisor** (`supervisor.py`): watchdog phase deadlines (first chunk, stream idle, model total,
-  per-tool limits, retry backoff, Telnyx connection loss); stop sequence of cancel, hard cancel, abandon;
-  generation fencing so an abandoned agent can never write the session; rebuild on the same session id;
-  resume without re-sending the prompt, using a write-ahead side-effect journal so completed actions are
-  never repeated and uncertain ones are reported; overflow compaction on the aux model; restart circuit
-  breaker; crash recovery; pending approvals that survive restarts and time out to a denial; GoalLoop
-  tasks that are never retried over an approval pause.
-- **Gateway** (`gateway.py`): one WebSocket per session, events buffered while the phone is away, device
-  tool calls routed to the phone by action id (the phone's ledger dedups them), re-sent turns ignored.
-- **Phone tools** (`device_tools.py`): the 18 tools the Android app runs, with their approval policies:
-  reads run (messages, notifications, calendar and screens taint the turn), texts, replies and calls ask
-  (a standing rule is per recipient), calendar writes ask, and the app operator asks when a tap's label reads
-  like a commit point (send, pay, delete, confirm). The phone refuses a tap whose label changed.
-
-## Answering your calls (`brain/src/emrys_brain/calls.py`)
-
-Callers keep dialing your own number. Android doesn't let an ordinary app speak on a cellular call, so when
-you turn call answering on, Emrys dials your carrier's forwarding code (calls you don't pick up, or all calls)
-to a Telnyx number where a Telnyx AI Assistant answers as Emrys and takes a message.
-
-1. Ask Emrys to "set up call answering" with a Telnyx number on your account. `call_answering_setup` creates
-   (or updates) the *Emrys call answering* assistant (a non-Anthropic Telnyx model; `EMRYS_CALL_MODEL`) and
-   routes the number to it, after your approval. A number already used by another connection is only moved
-   if you say so (biometric approval). The number is saved on the phone.
-2. Turn it on in Emrys › Settings › Call answering. That dials `**004*` / `**21*` (most carriers) or `*71` /
-   `*72` (Verizon); turning off dials `##002#` / `*73`.
-3. When the assistant picks up, the phone shows "Emrys is answering a call from …" and the conversation as it
-   happens (`call.live`). The brain reads the call's Telnyx AI conversation every `EMRYS_CALL_POLL` seconds
-   (default 2; read-only).
-4. **Take over** on the phone transfers the call to your own number (Settings › your number, E.164) with Telnyx
-   `TransferCall`. Your tap is the approval. It needs "unanswered calls" forwarding, since with "all calls" the
-   transfer would come straight back to Emrys.
-5. The message the caller leaves arrives as a notification and in `call_messages`. When the call ends, the
-   assistant sends a short summary (who, what they wanted, how it ended), which replaces the live notification
-   and lands in the activity log.
-6. Emrys then follows up on its own: a background task reads the message, checks what it needs (contacts,
-   calendar) and proposes the next step, such as a text back, a calendar hold or a reminder. Every send or
-   change waits for your approval, flagged as prompted by outside content. `EMRYS_CALL_FOLLOW_UP=0` turns this off.
-
-The assistant reaches the brain at `EMRYS_PUBLIC_URL/v1/calls/{session}/{token}/start|message|summary`, where the
-token is an HMAC of the session id under the device token. The schema evidence for the live transcript,
-take-over and summary, and what is still unverified live, is in [`docs/calls-live.md`](docs/calls-live.md).
-An assistant set up before these existed needs call answering set up again to get the summary tool.
-
-## Email (`brain/src/emrys_brain/email_tools.py`)
-
-Without a mailbox, Emrys reads email previews from the phone's notifications and opens drafts for you to send
-(`email_draft`). Give the brain your mailbox and it searches, reads, sends and replies itself, over IMAP and SMTP:
-
-| Variable | |
-|---|---|
-| `EMRYS_EMAIL_ADDRESS` | Your email address |
-| `EMRYS_EMAIL_PASSWORD` | An app password for it, never your account password |
-| `EMRYS_EMAIL_IMAP_HOST`, `EMRYS_EMAIL_IMAP_PORT` | Filled in for Gmail, iCloud and Fastmail addresses; the port is 993 |
-| `EMRYS_EMAIL_SMTP_HOST`, `EMRYS_EMAIL_SMTP_PORT` | Likewise; 465 (TLS) or 587 (STARTTLS) |
-
-The email tools exist only when the address and password are set. Every connection is TLS: the brain refuses to
-start with any other port, and sends nothing to a 587 server that offers no STARTTLS.
-
-- `email_search` and `email_read` run without asking and never mark mail read; what they return marks the turn
-  untrusted.
-- `email_send` and `email_reply` ask first. A standing rule covers the same `to` and `cc`, or replies to the
-  same sender. A reply names the address it goes to, which must be the email's Reply-To (or its sender), and threads
-  under it (`Re:`, `In-Reply-To`, `References`). Both file a copy in the folder the server marks `\Sent`.
-- `email_mark` (read, unread, archive) asks too. Archive moves the email to the folder marked `\Archive`, or Gmail's
-  All Mail. Nothing deletes mail.
-
-On Fly (`deploy_fly.sh` also stages any `EMRYS_EMAIL_*` set in its environment):
+See `android/README.md`. In short, with JDK 21 and the Android SDK:
 
 ```bash
-read -rs EMRYS_EMAIL_PASSWORD   # paste the app password; it stays out of your shell history
-fly secrets set -a rivet-assistant EMRYS_EMAIL_ADDRESS=you@gmail.com EMRYS_EMAIL_PASSWORD="$EMRYS_EMAIL_PASSWORD"
+cd android
+python3 tools/build_robot_asset.py --check && python3 tools/build_icon.py --check
+./gradlew testDebugUnitTest lintDebug assembleRelease
 ```
-
-Gmail needs an app password: turn on 2-Step Verification, then create one at
-https://myaccount.google.com/apppasswords (a Google Workspace admin can turn app passwords off). For a Workspace
-address on your own domain, also set `EMRYS_EMAIL_IMAP_HOST=imap.gmail.com` and `EMRYS_EMAIL_SMTP_HOST=smtp.gmail.com`.
-iCloud and Fastmail also require app passwords, created in their account security settings.
-
-## The Android app (`android/`)
-
-Kotlin + Compose, minSdk 29, targetSdk 36. See [`android/README.md`](android/README.md) for building,
-installing and the on-device checklist.
-
-- **Interface**: the Noir design system (near-black, porcelain, one halo accent; Instrument Serif, Geist and
-  Geist Mono) in Compose: a serif masthead with the dot-matrix sigil, Emrys on its stage with a serif greeting,
-  a glass transcript sheet you pull up over it, and a dock of soft pills, the composer and the porcelain voice
-  disc. The stage carries ElevenLabs UI's Matrix (Emrys's light language, in its armor and a light floor), Orb
-  and ShimmeringText. Replies render their markdown and citations. First launch is "Meet Emrys".
-- **Launcher**: an adaptive icon drawn from Emrys's head with a themed monochrome layer
-  (`android/tools/build_icon.py` generates every icon drawable from one shape list), long-press shortcuts
-  (talk, type, catch me up, my day) and two home-screen widgets: a search bar ("Ask Emrys anything" with
-  a talk key) and a panel with link status, Emrys's latest reply and quick keys. Widgets and shortcuts open
-  the app through fixed actions; a quick key carries only its name, never free text.
-- **Robot**: `Emrys_the_Robot.html`, a porcelain hero with ElevenLabs UI's Matrix in its armor and the Orb and
-  ShimmeringText on its stage (`android/stage-ui`), bundled with offline fonts and a small bridge
-  (`android/robot/bridge.js`) so the app drives its moves, lip sync from text-to-speech, and a stage glow in the
-  colour of what Emrys is doing. Served from app assets only (no network, no file access).
-- **Connection**: one OkHttp WebSocket per session in a foreground service, with `resume` on every
-  reconnect, exponential backoff, an offline queue and re-sent unacknowledged turns.
-- **Approvals**: a review sheet that answers a lane's approvals together, notification Approve/Deny that
-  need the phone unlocked, and biometrics or the device credential for high-risk tiers and for every
-  always-allow. "Don't ask again" works with Approve and with Deny; the rules are listed and removable in
-  Settings › Approval rules.
-- **Device tools**: `ActionLedger` records every action by the brain's tool use id, so a re-sent call returns
-  its stored result and one interrupted by the app dying is reported as uncertain, never repeated.
-
-## Run it
-
-```bash
-cd brain
-uv sync --frozen --extra dev
-export PERPLEXITY_API_KEY=... HORIZON_API_KEY=... EMRYS_DEVICE_TOKEN=$(python -c 'import secrets; print(secrets.token_urlsafe(32))')
-uv run emrys-brain            # serves :8080, /healthz and /v1/sessions/{session_id}
-```
-
-Deployed on Fly.io as `rivet-assistant` (https://rivet-assistant.fly.dev, region `sjc`, one machine,
-1 GB volume): `brain/scripts/deploy_fly.sh` creates or updates it (`FLY_LOCAL_BUILD=1` builds with local
-Docker when Fly's remote builder is unreachable). `brain/scripts/setup_call_answering.py` sets up call
-answering for a session from outside the phone.
-
-Configuration is in `brain/.env.example`. Secrets belong in your secret store (Fly secrets, cloud
-environment secrets), never in the repo. Deploy with `fly deploy` from `brain/` (`fly.toml`, one machine
-with a `/data` volume: sessions are single-writer).
-
-## Test it
-
-```bash
-cd brain
-uv run pytest -q -m "not live"   # unit, chaos (hangs, overflow, outages, kill -9, MCP drop), gateway
-uv run pytest -q -m live         # real Perplexity + read-only Telnyx, when the keys are set
-uv run ruff check src tests scripts && uv run mypy src
-```
-
-Tests never call Telnyx: a local MCP server stands in for Horizon. Live tests use Telnyx read-only, with
-approvals on and any write denied.
