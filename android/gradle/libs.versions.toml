@@ -11,12 +11,15 @@ biometric = "1.1.0"
 # (crash on every permission request); 1.3+ removed that check.
 fragment = "1.8.9"
 work = "2.11.2"
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 okhttp = "4.12.0"
 junit = "4.13.2"
 orgJson = "20260814"
 robolectric = "4.16"
 elevenlabs = "0.13.0"
+mcp = "0.16.0"
+ktor = "3.5.2"
+serialization = "1.11.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -40,6 +43,11 @@ junit = { module = "junit:junit", version.ref = "junit" }
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 elevenlabs-android = { module = "io.elevenlabs:elevenlabs-android", version.ref = "elevenlabs" }
+mcp-server = { module = "io.modelcontextprotocol:kotlin-sdk-server", version.ref = "mcp" }
+mcp-client = { module = "io.modelcontextprotocol:kotlin-sdk-client", version.ref = "mcp" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 
