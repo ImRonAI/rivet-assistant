@@ -5,8 +5,8 @@
 `AGENTS.md` is the source of truth for Emrys's status, what it can do, the rules, and the remaining work. Read it before changing
 anything. In short:
 
-- **Version:** app 0.4.5 (versionCode 12) on branch `ccr-22d59ed7-dzijhh`. The brain runs on the owner's Google Cloud VM at
-  https://rivet.ron-ai.dev (Docker and Caddy; files in `deploy/vm/`). The Fly app `rivet-assistant` is stopped.
+- **Version:** app 0.5.0 (versionCode 13) on `main`. The app talks to the ElevenLabs agents directly; the owner's workspace VM
+  is at https://rivet.ron-ai.dev (Docker and Caddy; files in `deploy/vm/`). The Fly app `rivet-assistant` is stopped.
 - **The owner's rules for this project:**
   - The ElevenLabs text agent is the default for typing and the ElevenLabs voice agent is the default for talking. Both use the
     phone through their client tools. Qwen (Groq) and Perplexity are only model options for Emrys's own brain, never a fallback
@@ -28,11 +28,8 @@ anything. In short:
 - **Before handing over an APK:** run the tests, lint and release build, review `android/build/screens/`, verify the APK, and run
   the live test.
 
-## Addendum, 2026-10-30: Emrys 0.5.0 (branch `design/facelift`)
-Branch `design/facelift` merges upstream 0.4.5 (every behaviour change kept), renames Rivet to **Emrys** everywhere in
-code (app ID `com.hiron.emrys`, the brain package `emrys_brain`, `EMRYS_*` settings, the bridge `window.emrys`) with no
-compatibility layer, and redesigns the app: the Noir design system (`docs/design/EMRYS_DESIGN.md`), a new robot, and
-ElevenLabs UI's Matrix, Orb and ShimmeringText on the stage (`docs/design/EMRYS_MATRIX.md`). It also fixes the robot
-never drawing on a device (the WebView now has `MATCH_PARENT` height). The live VM still runs the Rivet code under
-`/opt/rivet` until `deploy/vm/migrate-to-emrys.sh` runs there. What was done, how it was verified, and what's left are in
-the addendum at the end of `AGENTS.md`.
+## Addendum, 2026-10-30: Emrys 0.5.0
+Emrys 0.5.0 merges upstream 0.4.5 (every behaviour change kept), renames Rivet to **Emrys** everywhere in code (app ID
+`com.hiron.emrys`, `EMRYS_*` settings, the bridge `window.emrys`) with no compatibility layer, and redesigns the app:
+the Noir design system (`docs/design/EMRYS_DESIGN.md`), a new robot, and ElevenLabs UI's Matrix, Orb and
+ShimmeringText on the stage (`docs/design/EMRYS_MATRIX.md`). It is all on `main`; branch from there.

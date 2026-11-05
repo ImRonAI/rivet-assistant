@@ -1,8 +1,6 @@
 # AGENTS.md — Emrys
 
 Guidance for any AI agent (or person) working in this repository. Read this first, then `android/README.md`.
-`README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the deleted brain; trust
-this file where they disagree.
 
 Emrys is an Android phone assistant built by Oubli AI (founder Tim Hunter, https://oubliai.com, tim@oubliai.com). It
 handles texts, email drafts, calls, apps, reminders and tasks on the phone through the owner's ElevenLabs agents. Its
@@ -133,7 +131,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 
 | Area | State |
 |---|---|
-| App | **0.5.0** (versionCode 13, `com.hiron.emrys`). PR #4 (`design/facelift`) merged into `ccr-22d59ed7-dzijhh` at `fd621d2`; `design/facelift` is ahead of it with the brain off the VM (`3440e8b`) and the voice-token keep rule, the audio-tag filter and the arm64-only build (`11b5b98`). The release build ships arm64-v8a only (19.2 MB; the WebRTC library in the SDK is about 12 MB per ABI). |
+| App | **0.5.0** (versionCode 13, `com.hiron.emrys`). Everything is on `main` (PRs #5 to #8). The release build ships arm64-v8a only (19.2 MB; the WebRTC library in the SDK is about 12 MB per ABI). |
 | Verified | 109 unit and screen tests pass, Kotlin compiles with warnings as errors, lint has 0 errors. On the Android 15 emulator (2026-10-31) a typed question opened a session straight to the text agent (`conv_2801m68vtz0te2natfxrg5cyc6gp`): `user_id` and all eight `perm_*` arrived, the agent called `device_status`, the phone returned real data and the agent answered with the battery level. The arm64-only release APK, with the keep rule and the tag filter, installed on the emulator and opened a voice session with the voice agent ("Listening"; the agent's greeting appeared without its audio tags). |
 | Not verified | Talking to the voice agent through a real microphone (the emulator runs without audio, so only the connection and the agent's greeting were checked); `request_approval` from a live agent (the handler is registered, but on 2026-10-31 the tool was not attached to either agent — attaching it is the owner's call); anything on a physical phone. |
 | Attachments | Images and PDFs are not built: SDK 0.13.0 has no way to send files (`OutgoingEvent` has no multimodal message). The WebSocket protocol's `multimodal_message` with `file_input` exists only in the JS SDK and raw API. |
@@ -158,7 +156,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   files and `code-token` stay on the VM.
 - **No fakes, stubs or simulations in the product.** Test the real feature in the real app (emulator or phone) before
   calling it done.
-- **Branches:** work on `design/facelift`, merge through PRs; don't push to `main` or `ccr-22d59ed7-dzijhh`.
+- **Branches:** branch from `main` and merge through PRs; don't push to `main`.
 - **Match the surrounding code:** naming, comment density, evergreen comments with no "previously" or "now".
   Commits use conventional commit messages.
 - **Validate before handing over an APK:** `./gradlew testDebugUnitTest lintDebug assembleRelease`, review the
@@ -172,7 +170,7 @@ android/   Kotlin/Compose app (minSdk 29, targetSdk 36), robot WebView, ElevenLa
   robot/     the robot page and its bridge (built into assets by tools/build_robot_asset.py)
   stage-ui/  ElevenLabs UI matrix, orb and shimmering-text, bundled into assets/emrys/vendor/
 deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), laptop/ (OpenCode config, workspace AGENTS.md)
-docs/      design/ (Noir design system, Matrix light language, sigil); calls-live.md and scaling.md describe the old brain
+docs/      design/ (Noir design system, Matrix light language, sigil)
 .github/   CI: android.yml (asset checks, tests, lint, release build)
 ```
 
@@ -225,16 +223,18 @@ uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-
 1. **Live checks on a phone:** a voice conversation, `request_approval` end to end (once the owner attaches the tool),
    each phone tool, the overlay, widgets and notifications.
 2. **Image and PDF input:** blocked on the Android SDK (see Status). Don't build an upload path around it.
-3. **Docs:** `README.md`, `android/README.md`, `docs/calls-live.md` and `docs/scaling.md` still describe the brain.
-4. **VM leftovers:** `/opt/emrys/data`, `src/`, `brain.env` and the `emrys-brain:14bcf2b` image stay until the owner
+3. **VM leftovers:** `/opt/emrys/data`, `src/`, `brain.env` and the `emrys-brain:14bcf2b` image stay until the owner
    removes them.
-5. **Background tasks:** a callback the owner talks through past its opening line; a session that never started
+4. **Background tasks:** a callback the owner talks through past its opening line; a session that never started
    still calls with an empty first message. Not checked since the 2026-11-03 config read: the voice agent's
    `background_task` item and `job_dir` on both agents.
-6. **A stated result no tool returned:** on a phone call the voice agent called a phone tool that can't run there and
+5. **A stated result no tool returned:** on a phone call the voice agent called a phone tool that can't run there and
    then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
-7. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
+6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
+7. **Phone tools over MCP** (PRD https://claude.ai/artifact/HFpZU7AR2FDy1VyUhuQuWv): the phone's MCP server and tool
+   schemas are in `mcp/` (PR #8), tested on the JVM; nothing starts the server yet. Next: the foreground service and
+   Settings, then the VM hub (`deploy/vm/computer/hub.py`), then these docs.
 
 ## Before launch (checklist)
 1. **Release signing:** the APK is signed with the debug key (`android/app/build.gradle.kts`). Create a release
