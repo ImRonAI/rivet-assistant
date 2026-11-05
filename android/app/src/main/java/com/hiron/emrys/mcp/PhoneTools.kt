@@ -13,6 +13,12 @@ import kotlinx.serialization.json.putJsonArray
 internal object PhoneTools {
     private const val ISO = "ISO-8601 in the phone's time zone, like 2026-10-27T09:00, or epoch milliseconds"
 
+    /** Tools that reach people outside the phone. */
+    private val OPEN_WORLD = setOf("sms_send", "phone_call", "notification_reply", "screen_act")
+
+    /** Tools that can remove or overwrite something rather than only add. */
+    private val DESTRUCTIVE = setOf("reminder_cancel", "screen_act")
+
     val all: List<Tool> = listOf(
         tool("sms_send", "Send a text message.", false, required("to", "body"), "to" to str("Phone number or contact name"), "body" to str("The message")),
         tool("sms_list", "Recent text messages, newest first.", true, none(), "contact" to str("Only messages with this contact"), "limit" to int("How many, default 20")),
@@ -45,7 +51,7 @@ internal object PhoneTools {
             properties = buildJsonObject { properties.forEach { (key, schema) -> put(key, schema) } },
             required = required.ifEmpty { null },
         ),
-        annotations = ToolAnnotations(readOnlyHint = readOnly, destructiveHint = false, openWorldHint = false),
+        annotations = ToolAnnotations(readOnlyHint = readOnly, destructiveHint = name in DESTRUCTIVE, openWorldHint = name in OPEN_WORLD),
     )
 
     private fun required(vararg keys: String): List<String> = keys.toList()

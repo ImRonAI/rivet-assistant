@@ -64,6 +64,16 @@ class PhoneToolsTest {
     }
 
     @Test
+    fun openWorldAndDestructiveHintsMatch() {
+        val openWorld = setOf("sms_send", "phone_call", "notification_reply", "screen_act")
+        val destructive = setOf("reminder_cancel", "screen_act")
+        PhoneTools.all.forEach { tool ->
+            assertEquals(tool.name, tool.name in openWorld, tool.annotations?.openWorldHint)
+            assertEquals(tool.name, tool.name in destructive, tool.annotations?.destructiveHint)
+        }
+    }
+
+    @Test
     fun screenActionsAreTheOnesScreenOperatorTakes() {
         val action = PhoneTools.all.single { it.name == "screen_act" }.inputSchema.properties.orEmpty().getValue("action")
         val values = action.jsonObject.getValue("enum").jsonArray.map { it.jsonPrimitive.content }
