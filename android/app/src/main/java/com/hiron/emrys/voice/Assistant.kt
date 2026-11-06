@@ -21,3 +21,9 @@ interface Assistant {
 
     fun hasMicrophone(): Boolean
 }
+
+/** Who runs Emrys's agents; the screens, tools and approvals are the same either way. */
+enum class Provider(val label: String) {
+    ElevenLabs("ElevenLabs"),
+    Gemini("Gemini"),
+}

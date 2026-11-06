@@ -5,6 +5,8 @@ import android.util.Base64
 import com.hiron.emrys.BuildConfig
 import com.hiron.emrys.device.CarrierStyle
 import com.hiron.emrys.device.ForwardMode
+import com.hiron.emrys.voice.GeminiTextModel
+import com.hiron.emrys.voice.Provider
 import java.security.SecureRandom
 import java.util.UUID
 
@@ -54,6 +56,21 @@ class Settings(context: Context) {
     var voiceModel: Boolean
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
+
+    /** Who runs Emrys's agents: the ElevenLabs agents (the default) or Gemini on the workspace VM. */
+    var provider: Provider
+        get() = runCatching { Provider.valueOf(prefs.getString("provider", null).orEmpty()) }.getOrDefault(Provider.ElevenLabs)
+        set(value) = prefs.edit().putString("provider", value.name).apply()
+
+    /** The Gemini text model, which also runs the voice agent's helpers. */
+    var geminiTextModel: GeminiTextModel
+        get() = runCatching { GeminiTextModel.valueOf(prefs.getString("gemini_text_model", null).orEmpty()) }.getOrDefault(GeminiTextModel.Argon)
+        set(value) = prefs.edit().putString("gemini_text_model", value.name).apply()
+
+    /** The bearer token for the Gemini agents on the workspace VM. */
+    var geminiToken: String
+        get() = prefs.getString("gemini_token", null) ?: BuildConfig.DEFAULT_GEMINI_TOKEN
+        set(value) = prefs.edit().putString("gemini_token", value.trim()).apply()
 
     /** The agents reach this phone's MCP server with this token; made once per install. */
     val phoneMcpToken: String

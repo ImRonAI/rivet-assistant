@@ -17,6 +17,8 @@ import com.hiron.emrys.ui.ImageLoader
 import com.hiron.emrys.voice.AgentTools
 import com.hiron.emrys.voice.Assistant
 import com.hiron.emrys.voice.EmrysAgent
+import com.hiron.emrys.voice.GeminiAgent
+import com.hiron.emrys.voice.Provider
 import com.hiron.emrys.voice.SearchTools
 import com.hiron.emrys.widget.EmrysWidgets
 import kotlinx.coroutines.CompletableDeferred
@@ -49,7 +51,7 @@ class EmrysApp : Application() {
 val Context.emrys: EmrysRuntime get() = (applicationContext as EmrysApp).runtime
 
 /**
- * The rendered [state], the robot's command stream, the phone tools, the ElevenLabs agents ([agent]) and the
+ * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs or Gemini) and the
  * approvals they ask for with `request_approval`.
  */
 class EmrysRuntime(private val app: Context) {
@@ -92,7 +94,22 @@ class EmrysRuntime(private val app: Context) {
     /** Result thumbnails and images, cached in memory only. */
     val images = ImageLoader(http)
 
-    val agent: Assistant = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
+    private val elevenLabs = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
+    private val gemini = GeminiAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
+
+    /** The agents for the provider chosen in Settings. */
+    val agent: Assistant
+        get() = when (settings.provider) {
+            Provider.ElevenLabs -> elevenLabs
+            Provider.Gemini -> gemini
+        }
+
+    /** Switches provider; the running conversation ends, and the next one starts with [provider]. */
+    fun choose(provider: Provider) {
+        if (provider == settings.provider) return
+        agent.stop()
+        settings.provider = provider
+    }
 
     /** The same phone tools, approvals and searches, for agents that reach the phone over MCP ([PhoneMcpService]). */
     val phoneServer = PhoneMcpServer(
