@@ -1,6 +1,8 @@
 package com.hiron.emrys.mcp
 
+import com.hiron.emrys.core.PermAction
 import com.hiron.emrys.voice.AgentTools
+import com.hiron.emrys.voice.SearchTools
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -70,6 +72,31 @@ class PhoneToolsTest {
         PhoneTools.all.forEach { tool ->
             assertEquals(tool.name, tool.name in openWorld, tool.annotations?.openWorldHint)
             assertEquals(tool.name, tool.name in destructive, tool.annotations?.destructiveHint)
+        }
+    }
+
+    @Test
+    fun approvalOffersEveryPermission() {
+        val type = PhoneTools.approval.inputSchema.properties.orEmpty().getValue("action_type")
+        assertEquals(PermAction.entries.map { it.wire }, type.jsonObject.getValue("enum").jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("action_type", "details"), PhoneTools.approval.inputSchema.required)
+    }
+
+    @Test
+    fun searchesAreTheSearchToolsWithTheInputsTheyRead() {
+        assertEquals(SearchTools.NAMES.keys.toList(), PhoneTools.searches.map { it.name })
+        val inputs = mapOf(
+            "web_search" to setOf("q", "count", "freshness"),
+            "news_search" to setOf("q", "count", "freshness"),
+            "image_search" to setOf("q", "count"),
+            "video_search" to setOf("q", "count", "freshness"),
+            "place_search" to setOf("q", "location", "count"),
+            "answers" to setOf("q"),
+            "llm_context" to setOf("q", "count", "freshness", "maximum_number_of_tokens"),
+        )
+        PhoneTools.searches.forEach { tool ->
+            assertEquals(tool.name, inputs.getValue(tool.name), tool.inputSchema.properties.orEmpty().keys)
+            assertEquals(tool.name, true, tool.annotations?.readOnlyHint)
         }
     }
 

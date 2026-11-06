@@ -72,6 +72,18 @@ services:
     volumes:
       - laptop_home:/config
 
+  # The Gemini agents (Strands) for the phone, at wss://rivet.ron-ai.dev/gemini/.
+  gemini:
+    build: ./gemini
+    image: emrys-gemini:1.64.0
+    restart: unless-stopped
+    env_file:
+      - elevenlabs.env
+      - gemini.env
+    mem_limit: 4g
+    volumes:
+      - laptop_home:/config
+
 volumes:
   caddy_data:
   caddy_config:

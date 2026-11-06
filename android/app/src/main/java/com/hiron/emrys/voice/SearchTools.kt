@@ -33,18 +33,30 @@ object SearchTools {
     fun build(
         search: suspend (SearchQuery) -> Result<SearchResults>,
         update: ((EmrysState) -> EmrysState) -> Unit,
-    ): Map<String, ClientTool> = NAMES.mapValues { (name, kind) ->
+    ): Map<String, ClientTool> = NAMES.keys.associateWith { name ->
         object : ClientTool {
-            override suspend fun execute(parameters: Map<String, Any>): ClientToolResult {
-                val query = query(kind, parameters) ?: return ClientToolResult.failure("Say what to search for.")
-                return search(query).fold(
-                    onSuccess = { results ->
-                        update { EmrysStore.searched(it, name, results) }
-                        ClientToolResult.success(SearchSummary.forAgent(results))
-                    },
-                    onFailure = { error -> ClientToolResult.failure(error.message ?: FAILED) },
-                )
-            }
+            override suspend fun execute(parameters: Map<String, Any>): ClientToolResult = call(name, parameters, search, update).fold(
+                onSuccess = { ClientToolResult.success(it) },
+                onFailure = { ClientToolResult.failure(it.message ?: FAILED) },
+            )
+        }
+    }
+
+    /**
+     * One call of the search tool [name]: searches, puts the results on the tool's step in the chat, and answers what
+     * the agent is told about them; a failure carries what to tell the agent.
+     */
+    suspend fun call(
+        name: String,
+        parameters: Map<String, Any>,
+        search: suspend (SearchQuery) -> Result<SearchResults>,
+        update: ((EmrysState) -> EmrysState) -> Unit,
+    ): Result<String> {
+        val kind = NAMES[name] ?: return Result.failure(IllegalArgumentException("Unknown search tool $name."))
+        val query = query(kind, parameters) ?: return Result.failure(IllegalArgumentException("Say what to search for."))
+        return search(query).map { results ->
+            update { EmrysStore.searched(it, name, results) }
+            SearchSummary.forAgent(results)
         }
     }
 

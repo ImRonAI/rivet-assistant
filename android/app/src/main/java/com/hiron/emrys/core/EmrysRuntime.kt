@@ -2,14 +2,24 @@ package com.hiron.emrys.core
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
+import com.hiron.emrys.BuildConfig
 import com.hiron.emrys.device.DeviceTools
 import com.hiron.emrys.device.EmrysCallScreening
 import com.hiron.emrys.device.ReminderStore
 import com.hiron.emrys.device.ReminderStoreFile
 import com.hiron.emrys.device.Reminders
+import com.hiron.emrys.mcp.PhoneMcpServer
+import com.hiron.emrys.mcp.PhoneMcpService
 import com.hiron.emrys.service.Notifications
 import com.hiron.emrys.ui.ImageLoader
+import com.hiron.emrys.voice.AgentTools
+import com.hiron.emrys.voice.Assistant
 import com.hiron.emrys.voice.EmrysAgent
+import com.hiron.emrys.voice.GeminiAgent
+import com.hiron.emrys.voice.Provider
+import com.hiron.emrys.voice.SearchTools
 import com.hiron.emrys.widget.EmrysWidgets
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +43,7 @@ class EmrysApp : Application() {
         super.onCreate()
         Notifications.createChannels(this)
         runtime = EmrysRuntime(this)
+        if (runtime.settings.phoneMcpEnabled) ContextCompat.startForegroundService(this, Intent(this, PhoneMcpService::class.java))
         EmrysWidgets.follow(this, runtime)
     }
 }
@@ -40,7 +51,7 @@ class EmrysApp : Application() {
 val Context.emrys: EmrysRuntime get() = (applicationContext as EmrysApp).runtime
 
 /**
- * The rendered [state], the robot's command stream, the phone tools, the ElevenLabs agents ([agent]) and the
+ * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs or Gemini) and the
  * approvals they ask for with `request_approval`.
  */
 class EmrysRuntime(private val app: Context) {
@@ -83,7 +94,30 @@ class EmrysRuntime(private val app: Context) {
     /** Result thumbnails and images, cached in memory only. */
     val images = ImageLoader(http)
 
-    val agent = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
+    private val elevenLabs = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
+    private val gemini = GeminiAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
+
+    /** The agents for the provider chosen in Settings. */
+    val agent: Assistant
+        get() = when (settings.provider) {
+            Provider.ElevenLabs -> elevenLabs
+            Provider.Gemini -> gemini
+        }
+
+    /** Switches provider; the running conversation ends, and the next one starts with [provider]. */
+    fun choose(provider: Provider) {
+        if (provider == settings.provider) return
+        agent.stop()
+        settings.provider = provider
+    }
+
+    /** The same phone tools, approvals and searches, for agents that reach the phone over MCP ([PhoneMcpService]). */
+    val phoneServer = PhoneMcpServer(
+        BuildConfig.VERSION_NAME,
+        approve = { input -> AgentTools.askApproval(input.opt("action_type") as? String, input.opt("details") as? String, ::approve) },
+        search = { name, input -> SearchTools.call(name, PhoneMcpServer.parameters(input), search::search, ::update) },
+        run = tools::run,
+    )
 
     init {
         EmrysCallScreening.onIncoming = { number -> note("call", "Incoming call from ${number.ifBlank { "unknown number" }}") }

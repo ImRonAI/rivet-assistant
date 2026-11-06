@@ -39,7 +39,10 @@ data class Reply(override val id: String, val raw: String, val text: String, val
 
 enum class ToolState { Running, Done, Failed }
 
-/** One tool call; [type] is the agent's tool type: `client` (the phone), `webhook`, `mcp` or `system`. */
+/**
+ * One tool call; [type] is the agent's tool type: `client` (the phone), `webhook`, `mcp` or `system`, or `strands` for the
+ * Gemini agents' other tools.
+ */
 data class ToolStep(
     override val id: String,
     val name: String,

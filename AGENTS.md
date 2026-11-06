@@ -123,9 +123,33 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
+- **Gemini, the other provider** (Settings › Agents; ElevenLabs is the default): Emrys's agents in Strands on the
+  workspace VM (`deploy/vm/gemini/app.py`, the `gemini` container at `wss://rivet.ron-ai.dev/gemini/`, behind Caddy's
+  bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `EmrysRuntime.agent` is `EmrysAgent` or
+  `GeminiAgent`, and the screens use only its six members.
+  - Text (`/gemini/text`): the Strands harness, `create_harness(model="google/<text model>")`, with every built-in on
+    (shell, read, write, edit, web_fetch, Google Search, programmatic_tool_caller, subagent, todos, memory, sessions)
+    plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and mcp_router. Text models:
+    gemini-4-argon (default), gemini-3.8-flash, gemini-3.5-flash-lite.
+  - Voice (`/gemini/voice`): `BidiAgent` with `GoogleGeminiLiveModel` on gemini-3.8-live, voice Algieba, the same
+    vended tools except swarm and graph (subagent and web_fetch run on the text model) and the bidi docs'
+    `end_conversation`. Live, 2026-11-06 on the Gemini API: `enable_affective_dialog` is refused (1007 "Request
+    contains an invalid argument"), and Strands 1.64.0 sends swarm's and graph's schemas as `additional_properties`,
+    which Live refuses (1007 "Unknown name"); without both, a spoken "What is 2 + 2?" got "2 + 2 is 4." in
+    24 kHz audio with both transcripts. The
+    phone streams 16 kHz PCM and plays 24 kHz PCM (`voice/GeminiAudio.kt`), cleared on `bidi_barge_in`.
+  - Both reach the phone's MCP server (`${PHONE_MCP_URL}`, `${PHONE_MCP_TOKEN}`), emrys-computer and oubliai-telnyx
+    (`${TELNYX_MCP_AUTHORIZATION}`), unprefixed so the names match the prompt, and use the ElevenLabs text and voice
+    agents' own prompts, read when a conversation opens and filled like ElevenLabs' dynamic variables. The chat is
+    built from Strands' events (`voice/GeminiEvents.kt`). `start_background_task`, `call_as_emrys`, Google Calendar
+    and the ElevenLabs webhook tools have no Gemini counterpart yet.
+- **Phone MCP server** (`mcp/`, Settings › Remote tools): a foreground service serves the 18 phone tools,
+  `request_approval` and the seven searches on the phone's Tailscale address (port 8765, `/mcp`, bearer token from
+  Copy token), through the same handlers as the client tools.
 - **Release builds** keep the SDK's private fields (`android/app/proguard-rules.pro`). The SDK reads the voice
   conversation token into a private field with Gson, and its own keep rules cover only public members. Without the
   rule, R8 renames the field, the token comes back blank and voice fails with "Couldn't reach the ElevenLabs agent".
+  R8's own `-dontwarn` rules cover Ktor's `java.lang.management` check, under the phone's MCP server.
 
 ## Status (2026-10-31)
 
@@ -169,7 +193,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 android/   Kotlin/Compose app (minSdk 29, targetSdk 36), robot WebView, ElevenLabs stage layer, widgets, assistant overlay
   robot/     the robot page and its bridge (built into assets by tools/build_robot_asset.py)
   stage-ui/  ElevenLabs UI matrix, orb and shimmering-text, bundled into assets/emrys/vendor/
-deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), laptop/ (OpenCode config, workspace AGENTS.md)
+deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Gemini agents in Strands), laptop/ (OpenCode config, workspace AGENTS.md)
 docs/      design/ (Noir design system, Matrix light language, sigil)
 .github/   CI: android.yml (asset checks, tests, lint, release build)
 ```
@@ -180,6 +204,7 @@ cd android && python3 tools/build_robot_asset.py --check && python3 tools/build_
 JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease
 cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs files byte-identical to upstream
 uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
+uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
 ```
 
 ## Everything Emrys can do today
@@ -199,9 +224,10 @@ uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-
     same chat view as typing; checked on the emulator 2026-11-04.
   - **Approval sheet** (`ApprovalSheet.kt`): see `request_approval` above.
   - **Activity** (`ActivityScreen.kt`): pending reminders, then the activity log grouped by day.
-  - **Settings** (`SettingsScreen.kt`): 1 Voice (the talk key), 2 Permissions (a switch per `perm_*` action: "Always
-    allowed" or "Asks you first", applied from the next conversation), 3 Call answering (number, mode, carrier codes),
-    4 What Emrys can use (phone permissions), 5 About.
+  - **Settings** (`SettingsScreen.kt`): 1 Agents (provider, the Gemini text model, the talk key), 2 Permissions (a
+    switch per `perm_*` action: "Always allowed" or "Asks you first", applied from the next conversation), 3 Call
+    answering (number, mode, carrier codes), 4 What Emrys can use (phone permissions), 5 Remote tools (the phone's MCP
+    server), 6 About.
 - **Robot** (`ui/RobotView.kt`, `android/robot/bridge.js`): the bundled page runs offline; moves follow what Emrys is
   doing; the agent's speech moves the mouth (the SDK's audio alignment, `AgentTools.words`); the ElevenLabs Matrix,
   Orb and ShimmeringText on the stage (`android/stage-ui`, installed verbatim from elevenlabs/ui@`3a28ebab`) follow
@@ -232,9 +258,11 @@ uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-
    then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
-7. **Phone tools over MCP** (PRD https://claude.ai/artifact/HFpZU7AR2FDy1VyUhuQuWv): the phone's MCP server and tool
-   schemas are in `mcp/` (PR #8), tested on the JVM; nothing starts the server yet. Next: the foreground service and
-   Settings, then the VM hub (`deploy/vm/computer/hub.py`), then these docs.
+7. **Gemini** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL, PR #11): built and checked by mypy, the JVM tests,
+   lint and the release build; not deployed or run live yet. It runs on the Gemini API (AI Studio, owner,
+   2026-11-06). It needs `gemini.env` on the VM (`GOOGLE_API_KEY`, `PHONE_MCP_URL`, `PHONE_MCP_TOKEN`,
+   `TELNYX_MCP_AUTHORIZATION`), `EMRYS_GEMINI_TOKEN` in `computer.env` and the app's `geminiToken`, and Tailscale
+   on the VM and the phone. Then the live checks in the plan, and the next phase: `start_background_task` and `call_as_emrys` for Gemini.
 
 ## Before launch (checklist)
 1. **Release signing:** the APK is signed with the debug key (`android/app/build.gradle.kts`). Create a release

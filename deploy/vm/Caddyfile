@@ -7,6 +7,14 @@ rivet.ron-ai.dev {
 		}
 		respond 401
 	}
+	@gemini path /gemini/*
+	handle @gemini {
+		@token header Authorization "Bearer {$EMRYS_GEMINI_TOKEN}"
+		handle @token {
+			reverse_proxy gemini:8100
+		}
+		respond 401
+	}
 	respond 404
 }
 

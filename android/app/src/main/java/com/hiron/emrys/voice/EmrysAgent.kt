@@ -40,8 +40,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-enum class AgentMode { Voice, Text }
-
 /**
  * Emrys's ElevenLabs agents, connected straight through the ElevenLabs Android SDK: [start] a voice or text
  * session, [sendText], [switchMode], [stop]. Every session starts with the user's id and their `perm_*` grants
@@ -58,7 +56,7 @@ class EmrysAgent(
     private val scope: CoroutineScope,
     private val search: suspend (SearchQuery) -> Result<SearchResults>,
     private val connect: suspend (ConversationConfig, Context) -> ConversationSession = { config, context -> ConversationClient.startSession(config, context) },
-) {
+) : Assistant {
     // Main thread only. Every start and stop moves [generation] on, so a stale start or callback can tell.
     private var generation = 0
     private var session: ConversationSession? = null
@@ -67,12 +65,11 @@ class EmrysAgent(
     private var lips = Job()
     private var lastChunk: Job? = null
 
-    /** The mode of the session that is starting or running; null when there is none. */
     @Volatile
-    var mode: AgentMode? = null
+    override var mode: AgentMode? = null
         private set
 
-    fun start(mode: AgentMode, firstMessage: String? = null) {
+    override fun start(mode: AgentMode, firstMessage: String?) {
         stop()
         val gen = generation
         val messages = mutableListOf<String>().also { queued = it }
@@ -105,8 +102,7 @@ class EmrysAgent(
         }
     }
 
-    /** Sends [text] to the text agent, starting a text session when none is running; returns the message's id. */
-    fun sendText(text: String): String {
+    override fun sendText(text: String): String {
         val id = said(text)
         if (mode == AgentMode.Text && starting?.isActive == true) {
             queued += text
@@ -125,11 +121,11 @@ class EmrysAgent(
         return id
     }
 
-    fun switchMode(mode: AgentMode) {
+    override fun switchMode(mode: AgentMode) {
         if (this.mode != mode) start(mode)
     }
 
-    fun stop() {
+    override fun stop() {
         generation++
         starting?.cancel()
         starting = null
@@ -237,7 +233,7 @@ class EmrysAgent(
         words.lastOrNull()?.let { delay((it.seconds * 1000).toLong()) }
     }
 
-    fun hasMicrophone() =
+    override fun hasMicrophone() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     /** Adds the user's typed message to the conversation; returns its id. */
@@ -299,14 +295,18 @@ object AgentTools {
      * `{"approved": …, "remember_decision": …}`.
      */
     fun approval(approve: suspend (ApprovalRequest) -> ApprovalAnswer): ClientTool = object : ClientTool {
-        override suspend fun execute(parameters: Map<String, Any>): ClientToolResult {
-            val type = parameters["action_type"] as? String
-            val action = PermAction.of(type)
-                ?: return ClientToolResult.failure("Unknown action_type \"$type\". Use one of: ${PermAction.entries.joinToString { it.wire }}.")
-            val details = (parameters["details"] as? String).orEmpty()
-            val answer = approve(ApprovalRequest(UUID.randomUUID().toString(), action, details))
-            return ClientToolResult.success(JSONObject().put("approved", answer.approved).put("remember_decision", answer.remember).toString())
-        }
+        override suspend fun execute(parameters: Map<String, Any>): ClientToolResult = askApproval(parameters["action_type"] as? String, parameters["details"] as? String, approve).fold(
+            onSuccess = { ClientToolResult.success(it) },
+            onFailure = { ClientToolResult.failure(it.message.orEmpty()) },
+        )
+    }
+
+    /** One `request_approval` call: the user's answer as the agent reads it, or why the request couldn't be shown. */
+    suspend fun askApproval(type: String?, details: String?, approve: suspend (ApprovalRequest) -> ApprovalAnswer): Result<String> {
+        val action = PermAction.of(type)
+            ?: return Result.failure(IllegalArgumentException("Unknown action_type \"$type\". Use one of: ${PermAction.entries.joinToString { it.wire }}."))
+        val answer = approve(ApprovalRequest(UUID.randomUUID().toString(), action, details.orEmpty()))
+        return Result.success(JSONObject().put("approved", answer.approved).put("remember_decision", answer.remember).toString())
     }
 
     fun result(result: ToolResult): ClientToolResult {

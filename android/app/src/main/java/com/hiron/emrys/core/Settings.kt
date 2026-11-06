@@ -1,9 +1,13 @@
 package com.hiron.emrys.core
 
 import android.content.Context
+import android.util.Base64
 import com.hiron.emrys.BuildConfig
 import com.hiron.emrys.device.CarrierStyle
 import com.hiron.emrys.device.ForwardMode
+import com.hiron.emrys.voice.GeminiTextModel
+import com.hiron.emrys.voice.Provider
+import java.security.SecureRandom
 import java.util.UUID
 
 /** This phone's settings, and the permissions the user granted the agents ("Always allow"). */
@@ -52,6 +56,33 @@ class Settings(context: Context) {
     var voiceModel: Boolean
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
+
+    /** Who runs Emrys's agents: the ElevenLabs agents (the default) or Gemini on the workspace VM. */
+    var provider: Provider
+        get() = runCatching { Provider.valueOf(prefs.getString("provider", null).orEmpty()) }.getOrDefault(Provider.ElevenLabs)
+        set(value) = prefs.edit().putString("provider", value.name).apply()
+
+    /** The Gemini text model, which also runs the voice agent's helpers. */
+    var geminiTextModel: GeminiTextModel
+        get() = runCatching { GeminiTextModel.valueOf(prefs.getString("gemini_text_model", null).orEmpty()) }.getOrDefault(GeminiTextModel.Argon)
+        set(value) = prefs.edit().putString("gemini_text_model", value.name).apply()
+
+    /** The bearer token for the Gemini agents on the workspace VM. */
+    var geminiToken: String
+        get() = prefs.getString("gemini_token", null) ?: BuildConfig.DEFAULT_GEMINI_TOKEN
+        set(value) = prefs.edit().putString("gemini_token", value.trim()).apply()
+
+    /** The agents reach this phone's MCP server with this token; made once per install. */
+    val phoneMcpToken: String
+        get() = prefs.getString("phone_mcp_token", null) ?: newToken().also { prefs.edit().putString("phone_mcp_token", it).apply() }
+
+    /** Whether the phone's MCP server runs (Settings › Remote tools). */
+    var phoneMcpEnabled: Boolean
+        get() = prefs.getBoolean("phone_mcp_enabled", false)
+        set(value) = prefs.edit().putBoolean("phone_mcp_enabled", value).apply()
+
+    private fun newToken(): String = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
 
     fun granted(action: PermAction): Boolean = prefs.getString(action.variable, PROMPT) == GRANTED
 

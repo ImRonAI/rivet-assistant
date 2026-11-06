@@ -26,6 +26,7 @@ android {
         buildConfigField("String", "DEFAULT_ANSWERING_NUMBER", baked("answeringNumber"))
         buildConfigField("String", "DEFAULT_BRAVE_SEARCH_KEY", baked("braveSearchKey"))
         buildConfigField("String", "DEFAULT_BRAVE_ANSWERS_KEY", baked("braveAnswersKey"))
+        buildConfigField("String", "DEFAULT_GEMINI_TOKEN", baked("geminiToken"))
     }
 
     buildTypes {

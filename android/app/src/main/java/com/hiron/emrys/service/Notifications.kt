@@ -23,6 +23,7 @@ object Notifications {
     const val APPROVALS = "emrys.approvals"
     const val REMINDERS = "emrys.reminders"
     const val ACTIONS = "emrys.actions"
+    const val SERVER = "emrys.server"
     const val APPROVAL_SUMMARY_ID = 999
     const val ACTION_SUMMARY_ID = 998
     const val REMINDER_SUMMARY_ID = 997
@@ -56,6 +57,9 @@ object Notifications {
                 NotificationChannel(REMINDERS, "Reminders", NotificationManager.IMPORTANCE_HIGH),
                 NotificationChannel(ACTIONS, "Ready to open", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "Drafts and apps Emrys has ready for you"
+                },
+                NotificationChannel(SERVER, "Remote tools", NotificationManager.IMPORTANCE_LOW).apply {
+                    description = "Shows while the agents can reach this phone over Tailscale"
                 },
             ),
         )
@@ -117,6 +121,27 @@ object Notifications {
                 .setAutoCancel(true),
             Group.Actions,
         )
+    }
+
+    /** The phone's MCP server, while it runs: where the agents reach it, or what it is waiting for. */
+    fun server(context: Context, address: String?): Notification = NotificationCompat.Builder(context, SERVER)
+        .setSmallIcon(R.drawable.ic_emrys)
+        .setColor(context.getColor(R.color.emrys_accent))
+        .setContentTitle("Emrys phone tools")
+        .setContentText(if (address != null) "Reachable at $address:8765" else "Turn on Tailscale so the agents can reach this phone")
+        .setOngoing(true)
+        .setContentIntent(openApp(context))
+        .setCategory(NotificationCompat.CATEGORY_SERVICE)
+        .build()
+
+    /** Replaces notification [id] with [notification]. */
+    fun update(context: Context, id: Int, notification: Notification) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            android.os.Build.VERSION.SDK_INT >= 33
+        ) {
+            return
+        }
+        NotificationManagerCompat.from(context).notify(id, notification)
     }
 
     /** Posts, updates or cancels [group]'s summary: it exists only while the group has two or more notifications. */
