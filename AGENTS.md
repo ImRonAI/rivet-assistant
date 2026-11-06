@@ -131,8 +131,12 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     (shell, read, write, edit, web_fetch, Google Search, programmatic_tool_caller, subagent, todos, memory, sessions)
     plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and mcp_router. Text models:
     gemini-4-argon (default), gemini-3.8-flash, gemini-3.5-flash-lite.
-  - Voice (`/gemini/voice`): `BidiAgent` with `GoogleGeminiLiveModel` on gemini-3.8-live, voice Algieba, affective
-    dialogue on, the same vended tools (their children on the text model) and the bidi docs' `end_conversation`. The
+  - Voice (`/gemini/voice`): `BidiAgent` with `GoogleGeminiLiveModel` on gemini-3.8-live, voice Algieba, the same
+    vended tools except swarm and graph (subagent and web_fetch run on the text model) and the bidi docs'
+    `end_conversation`. Live, 2026-11-06 on the Gemini API: `enable_affective_dialog` is refused (1007 "Request
+    contains an invalid argument"), and Strands 1.64.0 sends swarm's and graph's schemas as `additional_properties`,
+    which Live refuses (1007 "Unknown name"); without both, a spoken "What is 2 + 2?" got "2 + 2 is 4." in
+    24 kHz audio with both transcripts. The
     phone streams 16 kHz PCM and plays 24 kHz PCM (`voice/GeminiAudio.kt`), cleared on `bidi_barge_in`.
   - Both reach the phone's MCP server (`${PHONE_MCP_URL}`, `${PHONE_MCP_TOKEN}`), emrys-computer and oubliai-telnyx
     (`${TELNYX_MCP_AUTHORIZATION}`), unprefixed so the names match the prompt, and use the ElevenLabs text and voice

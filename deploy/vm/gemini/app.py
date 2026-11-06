@@ -8,7 +8,7 @@ it streams (`{"data": …}`), each finished message (`{"message": …}`), and ho
 
 Voice: the phone opens `/gemini/voice` with the same parameters and streams its microphone as 16 kHz PCM frames; it
 gets Strands' bidi events as they are (`bidi_audio_delta` at 24 kHz, transcripts, `bidi_barge_in`, tool uses). The
-multi-agent tools and `web_fetch` run their children on the text model, since the Live model only talks.
+subagent tool and `web_fetch` run their children on the text model, since the Live model only talks.
 
 The instructions are the ElevenLabs agents' own prompts, read when the conversation opens and filled in the way
 ElevenLabs fills its dynamic variables.
@@ -42,10 +42,8 @@ from strands.vended_tools import (
     graph,
     handoff_to_user,
     http_request,
-    make_graph,
     make_mcp_router,
     make_subagent,
-    make_swarm,
     make_web_fetch,
     notebook,
     python_repl,
@@ -147,7 +145,7 @@ async def voice(websocket: WebSocket, model: TextModel) -> None:
     await websocket.accept()
     helper = GeminiModel(model_id=model)
     agent = BidiAgent(
-        model=GoogleGeminiLiveModel(model_id=VOICE_MODEL, voice=VOICE, params={"enable_affective_dialog": True}),
+        model=GoogleGeminiLiveModel(model_id=VOICE_MODEL, voice=VOICE),
         system_prompt=await instructions(VOICE_AGENT, variables(websocket, text_only=False)),
         tools=[
             *MCPClient.load_servers(SERVERS, continue_on_error=True),
@@ -161,9 +159,9 @@ async def voice(websocket: WebSocket, model: TextModel) -> None:
             http_request,
             notebook,
             sleep,
+            # swarm and graph stay out: Strands 1.64.0 sends their schemas to Gemini Live as `additional_properties`,
+            # which the Live API refuses with 1007.
             make_subagent(model=Fixed(helper)),
-            make_swarm(model=Fixed(helper)),
-            make_graph(model=Fixed(helper)),
             make_mcp_router(servers=SERVERS),
             end_conversation,
         ],
