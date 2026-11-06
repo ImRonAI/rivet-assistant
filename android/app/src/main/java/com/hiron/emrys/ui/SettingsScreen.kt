@@ -2,6 +2,8 @@ package com.hiron.emrys.ui
 
 import android.Manifest
 import android.app.role.RoleManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -80,6 +82,10 @@ import com.hiron.emrys.device.CarrierStyle
 import com.hiron.emrys.device.EmrysNotificationListener
 import com.hiron.emrys.device.ForwardMode
 import com.hiron.emrys.device.ScreenOperator
+import com.hiron.emrys.mcp.PHONE_MCP_PATH
+import com.hiron.emrys.mcp.PHONE_MCP_PORT
+import com.hiron.emrys.mcp.PhoneMcpService
+import com.hiron.emrys.mcp.tailnetAddress
 
 /** A section's serif title. */
 private val SectionTitle = Type.step.copy(fontSize = 28.sp, lineHeight = 32.sp)
@@ -120,7 +126,9 @@ fun SettingsScreen(runtime: EmrysRuntime) {
             )
         }
 
-        Section(5, "About") { About() }
+        Section(5, "Remote tools") { RemoteTools(runtime, refresh) }
+
+        Section(6, "About") { About() }
     }
 }
 
@@ -182,6 +190,33 @@ private fun AgentPermissions(runtime: EmrysRuntime, refresh: Int) {
         }
     }
     InfoStrip("On: Emrys does it without asking. Off: it asks you first. Changes apply from the next conversation.")
+}
+
+/** The phone's MCP server: on or off, where the agents reach it over Tailscale, and its token. */
+@Composable
+private fun RemoteTools(runtime: EmrysRuntime, refresh: Int) {
+    val context = LocalContext.current
+    val s = runtime.settings
+    var on by remember(refresh) { mutableStateOf(s.phoneMcpEnabled) }
+    val address = remember(refresh, on) { tailnetAddress()?.hostAddress }
+    EmrysCard(padding = PaddingValues(0.dp)) {
+        Toggle("Reachable by the agents", on, detail = if (on) "The phone tools are served over Tailscale" else "Off") { value ->
+            on = value
+            s.phoneMcpEnabled = value
+            val service = Intent(context, PhoneMcpService::class.java)
+            if (value) ContextCompat.startForegroundService(context, service) else context.stopService(service)
+        }
+        RowRule()
+        Readout(
+            "Address", address?.let { "http://$it:$PHONE_MCP_PORT$PHONE_MCP_PATH" } ?: "Tailscale is off on this phone",
+            Modifier.padding(horizontal = RowInset, vertical = 14.dp), mono = true,
+        )
+        RowRule()
+        TextKey("Copy token", {
+            context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Emrys phone token", s.phoneMcpToken))
+        }, Modifier.padding(horizontal = RowInset - 10.dp, vertical = 6.dp))
+    }
+    InfoStrip("Only the workspace VM on your Tailscale network can reach the phone, with this token. Paste the token into the VM's env file.")
 }
 
 /** The colophon: the Emrys wordmark, which build it is, who made it and where to get help. */

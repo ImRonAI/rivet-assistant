@@ -1,9 +1,11 @@
 package com.hiron.emrys.core
 
 import android.content.Context
+import android.util.Base64
 import com.hiron.emrys.BuildConfig
 import com.hiron.emrys.device.CarrierStyle
 import com.hiron.emrys.device.ForwardMode
+import java.security.SecureRandom
 import java.util.UUID
 
 /** This phone's settings, and the permissions the user granted the agents ("Always allow"). */
@@ -52,6 +54,18 @@ class Settings(context: Context) {
     var voiceModel: Boolean
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
+
+    /** The agents reach this phone's MCP server with this token; made once per install. */
+    val phoneMcpToken: String
+        get() = prefs.getString("phone_mcp_token", null) ?: newToken().also { prefs.edit().putString("phone_mcp_token", it).apply() }
+
+    /** Whether the phone's MCP server runs (Settings › Remote tools). */
+    var phoneMcpEnabled: Boolean
+        get() = prefs.getBoolean("phone_mcp_enabled", false)
+        set(value) = prefs.edit().putBoolean("phone_mcp_enabled", value).apply()
+
+    private fun newToken(): String = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
 
     fun granted(action: PermAction): Boolean = prefs.getString(action.variable, PROMPT) == GRANTED
 

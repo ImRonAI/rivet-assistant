@@ -12,16 +12,24 @@ import io.modelcontextprotocol.kotlin.sdk.types.success
 import org.json.JSONObject
 
 /**
- * Emrys's phone tools as one MCP server; every call goes to [run], the same function the client tools use.
- * [version] is the app's version name, reported to the hub in `initialize`.
+ * Emrys's phone tools as one MCP server. The device tools go to [run], the same function the client tools use;
+ * `request_approval` goes to [approve] and the search tools to [search], which answer what the agent is told or why
+ * the call failed. [version] is the app's version name, reported in `initialize`.
  */
-class PhoneMcpServer(private val version: String, private val run: suspend (String, JSONObject) -> ToolResult) {
+class PhoneMcpServer(
+    private val version: String,
+    private val approve: suspend (JSONObject) -> Result<String>,
+    private val search: suspend (String, JSONObject) -> Result<String>,
+    private val run: suspend (String, JSONObject) -> ToolResult,
+) {
     fun build(): Server {
         val server = Server(
             serverInfo = Implementation(name = "emrys-phone", version = version, title = "Emrys phone"),
             options = ServerOptions(capabilities = ServerCapabilities(tools = ServerCapabilities.Tools(listChanged = false))),
         )
         PhoneTools.all.forEach { tool -> server.addTool(tool) { request -> answer(run(tool.name, input(request))) } }
+        server.addTool(PhoneTools.approval) { request -> answer(approve(input(request))) }
+        PhoneTools.searches.forEach { tool -> server.addTool(tool) { request -> answer(search(tool.name, input(request))) } }
         return server
     }
 
@@ -37,5 +45,12 @@ class PhoneMcpServer(private val version: String, private val run: suspend (Stri
             }
             return if (result.ok) CallToolResult.success(text) else CallToolResult.error(text.ifBlank { "The action failed on the phone." })
         }
+
+        /** What the agent is told as a success, or the failure's message as an error. */
+        internal fun answer(result: Result<String>): CallToolResult =
+            result.fold({ CallToolResult.success(it) }, { CallToolResult.error(it.message ?: "The action failed on the phone.") })
+
+        /** The arguments as the map the client tools' handlers read, the way the ElevenLabs SDK hands them over. */
+        fun parameters(input: JSONObject): Map<String, Any> = input.keys().asSequence().associateWith { input.get(it) }
     }
 }

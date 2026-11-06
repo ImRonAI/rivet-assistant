@@ -15,6 +15,9 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <!-- The assistant overlay listens with SpeechRecognizer, which requires it of the calling app. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The phone's MCP server runs in a foreground service while it is switched on (Settings › Remote tools). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- LiveKit (under the ElevenLabs SDK) declares these for video and screen sharing; the agents only use the mic. -->
     <uses-permission android:name="android.permission.CAMERA" tools:node="remove" tools:ignore="PermissionImpliesUnsupportedChromeOsHardware" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" tools:node="remove" />
@@ -164,6 +167,15 @@
             <meta-data
                 android:name="android.speech"
                 android:resource="@xml/emrys_recognition" />
+        </service>
+
+        <service
+            android:name=".mcp.PhoneMcpService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Serves the owner's phone tools to the owner's own assistant agents over their private Tailscale network" />
         </service>
 
     </application>

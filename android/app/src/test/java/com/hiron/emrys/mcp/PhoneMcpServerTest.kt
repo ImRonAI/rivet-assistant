@@ -2,6 +2,7 @@ package com.hiron.emrys.mcp
 
 import com.hiron.emrys.device.ToolResult
 import com.hiron.emrys.voice.AgentTools
+import com.hiron.emrys.voice.SearchTools
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.sse.SSE
@@ -39,7 +40,17 @@ class PhoneMcpServerTest {
 
     @Before
     fun start() {
-        val server = PhoneMcpServer("test") { tool, input ->
+        val server = PhoneMcpServer(
+            "test",
+            approve = { input ->
+                calls += "request_approval" to input.toString()
+                Result.success("""{"approved":true,"remember_decision":false}""")
+            },
+            search = { name, input ->
+                calls += name to input.toString()
+                if (input.has("q")) Result.success("""{"shown_on_screen":true}""") else Result.failure(IllegalArgumentException("Say what to search for."))
+            },
+        ) { tool, input ->
             calls += tool to input.toString()
             answer
         }.build()
@@ -62,9 +73,30 @@ class PhoneMcpServerTest {
         """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}"""
 
     @Test
-    fun listsTheEighteenTools() = runBlocking {
+    fun listsThePhoneToolsThenApprovalThenSearches() = runBlocking {
         val client = connect()
-        assertEquals(AgentTools.NAMES, client.listTools().tools.map { it.name })
+        assertEquals(AgentTools.NAMES + AgentTools.REQUEST_APPROVAL + SearchTools.NAMES.keys, client.listTools().tools.map { it.name })
+        client.close()
+    }
+
+    @Test
+    fun requestApprovalAnswersWhatTheUserChose() = runBlocking {
+        val client = connect()
+        val result = client.callTool("request_approval", mapOf("action_type" to "send_messages", "details" to "Text Dana"))
+        assertEquals(listOf("request_approval" to JSONObject().put("action_type", "send_messages").put("details", "Text Dana").toString()), calls)
+        assertNotEquals(true, result.isError)
+        assertEquals(listOf("""{"approved":true,"remember_decision":false}"""), result.content.filterIsInstance<TextContent>().map { it.text })
+        client.close()
+    }
+
+    @Test
+    fun aSearchGoesToSearchAndAFailureIsAToolError() = runBlocking {
+        val client = connect()
+        val found = client.callTool("news_search", mapOf("q" to "rain"))
+        val empty = client.callTool("web_search", emptyMap())
+        assertEquals(listOf("""{"shown_on_screen":true}"""), found.content.filterIsInstance<TextContent>().map { it.text })
+        assertEquals(true, empty.isError)
+        assertEquals(listOf("Say what to search for."), empty.content.filterIsInstance<TextContent>().map { it.text })
         client.close()
     }
 

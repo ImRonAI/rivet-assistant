@@ -1,5 +1,6 @@
 package com.hiron.emrys.mcp
 
+import com.hiron.emrys.core.PermAction
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
 import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
@@ -9,7 +10,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-/** The phone tools as MCP tools: the same 18 names and inputs [com.hiron.emrys.device.DeviceTools] runs. */
+/**
+ * The phone tools as MCP tools: the same 18 names and inputs [com.hiron.emrys.device.DeviceTools] runs ([all]), then
+ * `request_approval` ([approval]) and the search tools ([searches]), the rest of what the agents call on the phone.
+ */
 internal object PhoneTools {
     private const val ISO = "ISO-8601 in the phone's time zone, like 2026-10-27T09:00, or epoch milliseconds"
 
@@ -44,6 +48,40 @@ internal object PhoneTools {
         ),
     )
 
+    /** `request_approval`, with the agents' own client tool definition. */
+    val approval: Tool = tool(
+        "request_approval",
+        "Ask the user to approve an action before you run it, when the action's permission is \"prompt\". The phone shows the user " +
+            "an approval with the details and an \"Always allow\" choice. Returns approved (true or false) and remember_decision (true " +
+            "when the user chose Always allow, which the phone saves as \"granted\").",
+        true, required("action_type", "details"),
+        "action_type" to enum(*PermAction.entries.map { it.wire }.toTypedArray()),
+        "details" to str("Exactly what will happen, in plain words the user can check, e.g. \"Text Dana at +1 801-555-0100: 'Friday at 9 works.'\""),
+    )
+
+    private const val FRESHNESS = "Filter results by discovery time: pd (past day), pw (past week), pm (past month), py (past year)."
+    private const val COUNT = "Number of results to return (1-20, default 10)."
+
+    /** The seven search tools, with the inputs [com.hiron.emrys.voice.SearchTools] reads. The results show in the chat. */
+    val searches: List<Tool> = listOf(
+        tool("web_search", "Search the web with Brave: titles, URLs and snippets, shown to the user in the chat.", true, required("q"),
+            "q" to str("The search query string."), "count" to int(COUNT), "freshness" to fresh()),
+        tool("news_search", "Search news articles with Brave, shown to the user in the chat.", true, required("q"),
+            "q" to str("The news search query string."), "count" to int(COUNT), "freshness" to fresh()),
+        tool("image_search", "Search images with Brave, shown to the user in the chat.", true, required("q"),
+            "q" to str("The image search query string."), "count" to int(COUNT)),
+        tool("video_search", "Search videos with Brave, shown to the user in the chat.", true, required("q"),
+            "q" to str("The video search query string."), "count" to int(COUNT), "freshness" to fresh()),
+        tool("place_search", "Search local businesses, places and points of interest with Brave, shown to the user in the chat. Give q, location or both.", true, none(),
+            "q" to str("The place or local query string (e.g. coffee shop, restaurant)."), "location" to str("Location string (e.g. \"austin tx united states\")."),
+            "count" to int(COUNT)),
+        tool("answers", "Ask Brave Answers for a synthesized answer with citations; the sources are shown to the user in the chat.", true, required("q"),
+            "q" to str("The question to answer.")),
+        tool("llm_context", "Get clean LLM context from web pages. Best for retrieving detailed page content or background info for grounding.", true, required("q"),
+            "q" to str("The search query string."), "count" to int("Number of pages to read (1-20, default 10)."), "freshness" to fresh(),
+            "maximum_number_of_tokens" to int("Maximum number of tokens to return (1024-8192, default 2048).")),
+    )
+
     private fun tool(name: String, description: String, readOnly: Boolean, required: List<String>, vararg properties: Pair<String, JsonObject>): Tool = Tool(
         name = name,
         description = description,
@@ -59,4 +97,5 @@ internal object PhoneTools {
     private fun str(description: String): JsonObject = buildJsonObject { put("type", "string"); put("description", description) }
     private fun int(description: String): JsonObject = buildJsonObject { put("type", "integer"); put("description", description) }
     private fun enum(vararg values: String): JsonObject = buildJsonObject { put("type", "string"); putJsonArray("enum") { values.forEach { add(it) } } }
+    private fun fresh(): JsonObject = buildJsonObject { put("type", "string"); put("description", FRESHNESS); putJsonArray("enum") { listOf("pd", "pw", "pm", "py").forEach { add(it) } } }
 }
