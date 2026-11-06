@@ -80,12 +80,6 @@ services:
     env_file:
       - elevenlabs.env
       - gemini.env
-    # google-genai on Vertex AI with the VM's own service account. `us` is the one location every Gemini model
-    # Emrys uses lists on its Vertex model page.
-    environment:
-      GOOGLE_GENAI_USE_VERTEXAI: "true"
-      GOOGLE_CLOUD_PROJECT: fair-expanse-493212-h8
-      GOOGLE_CLOUD_LOCATION: us
     mem_limit: 4g
     volumes:
       - laptop_home:/config
