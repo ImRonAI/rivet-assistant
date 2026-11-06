@@ -132,7 +132,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and mcp_router. Text models:
     gemini-4-argon (default), gemini-3.8-flash, gemini-3.5-flash-lite.
   - Voice (`/gemini/voice`): `BidiAgent` with `GoogleGeminiLiveModel` on gemini-3.8-live, voice Algieba, affective
-    dialogue on, the same vended tools (their children on the text model) and the bidi docs' `end_conversation`. The
+    dialogue on (Vertex AI), the same vended tools (their children on the text model) and the bidi docs' `end_conversation`. The
     phone streams 16 kHz PCM and plays 24 kHz PCM (`voice/GeminiAudio.kt`), cleared on `bidi_barge_in`.
   - Both reach the phone's MCP server (`${PHONE_MCP_URL}`, `${PHONE_MCP_TOKEN}`), emrys-computer and oubliai-telnyx
     (`${TELNYX_MCP_AUTHORIZATION}`), unprefixed so the names match the prompt, and use the ElevenLabs text and voice
@@ -255,10 +255,14 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,web-fetch]==1.6
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 7. **Gemini** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL, PR #11): built and checked by mypy, the JVM tests,
-   lint and the release build; not deployed or run live yet. It needs `gemini.env` on the VM (`GOOGLE_API_KEY`, or
-   google-genai's Vertex variables, `PHONE_MCP_URL`, `PHONE_MCP_TOKEN`, `TELNYX_MCP_AUTHORIZATION`),
-   `EMRYS_GEMINI_TOKEN` in `computer.env` and the app's `geminiToken`, and Tailscale on the VM and the phone. Google's
-   Gemini API pages say affective dialogue is removed from gemini-3.8-live, while the Vertex AI page lists it. Then
+   lint and the release build; not deployed or run live yet. It runs on Vertex AI (owner, 2026-11-06), through
+   google-genai's own variables in `compose.yaml` (`GOOGLE_GENAI_USE_VERTEXAI`, project `fair-expanse-493212-h8`,
+   location `us`, the one location the Vertex pages of gemini-3.8-live, gemini-4-argon, gemini-3.8-flash and
+   gemini-3.5-flash-lite all list) and the VM's service account, which needs the Vertex AI User role and the
+   `cloud-platform` scope. Vertex's Live API page lists affective dialog for gemini-3.8-live; Google's Gemini API
+   pages say it is removed there. It also needs `gemini.env` on the VM (`PHONE_MCP_URL`, `PHONE_MCP_TOKEN`,
+   `TELNYX_MCP_AUTHORIZATION`), `EMRYS_GEMINI_TOKEN` in `computer.env` and the app's `geminiToken`, and Tailscale
+   on the VM and the phone. Then
    the live checks in the plan, and the next phase: `start_background_task` and `call_as_emrys` for Gemini.
 
 ## Before launch (checklist)
@@ -266,7 +270,7 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,web-fetch]==1.6
    keystore before any public distribution.
 2. **ElevenLabs agents locked down (owner):** as of 2026-10-29 both agents had `enable_auth` off and webhook tools
    that use the owner's ElevenLabs key; public agents can be started by anyone with the agent id.
-3. **The workspace VM's service account:** swap the Compute Engine default account for one with no roles.
+3. **The workspace VM's service account:** swap the Compute Engine default account for one whose only role is Vertex AI User (for the Gemini agents).
 4. **Secrets hygiene:** rotate the keys that were pasted into chat sessions.
 5. **Store compliance (Play Store, if used):** SMS and call-log permissions need a permitted use case; Accessibility
    needs a disclosure. Sideloading avoids this.
