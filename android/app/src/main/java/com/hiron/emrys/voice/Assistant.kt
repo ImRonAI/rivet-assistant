@@ -26,4 +26,5 @@ interface Assistant {
 enum class Provider(val label: String) {
     ElevenLabs("ElevenLabs"),
     Gemini("Gemini"),
+    Telnyx("Telnyx"),
 }

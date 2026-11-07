@@ -20,6 +20,7 @@ import com.hiron.emrys.voice.EmrysAgent
 import com.hiron.emrys.voice.GeminiAgent
 import com.hiron.emrys.voice.Provider
 import com.hiron.emrys.voice.SearchTools
+import com.hiron.emrys.voice.TelnyxAgent
 import com.hiron.emrys.widget.EmrysWidgets
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +52,7 @@ class EmrysApp : Application() {
 val Context.emrys: EmrysRuntime get() = (applicationContext as EmrysApp).runtime
 
 /**
- * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs or Gemini) and the
+ * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs, Gemini or Telnyx) and the
  * approvals they ask for with `request_approval`.
  */
 class EmrysRuntime(private val app: Context) {
@@ -96,12 +97,14 @@ class EmrysRuntime(private val app: Context) {
 
     private val elevenLabs = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
     private val gemini = GeminiAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
+    private val telnyx = TelnyxAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
 
     /** The agents for the provider chosen in Settings. */
     val agent: Assistant
         get() = when (settings.provider) {
             Provider.ElevenLabs -> elevenLabs
             Provider.Gemini -> gemini
+            Provider.Telnyx -> telnyx
         }
 
     /** Switches provider; the running conversation ends, and the next one starts with [provider]. */
