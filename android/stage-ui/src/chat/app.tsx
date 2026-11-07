@@ -1,5 +1,16 @@
 import type { LucideIcon } from "lucide-react"
-import { FileTextIcon, ImageIcon, MapPinIcon, NewspaperIcon, SearchIcon, SparklesIcon, VideoIcon, WrenchIcon } from "lucide-react"
+import {
+  BrainIcon,
+  ChevronDownIcon,
+  FileTextIcon,
+  ImageIcon,
+  MapPinIcon,
+  NewspaperIcon,
+  SearchIcon,
+  SparklesIcon,
+  VideoIcon,
+  WrenchIcon,
+} from "lucide-react"
 
 import {
   ChainOfThought,
@@ -10,13 +21,13 @@ import {
   ChainOfThoughtSearchResults,
   ChainOfThoughtStep,
 } from "@/components/ai-elements/chain-of-thought"
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning"
 import { Shimmer } from "@/components/ai-elements/shimmer"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ui/conversation"
 import { Message, MessageContent } from "@/components/ui/message"
 import { Response } from "@/components/ui/response"
 
-import { type Part, type Step, type StepKind, tell, useChat } from "./model"
+import { type Part, type Reasoning, type Step, type StepKind, tell, useChat } from "./model"
 
 /* Body text at 16/24 (Material's Body Large, a point under iOS's 17 pt Body); steps, reasoning and badges keep the
    components' 14 and 12 px. The app scales the page with the system font size (WebView textZoom). */
@@ -63,12 +74,7 @@ export function ChatApp() {
               return (
                 <Message from="assistant" key={m.id}>
                   <MessageContent variant="flat" className={`${BODY} w-full`}>
-                    {m.reasoning && (
-                      <Reasoning isStreaming={m.reasoning.streaming} duration={m.reasoning.seconds ?? undefined}>
-                        <ReasoningTrigger />
-                        <ReasoningContent>{m.reasoning.text}</ReasoningContent>
-                      </Reasoning>
-                    )}
+                    {m.reasoning && <Thinking reasoning={m.reasoning} />}
                     {runs(m.parts).map((run) =>
                       run.type === "text" ? (
                         <Response key={run.id} linkSafety={LINKS}>
@@ -133,6 +139,26 @@ function Steps({ steps }: { steps: Step[] }) {
         ))}
       </ChainOfThoughtContent>
     </ChainOfThought>
+  )
+}
+
+/** The turn's reasoning summary, folded under how long Emrys thought. The text renders like a reply. */
+function Thinking({ reasoning }: { reasoning: Reasoning }) {
+  return (
+    <Collapsible className="not-prose mb-4">
+      <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 text-sm transition-colors">
+        <BrainIcon className="size-4" />
+        {reasoning.streaming ? (
+          <Shimmer duration={1}>Thinking...</Shimmer>
+        ) : (
+          <p>{reasoning.seconds === null ? "Thought for a few seconds" : `Thought for ${reasoning.seconds} seconds`}</p>
+        )}
+        <ChevronDownIcon className="size-4 transition-transform [[data-state=open]>&]:rotate-180" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="text-muted-foreground mt-4 text-sm">
+        <Response linkSafety={LINKS}>{reasoning.text}</Response>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
