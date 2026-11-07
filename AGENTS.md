@@ -143,6 +143,19 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     agents' own prompts, read when a conversation opens and filled like ElevenLabs' dynamic variables. The chat is
     built from Strands' events (`voice/GeminiEvents.kt`). `start_background_task`, `call_as_emrys`, Google Calendar
     and the ElevenLabs webhook tools have no Gemini counterpart yet.
+- **Telnyx, the third provider** (Settings › Agents, 2026-11-07): Telnyx AI Assistants on Telnyx's models, through
+  Telnyx's own client `@telnyx/ai-agent-lib` 0.7.0 in a WebView (`voice/TelnyxAgent.kt`, page
+  `android/stage-ui/src/telnyx`, built into `assets/emrys/telnyx`, 292 KB). Telnyx offers client-side tools only in
+  that JS library over WebRTC (https://developers.telnyx.com/docs/inference/ai-assistants/client-side-tools.md); its
+  Android SDK (`telnyx_rtc`, source at `8ea2625`, 2026-11-06) has anonymous sessions, transcripts and text messages but
+  no client tools, and would add a second 12.2 MB WebRTC library. The app starts a conversation with the assistant id
+  (the assistant needs "Supports unauthenticated web calls"), `user_id` and the eight `perm_*` as `X-` headers (Telnyx
+  maps `X-Perm-Use-Apps` to `{{perm_use_apps}}`), and the 18 phone tools, `request_approval` and the searches as
+  client-side tools answered by the same handlers. Typing is the library's `chatMode`: no microphone and the voice
+  isn't played, but a call is still placed and billed as Voice AI ($0.05/min, https://telnyx.com/pricing.md). The
+  assistant ids come from `telnyxVoiceAssistant` and `telnyxTextAssistant` in `emrys.local.properties`. Assistant
+  models: `zai-org/GLM-5.3-Flash` (Telnyx's default), voice-verified `moonshotai/Kimi-K2.6`, `Kimi-K2.5` and
+  `zai-org/GLM-5.2` (https://developers.telnyx.com/docs/voice/conversational-ai/quickstart.md).
 - **Phone MCP server** (`mcp/`, Settings › Remote tools): a foreground service serves the 18 phone tools,
   `request_approval` and the seven searches on the phone's Tailscale address (port 8765, `/mcp`, bearer token from
   Copy token), through the same handlers as the client tools.
@@ -263,6 +276,12 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,web-fetch]==1.6
    2026-11-06). It needs `gemini.env` on the VM (`GOOGLE_API_KEY`, `PHONE_MCP_URL`, `PHONE_MCP_TOKEN`,
    `TELNYX_MCP_AUTHORIZATION`), `EMRYS_GEMINI_TOKEN` in `computer.env` and the app's `geminiToken`, and Tailscale
    on the VM and the phone. Then the live checks in the plan, and the next phase: `start_background_task` and `call_as_emrys` for Gemini.
+8. **Telnyx** (PR on `claude/project-thread-jngfsl`): built and checked by the JVM tests, lint and the release build;
+   not run live. It needs the owner's two assistants (or the ElevenLabs agents imported into Telnyx, which carries
+   the prompt, greeting, variables, webhook tools and MCP servers but not client tools), each with the client-side
+   tools added and unauthenticated web calls on, and their ids in `emrys.local.properties`. Then on a phone: a voice
+   and a typed conversation, a tool call, `request_approval` (its Portal timeout must outlast the user), whether a
+   typed turn ends on `listening` in `chatMode`, and the WebView's microphone and audio with no window.
 
 ## Before launch (checklist)
 1. **Release signing:** the APK is signed with the debug key (`android/app/build.gradle.kts`). Create a release

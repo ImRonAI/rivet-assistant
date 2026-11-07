@@ -5,6 +5,7 @@ import android.util.Base64
 import com.hiron.emrys.BuildConfig
 import com.hiron.emrys.device.CarrierStyle
 import com.hiron.emrys.device.ForwardMode
+import com.hiron.emrys.voice.AgentMode
 import com.hiron.emrys.voice.GeminiTextModel
 import com.hiron.emrys.voice.Provider
 import java.security.SecureRandom
@@ -57,7 +58,7 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
 
-    /** Who runs Emrys's agents: the ElevenLabs agents (the default) or Gemini on the workspace VM. */
+    /** Who runs Emrys's agents: the ElevenLabs agents (the default), Gemini on the workspace VM, or Telnyx's assistants. */
     var provider: Provider
         get() = runCatching { Provider.valueOf(prefs.getString("provider", null).orEmpty()) }.getOrDefault(Provider.ElevenLabs)
         set(value) = prefs.edit().putString("provider", value.name).apply()
@@ -71,6 +72,12 @@ class Settings(context: Context) {
     var geminiToken: String
         get() = prefs.getString("gemini_token", null) ?: BuildConfig.DEFAULT_GEMINI_TOKEN
         set(value) = prefs.edit().putString("gemini_token", value.trim()).apply()
+
+    /** The Telnyx AI Assistant for [mode], from emrys.local.properties; empty when there is none. */
+    fun telnyxAssistant(mode: AgentMode): String = when (mode) {
+        AgentMode.Voice -> BuildConfig.DEFAULT_TELNYX_VOICE_ASSISTANT
+        AgentMode.Text -> BuildConfig.DEFAULT_TELNYX_TEXT_ASSISTANT
+    }
 
     /** The agents reach this phone's MCP server with this token; made once per install. */
     val phoneMcpToken: String

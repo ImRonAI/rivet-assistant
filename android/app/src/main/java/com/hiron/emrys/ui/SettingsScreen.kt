@@ -196,6 +196,7 @@ private fun Agents(runtime: EmrysRuntime, refresh: Int) {
         }
     }
     if (provider == Provider.Gemini) InfoStrip("Gemini talks on Gemini 3.8 Live and reaches the phone's tools through Remote tools, below.")
+    if (provider == Provider.Telnyx) InfoStrip("Telnyx's assistants run on Telnyx's models and use the phone's tools from inside the app.")
 }
 
 /**
