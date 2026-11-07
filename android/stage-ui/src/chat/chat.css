@@ -1,15 +1,11 @@
-/* The chat page's styles: Tailwind with Preflight, scanning src (the page and the components it uses) and the Streamdown
-   packages, whose class names live in their dist files. The tokens the ElevenLabs and AI Elements components read
+/* The chat page's styles: Tailwind with Preflight, scanning src (the page and the components it uses) and Streamdown, whose
+   class names live in its dist files. The tokens the ElevenLabs and AI Elements components read
    carry Noir's values (ui/Theme.kt `DarkPalette`); the app is dark only. */
 @import "tailwindcss" source("..");
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @source "../../node_modules/streamdown/dist/*.js";
-@source "../../node_modules/@streamdown/cjk/dist/*.js";
-@source "../../node_modules/@streamdown/code/dist/*.js";
-@source "../../node_modules/@streamdown/math/dist/*.js";
-@source "../../node_modules/@streamdown/mermaid/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -18,7 +18,6 @@ const ELEVENLABS = {
   "ui/response.tsx": "129a7e7acd1344af1ee0406e555d378c3c2c85b626ac52b350dad0fb3698a09b",
 }
 const AI_ELEMENTS = {
-  "ai-elements/reasoning.tsx": "f2047dec91f18c922c56c04edc53398d981ac43fa47be583703d9138fbdb03e8",
   "ai-elements/chain-of-thought.tsx": "5ccfddc925c98161c2508f63632380bb9976bfe95ffede4b9332451dcb6f0b70",
   "ai-elements/shimmer.tsx": "24bcb9b1dd45d616bd50dc6500e9f414ccabf440efb249e8d92522344b9057d6",
 }
