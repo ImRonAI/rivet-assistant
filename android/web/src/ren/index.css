@@ -1,0 +1,1247 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   REN — Ink & Volt
+   Bold minimal chrome, one electric colour (volt blurple), street-gallery details
+   used once per screen. Source of truth: docs/brand.md.
+   ============================================ */
+
+@layer base {
+  :root {
+    /* Paper — crisp, cool light mode */
+    --color-bg-primary: 255 255 255;
+    --color-bg-secondary: 249 250 252;
+    --color-bg-tertiary: 243 243 247;
+    --color-border: 230 231 237;
+    --color-border-subtle: 243 243 247;
+
+    --color-text-primary: 11 12 23;
+    --color-text-secondary: 74 76 88;
+    --color-text-muted: 114 116 126;
+
+    --color-accent: 85 67 255;
+    --color-accent-light: 141 152 254;
+
+    /* Ren RGB channels for raw CSS (rgb(var(--ren-volt) / a)) */
+    --ren-ink: 11 12 23;
+    --ren-paper: 255 255 255;
+    --ren-volt: 85 67 255;          /* blurple 600: primary on paper */
+    --ren-volt-soft: 141 152 254;   /* blurple 400 */
+    --ren-volt-deep: 52 41 167;     /* blurple 800 */
+    --ren-hairline: 11 12 23 / 0.09;
+
+    /* Shadows — ink-tinted, never coloured except the volt glow */
+    --shadow-sm: 0 1px 2px 0 rgb(11 12 23 / 0.04);
+    --shadow-md: 0 6px 20px -8px rgb(11 12 23 / 0.10);
+    --shadow-lg: 0 18px 48px -18px rgb(11 12 23 / 0.2);
+
+    /* Transitions */
+    --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* Chrome — the browser frame behind every surface */
+    --ron-chrome: 228 22% 95.5%;
+    --ron-sidebar-width: 264px;
+
+    /* shadcn/ui CSS variables - Light mode */
+    --background: 0 0% 100%;
+    --foreground: 235 35% 6.7%;
+    --card: 0 0% 100%;
+    --card-foreground: 235 35% 6.7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 235 35% 6.7%;
+    --primary: 246 100% 63.1%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 20% 96.1%;
+    --secondary-foreground: 235 35% 6.7%;
+    --muted: 240 20% 96.1%;
+    --muted-foreground: 231 6% 44.1%;
+    --accent: 240 20% 96.1%;
+    --accent-foreground: 235 35% 6.7%;
+    --destructive: 351 86% 55.7%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 231 16% 91.6%;
+    --input: 231 16% 91.6%;
+    --ring: 246 100% 63.1%;
+    --radius: 0.625rem;
+  }
+
+  /* A Glass text field (.ron-field) is a Dark island in both inks (§ Fields below). */
+  .dark,
+  html.glass .ron-field {
+    /* Ink — black and charcoal, colourless (chroma 0): the volt accent is the only colour */
+    --color-bg-primary: 12 12 12;
+    --color-bg-secondary: 20 20 20;
+    --color-bg-tertiary: 30 30 30;
+    --color-border: 38 38 38;
+    --color-border-subtle: 26 26 26;
+
+    --color-text-primary: 245 245 245;
+    --color-text-secondary: 189 189 189;
+    --color-text-muted: 145 145 145;
+
+    --ren-ink: 245 245 245;
+    --ren-paper: 12 12 12;
+    --ren-volt: 141 152 254;        /* blurple 400: primary on ink */
+    --ren-volt-soft: 179 189 255;   /* blurple 300 */
+    --ren-volt-deep: 103 106 254;   /* blurple 500 */
+    --ren-hairline: 245 245 245 / 0.08;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow-md: 0 6px 20px -8px rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 18px 48px -18px rgb(0 0 0 / 0.75);
+
+    --ron-chrome: 0 0% 2.7%;
+
+    /* shadcn/ui CSS variables - Dark mode */
+    --background: 0 0% 4.7%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 7.8%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 7.8%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 234 98% 77.5%;
+    --primary-foreground: 0 0% 4.7%;
+    --secondary: 0 0% 11.8%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 10.6%;
+    --muted-foreground: 0 0% 58%;
+    --accent: 0 0% 11.8%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 351 85% 61.6%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 15.3%;
+    --input: 0 0% 15.3%;
+    --ring: 234 98% 77.5%;
+  }
+
+  html {
+    @apply antialiased;
+    /* Inter: open digits, single-storey a off, tabular-friendly; ss03 rounded quotes */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss03";
+    text-rendering: optimizeLegibility;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-surface-0 text-ink font-sans font-normal;
+    letter-spacing: -0.008em;
+    @apply dark:bg-surface-900 dark:text-ink-inverse;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    min-height: 100vh;
+  }
+
+  /* Typography — poster headings in the display face, optical sizing on */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display tracking-tight;
+    font-optical-sizing: auto;
+    text-wrap: balance;
+  }
+
+  h1 {
+    @apply text-display-xl;
+  }
+
+  h2 {
+    @apply text-display-lg;
+  }
+
+  h3 {
+    @apply text-display-md;
+  }
+
+  h4 {
+    @apply text-display-sm;
+  }
+
+  p {
+    @apply text-body-md text-ink-secondary dark:text-ink-inverse-secondary;
+  }
+
+  /* Selection: volt highlighter */
+  ::selection {
+    background-color: rgb(var(--ren-volt) / 0.22);
+  }
+
+  /* Focus visible — one consistent volt ring */
+  :focus-visible {
+    @apply outline-none ring-2 ring-blurple-600/70 ring-offset-2 ring-offset-surface-0 dark:ring-blurple-400/70 dark:ring-offset-surface-900;
+  }
+
+  /* Smooth scrolling (disabled for reduced motion) */
+  * {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Keyboard-shortcut glyphs */
+  kbd {
+    font-family: inherit;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: #E6E7ED;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background-color: #2C2C2C;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #D3D4DC;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background-color: #3D3D3D;
+  }
+
+  /* Scrollbar corner */
+  ::-webkit-scrollbar-corner {
+    background-color: transparent;
+  }
+}
+
+/* ============================================
+   COMPONENT LAYER - Reusable patterns
+   ============================================ */
+
+@layer components {
+  /* Button base */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2;
+    @apply px-4 py-2.5 rounded-lg;
+    @apply text-body-sm font-semibold;
+    @apply transition-all duration-200 ease-smooth;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blurple-600/60 focus-visible:ring-offset-2;
+  }
+
+  /* Primary: solid volt. Pressing it lands it (no glow, no bounce). */
+  .btn-primary {
+    @apply btn;
+    @apply bg-blurple-600 text-white;
+    @apply hover:bg-blurple-700;
+    @apply active:translate-y-px;
+    @apply dark:bg-blurple-400 dark:text-ink dark:hover:bg-blurple-300;
+  }
+
+  .btn-secondary {
+    @apply btn;
+    @apply bg-surface-100 text-ink;
+    @apply hover:bg-surface-200;
+    @apply dark:bg-surface-800 dark:text-ink-inverse dark:hover:bg-surface-700;
+  }
+
+  .btn-ghost {
+    @apply btn;
+    @apply bg-transparent text-ink-secondary;
+    @apply hover:bg-surface-100 hover:text-ink;
+    @apply dark:text-ink-inverse-secondary dark:hover:bg-surface-800 dark:hover:text-ink-inverse;
+  }
+
+  /* Ink: the high-contrast neutral CTA (black on paper, white on ink). */
+  .btn-ink {
+    @apply btn;
+    @apply bg-ink text-white hover:bg-surface-800;
+    @apply dark:bg-ink-inverse dark:text-ink dark:hover:bg-white;
+  }
+
+  /* Card component: crisp hairline, elevation only on hover */
+  .card {
+    @apply bg-surface-0 rounded-xl;
+    @apply border border-surface-200;
+    @apply dark:bg-surface-850 dark:border-surface-800;
+    @apply transition-all duration-300 ease-smooth;
+  }
+
+  .card-hover {
+    @apply card;
+    @apply hover:shadow-medium hover:border-surface-300 hover:-translate-y-0.5;
+    @apply dark:hover:shadow-dark-medium dark:hover:border-surface-700;
+  }
+
+  .card-interactive {
+    @apply card-hover cursor-pointer;
+    @apply active:scale-[0.99] active:shadow-soft;
+  }
+
+  /* Input component */
+  .input {
+    @apply w-full px-4 py-3 rounded-lg;
+    @apply bg-surface-50 border border-surface-200;
+    @apply text-body-md text-ink placeholder:text-ink-muted;
+    @apply transition-all duration-200 ease-smooth;
+    @apply focus:outline-none focus:border-blurple-600 focus:ring-2 focus:ring-blurple-600/20;
+    @apply dark:bg-surface-850 dark:border-surface-800 dark:text-ink-inverse dark:placeholder:text-ink-inverse-muted;
+    @apply dark:focus:border-blurple-400 dark:focus:ring-blurple-400/20;
+  }
+
+  /* Badge component */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md;
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.12em];
+    @apply bg-surface-100 text-ink-secondary;
+    @apply dark:bg-surface-800 dark:text-ink-inverse-secondary;
+  }
+
+  .badge-accent {
+    @apply badge;
+    @apply bg-blurple-600/10 text-blurple-700;
+    @apply dark:bg-blurple-400/15 dark:text-blurple-300;
+  }
+
+  /* Divider */
+  .divider {
+    @apply h-px w-full;
+    @apply bg-gradient-to-r from-transparent via-surface-200 to-transparent;
+    @apply dark:via-surface-700;
+  }
+
+  /* Tag/Pill */
+  .pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full;
+    @apply text-body-xs font-medium;
+    @apply bg-surface-100 text-ink-secondary;
+    @apply dark:bg-surface-800 dark:text-ink-inverse-secondary;
+    @apply transition-colors duration-200;
+  }
+
+  /* Animated underline for links */
+  .link-underline {
+    @apply relative;
+  }
+
+  .link-underline::after {
+    content: "";
+    @apply absolute bottom-0 left-0 w-0 h-px;
+    @apply bg-current;
+    @apply transition-all duration-300 ease-smooth;
+  }
+
+  .link-underline:hover::after {
+    @apply w-full;
+  }
+
+  /* ------------------------------------------
+     STREET DETAILS (docs/brand.md § Motifs)
+     One per screen, two at most. Never on dense data UI.
+     ------------------------------------------ */
+
+  /* Tag label: mono caps micro-label, e.g. "// PROJECTS". */
+  .tag-label {
+    @apply inline-flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase leading-none tracking-[0.14em];
+    @apply text-ink-muted dark:text-ink-inverse-muted;
+  }
+
+  .tag-label-slash::before {
+    content: "//";
+    color: rgb(var(--ren-volt));
+    letter-spacing: 0;
+  }
+
+  /* Sticker: ink outline + hard offset shadow, a little off-axis. */
+  .sticker {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5;
+    @apply font-mono text-[10px] font-semibold uppercase leading-4 tracking-[0.12em];
+    @apply bg-surface-0 text-ink dark:bg-surface-900 dark:text-ink-inverse;
+    border: 1.5px solid rgb(var(--ren-ink));
+    box-shadow: 2px 2px 0 0 rgb(var(--ren-ink));
+    transform: rotate(-2deg);
+  }
+
+  .sticker-volt {
+    @apply sticker;
+    @apply bg-blurple-600 text-white dark:bg-blurple-400 dark:text-ink;
+  }
+
+  .sticker-flat {
+    transform: none;
+  }
+
+  /* Display: the poster cut of the display face. */
+  .ren-display {
+    @apply font-display;
+    font-weight: 800;
+    font-stretch: 86%;
+    letter-spacing: -0.045em;
+    line-height: 0.92;
+    font-optical-sizing: auto;
+  }
+
+  /* Volt text / fill that follows the theme (600 on paper, 400 on ink). */
+  .text-volt {
+    color: rgb(var(--ren-volt));
+  }
+
+  .bg-volt {
+    background-color: rgb(var(--ren-volt));
+  }
+
+  /* Spray halo: a soft volt bloom behind a hero element (pointer-safe). */
+  .spray-halo {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .spray-halo::before {
+    content: "";
+    position: absolute;
+    inset: -20% -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(42% 52% at 30% 40%, rgb(var(--ren-volt) / 0.22), transparent 70%),
+      radial-gradient(36% 46% at 72% 64%, rgb(var(--ren-volt-soft) / 0.18), transparent 72%);
+    filter: blur(18px);
+  }
+
+  /* Halftone: printed-dot texture, faded at the edges. */
+  .halftone {
+    background-image: radial-gradient(rgb(var(--ren-ink) / 0.12) 1px, transparent 1.2px);
+    background-size: 9px 9px;
+    -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+}
+
+/* ============================================
+   UTILITY LAYER - Custom utilities
+   ============================================ */
+
+@layer utilities {
+  /* Hide scrollbar but allow scrolling */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Thin scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #E6E7ED;
+    border-radius: 3px;
+  }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #2C2C2C;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #D3D4DC;
+  }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #3D3D3D;
+  }
+
+  /* Text balance */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Gradient backgrounds */
+  .bg-gradient-subtle {
+    background: linear-gradient(
+      135deg,
+      rgb(var(--color-bg-primary)) 0%,
+      rgb(var(--color-bg-secondary)) 100%
+    );
+  }
+
+  .bg-gradient-accent {
+    background: linear-gradient(
+      135deg,
+      rgb(var(--color-accent)) 0%,
+      rgb(var(--color-accent-light)) 100%
+    );
+  }
+
+  /* Noise texture overlay */
+  .noise-texture::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.015;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .noise-texture > * {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Shimmer effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Glow effects */
+  .glow-accent {
+    box-shadow: 0 0 24px -6px rgb(85 67 255 / 0.45);
+  }
+
+  .glow-accent-lg {
+    box-shadow: 0 0 56px -12px rgb(85 67 255 / 0.5);
+  }
+
+  /* Backdrop utilities */
+  .backdrop-blur-subtle {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .backdrop-blur-medium {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .backdrop-blur-strong {
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  /* 3D transforms */
+  .transform-3d {
+    transform-style: preserve-3d;
+    perspective: 1000px;
+  }
+
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+
+  /* Stagger animation delays */
+  .stagger-1 {
+    animation-delay: 0.05s;
+  }
+  .stagger-2 {
+    animation-delay: 0.1s;
+  }
+  .stagger-3 {
+    animation-delay: 0.15s;
+  }
+  .stagger-4 {
+    animation-delay: 0.2s;
+  }
+  .stagger-5 {
+    animation-delay: 0.25s;
+  }
+  .stagger-6 {
+    animation-delay: 0.3s;
+  }
+}
+
+/* ============================================
+   ELECTRON-SPECIFIC STYLES
+   ============================================ */
+
+@layer components {
+  /* Draggable region for custom title bar */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Traffic lights placeholder (macOS) */
+  .traffic-lights-space {
+    width: 68px;
+    height: 100%;
+  }
+}
+
+/* ============================================
+   GLASS EFFECTS - Refined translucency
+   ============================================ */
+
+.glass-ultra {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(11, 12, 23, 0.05);
+}
+
+.dark .glass-ultra {
+  background: rgba(12, 12, 12, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-frosted {
+  background: rgba(255, 255, 255, 0.76);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(11, 12, 23, 0.04);
+}
+
+.dark .glass-frosted {
+  background: rgba(20, 20, 20, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Chrome glass for header */
+.chrome-glass {
+  background: rgba(241, 242, 246, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.dark .chrome-glass {
+  background: rgba(7, 7, 7, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ============================================
+   ANIMATION KEYFRAMES
+   ============================================ */
+
+/* Spin animation for tab icons on hover */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Marker stroke: draws the hand-made underline once (src/components/brand/Marker.tsx). */
+@keyframes ren-marker-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ren-marker path {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
+
+/* ============================================
+   PREVENT TEXT SELECTION IN UI ELEMENTS
+   ============================================ */
+
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* ============================================
+   COMMAND NEXUS - SuperAgent Input Styling
+   ============================================ */
+
+.command-nexus {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-radius: 1rem;
+}
+
+.dark .command-nexus {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+}
+
+.command-nexus:focus-within {
+  box-shadow: 0 0 60px rgb(85 67 255 / 0.16);
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ============================================
+   TIPTAP EDITOR STYLES
+   ============================================ */
+
+.ProseMirror {
+  @apply outline-none min-h-[200px];
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  @apply text-ink-muted dark:text-ink-inverse-muted;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Heading styles: the display face, heavy and tight */
+.ProseMirror h1 {
+  @apply font-display text-display-md font-extrabold text-ink dark:text-ink-inverse mb-4;
+}
+.ProseMirror h2 {
+  @apply font-display text-display-sm font-bold text-ink dark:text-ink-inverse mb-3;
+}
+.ProseMirror h3 {
+  @apply font-display text-[1.375rem] leading-tight font-bold tracking-[-0.02em] text-ink dark:text-ink-inverse mb-2;
+}
+.ProseMirror :is(h1, h2, h3):not(:first-child) {
+  @apply mt-6;
+}
+
+/* Bulleted and numbered lists (Tailwind's preflight removes their markers) */
+.ProseMirror ul:not([data-type="taskList"]) {
+  @apply list-disc pl-6 my-3;
+}
+.ProseMirror ol {
+  @apply list-decimal pl-6 my-3;
+}
+.ProseMirror :is(ul:not([data-type="taskList"]), ol) li {
+  @apply my-1;
+}
+.ProseMirror :is(ul:not([data-type="taskList"]), ol) li::marker {
+  @apply text-blurple-600 dark:text-blurple-400;
+}
+
+/* Task list */
+.ProseMirror ul[data-type="taskList"] {
+  @apply list-none p-0;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  @apply flex items-start gap-2 mb-2;
+}
+.ProseMirror ul[data-type="taskList"] li label {
+  @apply pt-1 select-none mr-2;
+}
+.ProseMirror ul[data-type="taskList"] li input[type="checkbox"] {
+  @apply w-5 h-5 rounded-md border-2 border-surface-300 dark:border-surface-600 cursor-pointer appearance-none relative;
+  @apply transition-all duration-200;
+}
+.ProseMirror ul[data-type="taskList"] li input[type="checkbox"]:checked {
+  @apply bg-blurple-600 border-blurple-600 dark:bg-blurple-400 dark:border-blurple-400;
+}
+.ProseMirror ul[data-type="taskList"] li input[type="checkbox"]:checked::after {
+  content: "";
+  @apply absolute inset-0 m-auto w-2.5 h-1.5 border-l-2 border-b-2 border-white rotate-[-45deg] -translate-y-0.5;
+}
+.dark .ProseMirror ul[data-type="taskList"] li input[type="checkbox"]:checked::after {
+  @apply border-ink;
+}
+.ProseMirror ul[data-type="taskList"] li div {
+  @apply flex-1;
+}
+
+/* Table styling */
+.ProseMirror table {
+  @apply w-full border-collapse rounded-lg overflow-hidden my-4 table-fixed;
+}
+.ProseMirror th {
+  @apply bg-surface-50 dark:bg-surface-850 p-3 text-left font-mono text-[10px] uppercase tracking-[0.12em] text-ink-muted dark:text-ink-inverse-muted font-semibold border border-surface-200 dark:border-surface-800;
+}
+.ProseMirror td {
+  @apply p-3 text-body-sm text-ink dark:text-ink-inverse border border-surface-200 dark:border-surface-800;
+}
+
+/* Mention */
+.ProseMirror .mention {
+  @apply px-1.5 py-0.5 rounded-md bg-blurple-600/10 text-blurple-700 dark:bg-blurple-400/15 dark:text-blurple-300 font-medium box-decoration-clone;
+}
+
+/* Link */
+.ProseMirror a {
+  @apply text-blurple-600 dark:text-blurple-400 underline decoration-2 underline-offset-[3px] decoration-blurple-600/30 hover:decoration-blurple-600 dark:decoration-blurple-400/30 dark:hover:decoration-blurple-400 cursor-pointer;
+}
+
+/* Code block */
+.ProseMirror pre {
+  @apply bg-surface-950 text-surface-50 p-4 rounded-xl my-4 overflow-x-auto border border-surface-800;
+  font-family: "JetBrains Mono", monospace;
+}
+.ProseMirror code {
+  @apply font-mono text-sm;
+}
+
+/* ============================================
+   REN — Chrome primitives
+   ============================================ */
+
+/* The browser frame: one surface shared by toolbar, tab strip and sidebar.
+   Opaque in Light/Dark/System; the Glass theme replaces it with a thin veil. */
+.ron-chrome {
+  background-color: hsl(var(--ron-chrome));
+}
+
+/* ============================================
+   GLASS THEME — clear, colourless glass over a real material
+   --------------------------------------------
+   html.glass         Glass is selected (ink follows the OS: + .dark when dark)
+   html.glass-native  the Electron shell on macOS mounted a native material behind
+                      the window (vibrancy) — see electron/window-material.ts.
+
+   Ren glass is colourless and see-through: the desktop shows through, lightly
+   frosted by the native material, and Ren adds only thin neutral veils (white in
+   Light, black in Dark) so ink stays legible. No hue and no saturation boost: the
+   volt accent is the only colour. (docs/brand.md § Themes)
+
+   Rules (Apple HIG, Materials):
+   - The material lives on the navigation/control layer (toolbar, tab strip,
+     sidebar, floating panels and menus). Content stays legible: Ren's pages get a
+     thin see-through veil; websites (native WebContentsViews) stay opaque.
+   - The shell itself never uses CSS backdrop-filter: Chromium can only blur
+     pixels inside this renderer, never the desktop — the native view does that.
+     backdrop-filter is used only on surfaces that float over renderer content
+     (menus, agent panel), and on a ::before so it never becomes a containing
+     block for position:fixed descendants.
+   - Surface tokens are matched with [class~="…"] at the specificity of the utility
+     they replace (Tailwind does not clone attribute selectors into @apply), so
+     hover/active utilities still win and controls keep their feedback.
+   - Reduce Transparency and Increase Contrast make everything (near) opaque.
+   ============================================ */
+html.glass {
+  --ron-glass-chrome: rgb(255 255 255 / 0.08);   /* toolbar, tab strip, sidebar */
+  --ron-glass-control: rgb(255 255 255 / 0.5);   /* capsules in the chrome: Ask Ren, active tab, search */
+  --ron-glass-content: rgb(255 255 255 / 0.2);   /* Ren's pages and cards (nested surfaces stack) */
+  --ron-glass-fill: rgb(0 0 0 / 0.045);          /* wells, chips, secondary buttons */
+  --ron-glass-panel: rgb(255 255 255 / 0.34);    /* agent panel and other floating sheets */
+  --ron-glass-popover: rgb(252 252 252 / 0.78);  /* menus, popovers, selects, hover cards */
+  --ron-glass-blur: 18px;
+  --ron-glass-hairline: rgb(0 0 0 / 0.08);
+  --ron-glass-edge: inset 0 1px 0 0 rgb(255 255 255 / 0.55), inset 0 0 0 1px rgb(0 0 0 / 0.05);
+  --ron-glass-shadow: 0 18px 48px -18px rgb(0 0 0 / 0.28);
+}
+
+html.glass.dark,
+html.glass .ron-field {
+  --ron-glass-chrome: rgb(0 0 0 / 0.16);
+  --ron-glass-control: rgb(255 255 255 / 0.09);
+  --ron-glass-content: rgb(0 0 0 / 0.24);
+  --ron-glass-fill: rgb(255 255 255 / 0.06);
+  --ron-glass-panel: rgb(0 0 0 / 0.38);
+  --ron-glass-popover: rgb(18 18 18 / 0.8);
+  --ron-glass-hairline: rgb(255 255 255 / 0.09);
+  --ron-glass-edge: inset 0 1px 0 0 rgb(255 255 255 / 0.1), inset 0 0 0 1px rgb(255 255 255 / 0.05);
+  --ron-glass-shadow: 0 18px 48px -18px rgb(0 0 0 / 0.65);
+}
+
+html.glass .ron-chrome {
+  background-color: var(--ron-glass-chrome);
+}
+
+/* Native material: let the window show through the document. */
+html.glass-native,
+html.glass-native body {
+  background: transparent;
+}
+
+/* No native material (plain browser preview, Linux, Windows): paint a soft, colourless
+   frosted backdrop so translucent panes never sit on a raw desktop. */
+html.glass:not(.glass-native) body {
+  background:
+    radial-gradient(1100px 760px at 10% 0%, rgb(255 255 255 / 0.9), transparent 62%),
+    radial-gradient(900px 700px at 92% 100%, rgb(0 0 0 / 0.07), transparent 60%),
+    linear-gradient(160deg, #F2F2F2 0%, #DEDEDE 100%);
+}
+
+html.glass.dark:not(.glass-native) body {
+  background:
+    radial-gradient(1100px 760px at 10% 0%, rgb(255 255 255 / 0.08), transparent 62%),
+    radial-gradient(900px 700px at 92% 100%, rgb(255 255 255 / 0.04), transparent 60%),
+    linear-gradient(160deg, #1C1C1C 0%, #090909 100%);
+}
+
+/* Chrome hairlines: faint neutral edges instead of opaque rules. */
+html.glass .ron-toolbar,
+html.glass .ron-sidebar > * {
+  border-color: var(--ron-glass-hairline);
+}
+
+/* Opaque controls in the chrome (Ask Ren button, active tab, focused search) become clear capsules. */
+:where(html.glass:not(.dark) :is(.ron-toolbar, .ron-sidebar)) [class~="bg-surface-0"],
+:where(html.glass.dark :is(.ron-toolbar, .ron-sidebar)) :is([class~="dark:bg-surface-800"], [class~="dark:bg-surface-850"]):is(.dark *) {
+  background-color: var(--ron-glass-control);
+}
+
+/* Content layer: Ren's pages veil the material instead of hiding it. Page roots, cards and
+   other surface tokens all get the same thin veil, so nested surfaces stack (page + card
+   ≈ 0.36 in Light) and text-heavy cards stay legible while the desktop still shows through.
+   Small controls that must stay solid (switch thumbs: bg-background, knobs: bg-white) are
+   deliberately not matched. */
+html.glass .ron-content {
+  background-color: transparent;
+}
+
+:where(html.glass:not(.dark) .ron-content) :is([class~="bg-surface-0"], [class~="bg-surface-50"], [class~="bg-card"]),
+:where(html.glass.dark .ron-content) :is([class~="dark:bg-surface-900"], [class~="dark:bg-surface-950"], [class~="dark:bg-surface-850"], [class~="dark:bg-card"]):is(.dark *),
+:where(html.glass.dark .ron-content) [class~="bg-card"] {
+  background-color: var(--ron-glass-content);
+}
+
+/* Fills (wells, chips, secondary buttons): neutral tints instead of opaque greys. */
+:where(html.glass:not(.dark) .ron-content) [class~="bg-surface-100"],
+:where(html.glass.dark .ron-content) [class~="dark:bg-surface-800"]:is(.dark *) {
+  background-color: var(--ron-glass-fill);
+}
+
+/* Floating panel (agent panel): frosted material over whatever is behind it.
+   Surfaces inside it (header, inputs) keep the content veil on top. */
+html.glass .ron-content .ron-glass-panel,
+html.glass .ron-glass-panel {
+  position: relative;
+  isolation: isolate;
+  background-color: transparent;
+  border-color: var(--ron-glass-hairline);
+}
+
+html.glass .ron-glass-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background-color: var(--ron-glass-panel);
+  box-shadow: var(--ron-glass-edge);
+  -webkit-backdrop-filter: blur(var(--ron-glass-blur));
+  backdrop-filter: blur(var(--ron-glass-blur));
+}
+
+/* Menus, popovers, selects, hover cards (shadcn `bg-popover`) and Ren popovers. */
+html.glass [class~="bg-popover"],
+html.glass .ron-popover {
+  background-color: var(--ron-glass-popover);
+  border-color: var(--ron-glass-hairline);
+  box-shadow: var(--ron-glass-edge), var(--ron-glass-shadow);
+  -webkit-backdrop-filter: blur(var(--ron-glass-blur));
+  backdrop-filter: blur(var(--ron-glass-blur));
+}
+
+/* Fields: the one solid surface in Glass. Every text field (inputs, textareas, selects and select
+   triggers, search and URL bars, composers) is black with white ink, in both inks: the black the URL
+   bar and the agent composer show in Dark (surface-850). What you type always sits on black while
+   everything around it stays glass (the user's choice, 2026-11-11).
+   - `.ron-field` marks the element that draws a field's box: a bordered control (the Input, Textarea
+     and SelectTrigger primitives) or the capsule around a transparent control (input groups, search
+     and URL bars, composers, cmdk inputs). A marked field is a Dark island in both inks: Tailwind's
+     dark: variant also matches on and inside it (darkMode in tailwind.config.ts), and the Dark theme
+     variables and glass veils apply to it (`.dark` in @layer base, `html.glass.dark` above), so its
+     icons, buttons and the suggestion, command and mention lists inside it render exactly as in Dark.
+   - A bare control that paints its own box (an input, textarea or select that is not bg-transparent)
+     is matched directly; its ink is set here.
+   - Checkboxes, radios, ranges, colour and file pickers keep their look; contenteditable documents
+     (pages, descriptions) and borderless inline title editors (bg-transparent) stay glass.
+   Specificity: html.glass .ron-field (0,2,1) and its :hover/:focus-within states (0,3,1)-(0,4,1) beat
+   the surface utilities, their dark: (0,2,0) and dark:hover:/dark:focus-within: (0,3,0) variants and
+   the glass veils above; bare controls start at (0,3,2). */
+html.glass {
+  --ron-glass-field: rgb(20 20 20);            /* surface-850 */
+  --ron-glass-field-hover: rgb(30 30 30);      /* surface-800 */
+  --ron-glass-field-ink: rgb(245 245 245);     /* ink-inverse */
+  --ron-glass-field-muted: rgb(145 145 145);   /* ink-inverse-muted */
+  --ron-glass-field-fill: rgb(255 255 255 / 0.08);
+  --ron-glass-field-hairline: rgb(255 255 255 / 0.1);
+}
+
+html.glass .ron-field,
+html.glass .ron-field:focus-within,
+html.glass :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  textarea,
+  select
+):not([class~="bg-transparent"], .ron-field *) {
+  background-color: var(--ron-glass-field);
+  background-image: none;
+  color-scheme: dark;
+}
+
+html.glass .ron-field:hover:not(:focus-within),
+html.glass :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  textarea,
+  select
+):not([class~="bg-transparent"], .ron-field *):hover:not(:focus) {
+  background-color: var(--ron-glass-field-hover);
+}
+
+/* White ink and caret. A control that hides its text (text-transparent: the URL bar under its host
+   overlay) keeps hiding it; inside a field, controls take the island's ink from their dark: classes. */
+html.glass .ron-field:not([class~="text-transparent"]),
+html.glass :is(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"], [type="reset"], [type="image"]),
+  textarea,
+  select
+):not([class~="bg-transparent"], [class~="text-transparent"], .ron-field *) {
+  color: var(--ron-glass-field-ink);
+}
+html.glass .ron-field,
+html.glass .ron-field :is(input, textarea, select, [contenteditable="true"]),
+html.glass :is(input, textarea, select):not([class~="bg-transparent"], .ron-field *) {
+  caret-color: var(--ron-glass-field-ink);
+}
+/* A control without its own background inside a field must not show the browser's field colour. */
+html.glass .ron-field :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select):not([class*="bg-"]) {
+  background-color: transparent;
+}
+html.glass .ron-field::placeholder,
+html.glass .ron-field ::placeholder,
+html.glass :is(input, textarea):not([class~="bg-transparent"], .ron-field *)::placeholder {
+  color: var(--ron-glass-field-muted);
+  opacity: 1;
+}
+
+/* Neutral borders become a hairline at rest; focus, open, invalid and error borders still show. */
+html.glass .ron-field:not(:focus-within, [data-state="open"], [aria-expanded="true"], [aria-invalid="true"], [class~="border-destructive"], [class~="border-danger"], [class~="border-red-500"]):is([class~="border"], [class*="border-surface-"], [class~="border-input"], [class~="border-border"]),
+html.glass :is(input, textarea, select):not([class~="bg-transparent"], .ron-field *):not(:focus, [aria-invalid="true"], [class~="border-destructive"], [class~="border-danger"], [class~="border-red-500"]):is([class~="border"], [class*="border-surface-"], [class~="border-input"], [class~="border-border"]) {
+  border-color: var(--ron-glass-field-hairline);
+}
+
+/* Classes with no dark: counterpart would keep their light-ink colour on black: neutral ink becomes
+   the field ink, muted ink the field's muted ink, and a black primary button turns white with dark ink
+   (as `bg-ink dark:bg-ink-inverse dark:text-ink` buttons do). Exact tokens only, so state variants
+   (hover:, disabled:, placeholder:) keep their meaning; :where() keeps these at a utility's
+   specificity so hover and focus utilities still win. */
+:where(html.glass .ron-field) :where(:not([class*="dark:text-"])):is([class~="text-ink"], [class~="text-ink-secondary"], [class~="text-black"], [class~="text-surface-700"], [class~="text-surface-800"], [class~="text-surface-900"]) {
+  color: var(--ron-glass-field-ink);
+}
+:where(html.glass .ron-field) :where(:not([class*="dark:text-"])):is([class~="text-ink-muted"], [class~="text-surface-500"], [class~="text-surface-600"]) {
+  color: var(--ron-glass-field-muted);
+}
+:where(html.glass .ron-field) :where(:not([class*="dark:bg-"])):is([class~="bg-ink"], [class~="bg-black"], [class~="bg-surface-900"], [class~="bg-surface-950"]) {
+  background-color: var(--ron-glass-field-ink);
+  color: rgb(11 12 23); /* ink */
+}
+
+/* A field inside a field (an Input primitive inside a marked capsule): only the outer one paints. */
+html.glass .ron-field .ron-field,
+html.glass .ron-field .ron-field:hover:not(:focus-within) {
+  background-color: transparent;
+}
+
+/* Shortcut chips (⌘K) inside a field. */
+html.glass .ron-field .kbd {
+  background-color: var(--ron-glass-field-fill);
+  border-color: var(--ron-glass-field-hairline);
+  color: var(--ron-glass-field-muted);
+}
+
+/* Accessibility: System Settings › Accessibility › Display. */
+@media (prefers-contrast: more) {
+  html.glass {
+    --ron-glass-chrome: rgb(255 255 255 / 0.75);
+    --ron-glass-control: rgb(255 255 255 / 0.92);
+    --ron-glass-content: rgb(255 255 255 / 0.88);
+    --ron-glass-fill: rgb(0 0 0 / 0.08);
+    --ron-glass-panel: rgb(255 255 255 / 0.92);
+    --ron-glass-popover: rgb(255 255 255 / 0.96);
+    --ron-glass-hairline: rgb(0 0 0 / 0.35);
+    --ron-glass-field-hairline: rgb(255 255 255 / 0.4);
+  }
+  html.glass.dark {
+    --ron-glass-chrome: rgb(7 7 7 / 0.82);
+    --ron-glass-control: rgb(44 44 44 / 0.92);
+    --ron-glass-content: rgb(12 12 12 / 0.88);
+    --ron-glass-fill: rgb(255 255 255 / 0.1);
+    --ron-glass-panel: rgb(12 12 12 / 0.92);
+    --ron-glass-popover: rgb(20 20 20 / 0.96);
+    --ron-glass-hairline: rgb(245 245 245 / 0.35);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html.glass {
+    --ron-glass-chrome: #F1F2F6;
+    --ron-glass-control: #FFFFFF;
+    --ron-glass-content: #FFFFFF;
+    --ron-glass-fill: #F3F3F7;
+    --ron-glass-panel: #FFFFFF;
+    --ron-glass-popover: #FFFFFF;
+  }
+  html.glass.dark {
+    --ron-glass-chrome: #070707;
+    --ron-glass-control: #1E1E1E;
+    --ron-glass-content: #0C0C0C;
+    --ron-glass-fill: #1E1E1E;
+    --ron-glass-panel: #0C0C0C;
+    --ron-glass-popover: #141414;
+  }
+  html.glass .ron-glass-panel::before,
+  html.glass [class~="bg-popover"],
+  html.glass .ron-popover {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Keyboard hint chips (⌘K, ⌘J) */
+.kbd {
+  @apply inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] px-1;
+  @apply border border-surface-200 border-b-2 bg-surface-0 font-mono text-[10px] font-medium leading-none text-ink-muted;
+  @apply dark:border-surface-700 dark:bg-surface-850 dark:text-ink-inverse-muted;
+  font-feature-settings: "tnum";
+}
+
+/* Subtle film grain for large hero surfaces (pointer-safe) */
+.ron-grain {
+  position: relative;
+  isolation: isolate;
+}
+.ron-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  z-index: -1;
+}
+.dark .ron-grain::after {
+  mix-blend-mode: screen;
+  opacity: 0.03;
+}
+
+/* Workflow diagrams. The AI Elements workflow components (canvas, node, edge, connection, controls)
+   expect shadcn v4 colour variables (--sidebar, --color-ring, a full colour in --primary); Ren's tokens
+   are HSL channels, so map both those and React Flow's own theme variables here, per theme. */
+.ron-workflow {
+  --sidebar: hsl(var(--muted) / 0.45);
+  --color-ring: hsl(var(--ring));
+  --xy-background-color: transparent;
+  --xy-edge-stroke: hsl(var(--muted-foreground) / 0.75);
+  --xy-edge-stroke-selected: hsl(var(--primary));
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: hsl(var(--ring));
+  --xy-handle-background-color: hsl(var(--card));
+  --xy-handle-border-color: hsl(var(--muted-foreground));
+  --xy-controls-button-background-color: hsl(var(--card));
+  --xy-controls-button-background-color-hover: hsl(var(--secondary));
+  --xy-controls-button-color: hsl(var(--foreground));
+  --xy-controls-button-color-hover: hsl(var(--foreground));
+  --xy-controls-button-border-color: hsl(var(--border));
+  --xy-selection-background-color: hsl(var(--primary) / 0.08);
+  --xy-selection-border: 1px dotted hsl(var(--primary) / 0.6);
+  --xy-attribution-background-color: transparent;
+}
+.ron-workflow .react-flow__edge circle { fill: hsl(var(--primary)); }
+.ron-workflow .react-flow__handle { width: 10px; height: 10px; border-width: 1.5px; }
+.ron-workflow .react-flow__node.selected .node-container { box-shadow: 0 0 0 1.5px hsl(var(--primary)); }
+.ron-workflow .react-flow__attribution a { color: hsl(var(--muted-foreground)); }
+
+/* ============================================
+   BUILD IDE — CodeMirror surface (src/components/build/CodeEditor.tsx)
+   Token colours come from the editor theme; this only fits the frame.
+   ============================================ */
+.ren-code-editor .cm-editor {
+  height: 100%;
+  font-size: 12.5px;
+}
+.ren-code-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.ren-code-editor .cm-scroller {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  line-height: 1.65;
+}

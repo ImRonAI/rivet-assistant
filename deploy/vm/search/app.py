@@ -2,8 +2,9 @@
 
 ``POST /search/stream`` (Brave sections, Brave Answers, the Shopping and Search agents on GLM 5.3 Flash) and the
 Discover feed come from ren's backend at the commit the image pins (``Dockerfile``); nothing of them is rewritten here.
-Caddy puts this app at ``https://rivet.ron-ai.dev/ren/`` behind the phone's bearer token, and the app's bundled search
-page (served from ``https://appassets.androidplatform.net``) is the one origin allowed to call it.
+Caddy puts this app at ``https://rivet.ron-ai.dev`` (``/search/*`` and ``/discover/*``, the paths ren's own pages call)
+behind the phone's bearer token, and the app's bundled search page (served from
+``https://appassets.androidplatform.net``) is the one origin allowed to call it.
 """
 
 from __future__ import annotations

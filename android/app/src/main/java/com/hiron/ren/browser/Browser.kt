@@ -25,6 +25,8 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.StateFlow
@@ -72,9 +74,10 @@ data class DownloadRequest(val url: String, val name: String, val host: String, 
  * do to them. All of it runs on the main thread, as WebView requires.
  *
  * A tab opened from home keeps home under its first page, so Back from that page returns to it. Ren's own pages
- * (`ren://search`) are the app's bundled pages, loaded from its assets; only they can talk to the app.
+ * (`ren://search`) are the app's bundled pages, loaded from its assets; only they can talk to the app, and what they
+ * can ask for is [token], the workspace VM's bearer token their requests to Ren's search carry.
  */
-class Browser(private val context: Context, private val store: BrowserStore) {
+class Browser(private val context: Context, private val store: BrowserStore, private val token: () -> String) {
     private val _state = MutableStateFlow(BrowserState())
     val state: StateFlow<BrowserState> = _state.asStateFlow()
 
@@ -266,6 +269,12 @@ class Browser(private val context: Context, private val store: BrowserStore) {
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         webViewClient = Pages(id)
         webChromeClient = Chrome(id)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            // Ren's search page asks for the workspace token its requests carry; no other origin reaches this listener.
+            WebViewCompat.addWebMessageListener(this, "RenHost", setOf("https://$ORIGIN_HOST")) { _, message, _, isMainFrame, reply ->
+                if (isMainFrame && message.data == "token") reply.postMessage(token())
+            }
+        }
         setDownloadListener { url, userAgent, disposition, mime, bytes ->
             val name = URLUtil.guessFileName(url, disposition, mime)
             downloadRequest.value = DownloadRequest(url, name, Uri.parse(url).host.orEmpty(), mime, bytes, userAgent)

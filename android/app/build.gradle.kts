@@ -71,6 +71,29 @@ kotlin {
     }
 }
 
+// Ren's bundled pages (android/web: the robot, and ren desktop's search page) are built by Vite into the app's assets,
+// so an APK always carries the pages its sources describe. Needs Node and npm on the build machine.
+val web = rootProject.layout.projectDirectory.dir("web")
+val webInstall = tasks.register<Exec>("webInstall") {
+    workingDir = web.asFile
+    commandLine("npm", "ci")
+    inputs.file(web.file("package-lock.json"))
+    outputs.file(web.file("node_modules/.package-lock.json"))
+}
+val webBuild = tasks.register<Exec>("webBuild") {
+    dependsOn(webInstall)
+    workingDir = web.asFile
+    commandLine("npm", "run", "build")
+    inputs.dir(web.dir("src"))
+    inputs.dir(web.dir("scripts"))
+    inputs.files(
+        web.file("package-lock.json"), web.file("vite.config.ts"), web.file("tailwind.config.ts"), web.file(".env"),
+        web.file("tsconfig.json"), web.file("tsconfig.app.json"), web.file("tsconfig.cato.json"), web.file("tsconfig.ren.json"),
+    )
+    outputs.dir(layout.projectDirectory.dir("src/main/assets/ren/web"))
+}
+tasks.named("preBuild") { dependsOn(webBuild) }
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

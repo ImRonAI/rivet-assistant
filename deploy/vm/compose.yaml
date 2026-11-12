@@ -91,7 +91,7 @@ services:
     restart: unless-stopped
     mem_limit: 1g
 
-  # Ren's search and Discover (ren desktop's own backend code) for the phone, at https://rivet.ron-ai.dev/ren/.
+  # Ren's search and Discover (ren desktop's own backend code) for the phone, at https://rivet.ron-ai.dev/search/ and /discover/.
   search:
     build: ./search
     image: ren-search:b112adf

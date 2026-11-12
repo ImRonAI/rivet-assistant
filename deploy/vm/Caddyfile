@@ -27,11 +27,11 @@ rivet.ron-ai.dev {
 		}
 		respond 401
 	}
-	# Ren's search for the phone. The bundled search page calls it from another origin, so the browser's preflight,
-	# which carries no token, goes straight to the app, which answers it for that origin only.
-	@ren path /ren/*
+	# Ren's search and Discover for the phone, on the paths ren desktop's own pages call. The bundled search page calls
+	# them from another origin, so the browser's preflight, which carries no token, goes straight to the app, which
+	# answers it for that origin only.
+	@ren path /search/* /discover/*
 	handle @ren {
-		uri strip_prefix /ren
 		@preflight method OPTIONS
 		handle @preflight {
 			reverse_proxy search:8200

@@ -95,7 +95,7 @@ class RenRuntime(private val app: Context) {
     val search = BraveSearch(http, settings::braveSearchKey, settings::braveAnswersKey)
 
     /** The browser's tabs. */
-    val browser = Browser(app, BrowserStore({ settings.browserTabs }, { settings.browserTabs = it }))
+    val browser = Browser(app, BrowserStore({ settings.browserTabs }, { settings.browserTabs = it })) { settings.geminiToken }
 
     /** Result thumbnails and images, cached in memory only. */
     val images = ImageLoader(http)

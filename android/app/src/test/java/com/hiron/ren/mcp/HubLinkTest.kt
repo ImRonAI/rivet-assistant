@@ -83,7 +83,7 @@ class HubLinkTest {
         var saved: String? = null
         val server = PhoneMcpServer(
             "test",
-            Browser(context, BrowserStore({ saved }, { saved = it })),
+            Browser(context, BrowserStore({ saved }, { saved = it })) { withToken },
             level = { SearchLevel.Default },
             approve = { input ->
                 calls += "request_approval" to input.toString()

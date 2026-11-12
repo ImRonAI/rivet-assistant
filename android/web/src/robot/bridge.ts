@@ -83,8 +83,6 @@ const api = { state, mouth, quiet, viseme, theme, focus, voice, level }
 declare global {
   interface Window {
     ren: typeof api
-    /** The app's web message listener (WebViewCompat.addWebMessageListener). */
-    RenHost?: { postMessage(message: string): void }
   }
 }
 
