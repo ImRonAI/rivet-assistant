@@ -22,8 +22,13 @@ interface Assistant {
     fun hasMicrophone(): Boolean
 }
 
-/** Who runs Emrys's agents; the screens, tools and approvals are the same either way. */
-enum class Provider(val label: String) {
-    ElevenLabs("ElevenLabs"),
-    Gemini("Gemini"),
+/**
+ * Who runs Emrys's agents; the screens, tools and approvals are the same either way. Every provider but ElevenLabs is a
+ * text model under the Strands agents on the workspace VM ([StrandsAgent]), named there by [strands].
+ */
+enum class Provider(val label: String, val strands: String?) {
+    ElevenLabs("ElevenLabs", null),
+    Gemini("Gemini", "gemini"),
+    Nim("NVIDIA NIM", "nim"),
+    Mistral("Mistral", "mistral"),
 }

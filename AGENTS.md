@@ -123,14 +123,22 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
-- **Gemini, the other provider** (Settings › Agents; ElevenLabs is the default): Emrys's agents in Strands on the
-  workspace VM (`deploy/vm/gemini/app.py`, the `gemini` container at `wss://rivet.ron-ai.dev/gemini/`, behind Caddy's
-  bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `EmrysRuntime.agent` is `EmrysAgent` or
-  `GeminiAgent`, and the screens use only its six members.
-  - Text (`/gemini/text`): the Strands harness, `create_harness(model="google/<text model>")`, with every built-in on
-    (shell, read, write, edit, web_fetch, Google Search, programmatic_tool_caller, subagent, todos, memory, sessions)
-    plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and mcp_router. Text models:
-    gemini-4-argon (default), gemini-3.8-flash, gemini-3.5-flash-lite.
+- **Strands providers: Gemini, NVIDIA NIM and Mistral** (Settings › Agents; ElevenLabs is the default): Emrys's agents
+  in Strands on the workspace VM (`deploy/vm/gemini/app.py`, the `gemini` container at `wss://rivet.ron-ai.dev/gemini/`,
+  behind Caddy's bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `EmrysRuntime.agent` is
+  `EmrysAgent` or `StrandsAgent`, and the screens use only its six members. Settings › Agents picks the provider, the text
+  model from the provider's live catalogue (`GET /gemini/models?provider=`, searchable; none chosen is the VM's default)
+  and the model's reasoning level (`GET /gemini/efforts`, with Auto first); the session's WebSocket carries `provider`,
+  `model` and `effort`.
+  - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`), copied into `providers.py`, `mistral_model.py`,
+    `media_capabilities.py` and `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
+    (default `z-ai/glm-5.3-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
+    `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
+    change for mypy and for Strands 1.64.0. Keys: `NVIDIA_NIM_API_KEY` and `MISTRAL_API_KEY` in `gemini.env`.
+  - Text (`/gemini/text`): the Strands harness, `create_harness(model="google/<text model>", effort=…)` for Gemini, with
+    every built-in on (shell, read, write, edit, web_fetch, Google Search, programmatic_tool_caller, subagent, todos,
+    memory, sessions) plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and
+    mcp_router. Gemini's default text model is gemini-4-argon.
   - Voice (`/gemini/voice`): `BidiAgent` with `GoogleGeminiLiveModel` on gemini-3.8-live, voice Algieba, the same
     vended tools except swarm and graph (subagent and web_fetch run on the text model) and the bidi docs'
     `end_conversation`. Live, 2026-11-06 on the Gemini API: `enable_affective_dialog` is refused (1007 "Request
@@ -204,7 +212,7 @@ cd android && python3 tools/build_robot_asset.py --check && python3 tools/build_
 JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease
 cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs files byte-identical to upstream
 uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
-uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
+uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with mistralai==2.10.1 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
 ```
 
 ## Everything Emrys can do today

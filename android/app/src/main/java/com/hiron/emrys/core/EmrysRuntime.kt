@@ -17,8 +17,8 @@ import com.hiron.emrys.ui.ImageLoader
 import com.hiron.emrys.voice.AgentTools
 import com.hiron.emrys.voice.Assistant
 import com.hiron.emrys.voice.EmrysAgent
-import com.hiron.emrys.voice.GeminiAgent
 import com.hiron.emrys.voice.Provider
+import com.hiron.emrys.voice.StrandsAgent
 import com.hiron.emrys.voice.SearchTools
 import com.hiron.emrys.widget.EmrysWidgets
 import kotlinx.coroutines.CompletableDeferred
@@ -51,7 +51,7 @@ class EmrysApp : Application() {
 val Context.emrys: EmrysRuntime get() = (applicationContext as EmrysApp).runtime
 
 /**
- * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs or Gemini) and the
+ * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs or Strands) and the
  * approvals they ask for with `request_approval`.
  */
 class EmrysRuntime(private val app: Context) {
@@ -95,13 +95,14 @@ class EmrysRuntime(private val app: Context) {
     val images = ImageLoader(http)
 
     private val elevenLabs = EmrysAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
-    private val gemini = GeminiAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
+    /** Gemini, NVIDIA NIM and Mistral in Strands on the workspace VM. */
+    val strands = StrandsAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
 
     /** The agents for the provider chosen in Settings. */
     val agent: Assistant
         get() = when (settings.provider) {
             Provider.ElevenLabs -> elevenLabs
-            Provider.Gemini -> gemini
+            Provider.Gemini, Provider.Nim, Provider.Mistral -> strands
         }
 
     /** Switches provider; the running conversation ends, and the next one starts with [provider]. */
@@ -109,6 +110,19 @@ class EmrysRuntime(private val app: Context) {
         if (provider == settings.provider) return
         agent.stop()
         settings.provider = provider
+    }
+
+    /** Switches the text model (null: the provider's default) and its reasoning; the next conversation uses them. */
+    fun chooseModel(provider: Provider, model: String?) {
+        if (model == settings.textModel(provider)) return
+        if (provider == settings.provider) agent.stop()
+        settings.setTextModel(provider, model)
+    }
+
+    fun chooseEffort(provider: Provider, effort: String) {
+        if (effort == settings.effort(provider)) return
+        if (provider == settings.provider) agent.stop()
+        settings.setEffort(provider, effort)
     }
 
     /** The same phone tools, approvals and searches, for agents that reach the phone over MCP ([PhoneMcpService]). */

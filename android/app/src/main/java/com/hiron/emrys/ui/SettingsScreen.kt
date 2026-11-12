@@ -86,7 +86,6 @@ import com.hiron.emrys.mcp.PHONE_MCP_PATH
 import com.hiron.emrys.mcp.PHONE_MCP_PORT
 import com.hiron.emrys.mcp.PhoneMcpService
 import com.hiron.emrys.mcp.tailnetAddress
-import com.hiron.emrys.voice.GeminiTextModel
 import com.hiron.emrys.voice.Provider
 
 /** A section's serif title. */
@@ -162,13 +161,12 @@ private fun Section(number: Int, title: String, content: @Composable ColumnScope
 @Composable
 private fun RowRule() = Rule(Modifier.padding(horizontal = RowInset), color = LocalPalette.current.line)
 
-/** Who runs the agents, the Gemini text model, and the talk key. */
+/** Who runs the agents, the text model and its reasoning, and the talk key. */
 @Composable
 private fun Agents(runtime: EmrysRuntime, refresh: Int) {
     val p = LocalPalette.current
     val s = runtime.settings
     var provider by remember(refresh) { mutableStateOf(s.provider) }
-    var textModel by remember(refresh) { mutableStateOf(s.geminiTextModel) }
     var voiceModel by remember(refresh) { mutableStateOf(s.voiceModel) }
     EmrysCard(padding = PaddingValues(0.dp)) {
         Column(Modifier.padding(horizontal = RowInset, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -179,15 +177,7 @@ private fun Agents(runtime: EmrysRuntime, refresh: Int) {
                     runtime.choose(it)
                 }
             }
-            if (provider == Provider.Gemini) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Text model", style = Type.labelLg, color = p.ink2)
-                    Choices(GeminiTextModel.entries.map { it to it.label }, textModel) {
-                        textModel = it
-                        s.geminiTextModel = it
-                    }
-                }
-            }
+            if (provider.strands != null) TextModelSetting(runtime, provider, refresh)
         }
         RowRule()
         Toggle("Talk key", voiceModel, detail = "Shows the mic key, so you can talk to Emrys out loud.") {
@@ -195,7 +185,9 @@ private fun Agents(runtime: EmrysRuntime, refresh: Int) {
             s.voiceModel = it
         }
     }
-    if (provider == Provider.Gemini) InfoStrip("Gemini talks on Gemini 3.8 Live and reaches the phone's tools through Remote tools, below.")
+    if (provider.strands != null) {
+        InfoStrip("${provider.label} runs Emrys's text agent in Strands, talks on Gemini 3.8 Live, and reaches the phone's tools through Remote tools, below.")
+    }
 }
 
 /**

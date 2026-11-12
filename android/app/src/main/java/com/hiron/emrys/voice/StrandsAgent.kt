@@ -17,6 +17,7 @@ import com.hiron.emrys.device.ScreenOperator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -26,23 +27,23 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString.Companion.toByteString
 import org.json.JSONObject
+import java.io.IOException
 import java.util.UUID
 
-/** The Gemini text models; the default is the most capable, as on the ElevenLabs text agent. */
-enum class GeminiTextModel(val id: String, val label: String) {
-    Argon("gemini-4-argon", "Gemini 4 Argon"),
-    Flash("gemini-3.8-flash", "Gemini 3.8 Flash"),
-    FlashLite("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite"),
-}
+/** One model in a provider's live catalogue on the workspace VM. */
+data class TextModel(val id: String, val ownedBy: String)
+
+/** A provider's live models and the model the VM runs when none is chosen. */
+data class Catalogue(val models: List<TextModel>, val default: String)
 
 /**
- * Emrys's Gemini agents, which run in Strands on the workspace VM (`deploy/vm/gemini/app.py`): a text session is the
- * Strands harness, a voice session a BidiAgent on Gemini Live with this phone's microphone and speaker ([GeminiAudio]).
- * Each opens a WebSocket with the user's id, their `perm_*` grants and the text model, and the agents reach the phone
- * tools, `request_approval` and the searches through the phone's MCP server. The chat is built from Strands' events
- * ([GeminiEvents]).
+ * Emrys's Strands agents on the workspace VM (`deploy/vm/gemini/app.py`), with the text model on Gemini, NVIDIA NIM or
+ * Mistral: a text session is the Strands harness, a voice session a BidiAgent on Gemini Live with this phone's
+ * microphone and speaker ([GeminiAudio]). Each opens a WebSocket with the user's id, their `perm_*` grants, the
+ * provider, text model and reasoning level, and the agents reach the phone tools, `request_approval` and the searches
+ * through the phone's MCP server. The chat is built from Strands' events ([GeminiEvents]).
  */
-class GeminiAgent(
+class StrandsAgent(
     private val context: Context,
     private val settings: Settings,
     private val http: OkHttpClient,
@@ -99,13 +100,44 @@ class GeminiAgent(
     override fun hasMicrophone() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
-    private fun url(mode: AgentMode): HttpUrl = SERVICE.toHttpUrl().newBuilder()
-        .addPathSegment(if (mode == AgentMode.Voice) "voice" else "text")
-        .addQueryParameter("conversation", UUID.randomUUID().toString())
-        .addQueryParameter("model", settings.geminiTextModel.id)
-        .addQueryParameter("user_id", settings.userId)
-        .apply { settings.permissionVariables().forEach { (name, value) -> addQueryParameter(name, value) } }
-        .build()
+    /** The [provider]'s live models, as the VM lists them from the provider itself. */
+    suspend fun models(provider: Provider): Catalogue {
+        val json = get(SERVICE.toHttpUrl().newBuilder().addPathSegment("models").addQueryParameter("provider", provider.strands).build())
+        val models = json.getJSONArray("models")
+        return Catalogue(
+            (0 until models.length()).map { models.getJSONObject(it) }.map { TextModel(it.getString("id"), it.optString("owned_by")) },
+            json.getString("default"),
+        )
+    }
+
+    /** The reasoning levels [model] accepts, lowest first; empty when it has none to choose from. */
+    suspend fun efforts(provider: Provider, model: String): List<String> {
+        val url = SERVICE.toHttpUrl().newBuilder().addPathSegment("efforts")
+            .addQueryParameter("provider", provider.strands).addQueryParameter("model", model).build()
+        val efforts = get(url).getJSONArray("efforts")
+        return (0 until efforts.length()).map(efforts::getString)
+    }
+
+    private suspend fun get(url: HttpUrl): JSONObject = withContext(Dispatchers.IO) {
+        http.newCall(Request.Builder().url(url).header("Authorization", "Bearer ${settings.geminiToken}").build()).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IOException("The workspace answered ${response.code}")
+            JSONObject(body)
+        }
+    }
+
+    private fun url(mode: AgentMode): HttpUrl {
+        val provider = settings.provider
+        return SERVICE.toHttpUrl().newBuilder()
+            .addPathSegment(if (mode == AgentMode.Voice) "voice" else "text")
+            .addQueryParameter("conversation", UUID.randomUUID().toString())
+            .addQueryParameter("provider", provider.strands)
+            .apply { settings.textModel(provider)?.let { addQueryParameter("model", it) } }
+            .addQueryParameter("effort", settings.effort(provider))
+            .addQueryParameter("user_id", settings.userId)
+            .apply { settings.permissionVariables().forEach { (name, value) -> addQueryParameter(name, value) } }
+            .build()
+    }
 
     private fun listener(gen: Int, mode: AgentMode) = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -189,9 +221,9 @@ class GeminiAgent(
         update { EmrysStore.note(it.copy(lastError = error, activity = Activity.Failed), System.currentTimeMillis(), "error", error) }
 
     companion object {
-        /** The Gemini service on the workspace VM, behind Caddy's bearer token. */
+        /** The Strands service on the workspace VM, behind Caddy's bearer token. */
         const val SERVICE = "https://rivet.ron-ai.dev/gemini"
-        const val COULD_NOT_REACH = "Couldn't reach the Gemini agents. Check your connection and try again."
+        const val COULD_NOT_REACH = "Couldn't reach the agents on the workspace. Check your connection and try again."
         private const val NORMAL_CLOSURE = 1000
     }
 }

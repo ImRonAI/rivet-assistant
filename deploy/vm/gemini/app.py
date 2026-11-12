@@ -1,8 +1,12 @@
-"""Emrys's Gemini agents for the phone, in Strands: the harness for text and a BidiAgent for voice, behind FastAPI
-WebSockets.
+"""Emrys's Strands agents for the phone: the harness for text and a BidiAgent for voice, behind FastAPI WebSockets.
 
-Text: the phone opens `/gemini/text` with the conversation's id, the text model, `user_id` and the eight `perm_*` as
-query parameters, then sends each message as text. Every message runs the harness's `stream_async`; the phone gets the text as
+The text agent runs on Gemini, NVIDIA NIM or Mistral, the phone's choice in Settings › Agents (`provider`, `model`, the
+provider's default when left out, and `effort`, the reasoning level or `auto`). NIM and Mistral models are built the way ren builds them (`providers.py`);
+`GET /gemini/models` and `GET /gemini/efforts` list each provider's live models and each model's reasoning levels.
+Voice is always Gemini Live; its helpers run on the chosen text model.
+
+Text: the phone opens `/gemini/text` with the conversation's id, the provider, text model and effort, `user_id` and the
+eight `perm_*` as query parameters, then sends each message as text. Every message runs the harness's `stream_async`; the phone gets the text as
 it streams (`{"data": …}`), each finished message (`{"message": …}`), and how the turn ended (`{"stop_reason": …,
 "interrupts": […]}`). The reply after a `handoff_to_user` goes back as its `interruptResponse`.
 
@@ -14,10 +18,10 @@ The instructions are the ElevenLabs agents' own prompts, read when the conversat
 ElevenLabs fills its dynamic variables.
 """
 
+import asyncio
 import os
 import re
 from collections.abc import Mapping
-from typing import Literal
 
 import uvicorn
 from elevenlabs import AsyncElevenLabs
@@ -31,6 +35,7 @@ from strands.bidi.types.agent import BidiAgentInput
 from strands.bidi.types.events import BidiOutputEvent
 from strands.bidi.types.media import AudioDelta
 from strands.interrupt import Interrupt
+from strands.models import Model
 from strands.models.gemini import GeminiModel
 from strands.multiagent.spec import Fixed
 from strands.tools.mcp import MCPClient, MCPServerConfig
@@ -54,8 +59,11 @@ from strands.vended_tools import (
     swarm,
     write,
 )
-from strands_harness import create_harness
+from strands_harness import Effort, create_harness
+from strands_harness.models import EFFORT_LEVELS
 from strands_harness.tools.programmatic_tool_caller import programmatic_tool_caller
+
+from providers import ProviderName, build_model, list_provider_models, provider_default_model, reasoning_efforts
 
 VOICE_AGENT = "agent_2901m620nzwrev2r7ekqpydcxe25"
 TEXT_AGENT = "agent_9601m623qa72ffs9cyy3ezc0p6tb"
@@ -72,7 +80,6 @@ PERMISSIONS = (
     "perm_deploy",
     "perm_create_music",
 )
-TextModel = Literal["gemini-4-argon", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
 HOME = "/config/emrys-gemini"
 
 # The ElevenLabs agents' MCP servers plus the phone's own, unprefixed so the tool names match the prompt.
@@ -140,10 +147,39 @@ class Phone(OutputStream):
         await self.websocket.send_json(to_jsonable_python(event, fallback=str))
 
 
+def text_model(provider: ProviderName, model: str, effort: str) -> Model:
+    """The text model the phone chose: Gemini as Strands builds it, NIM and Mistral as ren builds them."""
+    if provider == "gemini":
+        return GeminiModel(model_id=model)
+    return build_model(provider, model, None if effort == "auto" else effort)
+
+
+def harness_effort(effort: str) -> Effort:
+    """The phone's reasoning level as the harness names it; it checks the level against the Gemini model itself."""
+    for level in EFFORT_LEVELS:
+        if level == effort:
+            return level
+    raise ValueError(f"Unknown effort {effort!r}")
+
+
+@app.get("/gemini/models")
+async def models(provider: ProviderName) -> dict[str, object]:
+    """The provider's live model catalogue and its default model, as ren's `GET /models` lists them."""
+    return {"models": await asyncio.to_thread(list_provider_models, provider), "default": provider_default_model(provider)}
+
+
+@app.get("/gemini/efforts")
+async def efforts(provider: ProviderName, model: str) -> dict[str, list[str]]:
+    """The model's reasoning levels, lowest first, as ren's `GET /models/{id}/efforts` answers them."""
+    return {"efforts": list(reasoning_efforts(provider, model))}
+
+
 @app.websocket("/gemini/voice")
-async def voice(websocket: WebSocket, model: TextModel) -> None:
+async def voice(
+    websocket: WebSocket, provider: ProviderName = "gemini", model: str | None = None, effort: str = "auto"
+) -> None:
     await websocket.accept()
-    helper = GeminiModel(model_id=model)
+    helper = text_model(provider, model or provider_default_model(provider), effort)
     agent = BidiAgent(
         model=GoogleGeminiLiveModel(model_id=VOICE_MODEL, voice=VOICE),
         system_prompt=await instructions(VOICE_AGENT, variables(websocket, text_only=False)),
@@ -173,10 +209,14 @@ async def voice(websocket: WebSocket, model: TextModel) -> None:
 
 
 @app.websocket("/gemini/text")
-async def text(websocket: WebSocket, conversation: str, model: TextModel) -> None:
+async def text(
+    websocket: WebSocket, conversation: str, provider: ProviderName = "gemini", model: str | None = None, effort: str = "auto"
+) -> None:
     await websocket.accept()
+    chosen = model or provider_default_model(provider)
     agent = create_harness(
-        model=f"google/{model}",
+        model=f"google/{chosen}" if provider == "gemini" else text_model(provider, chosen, effort),
+        effort=harness_effort(effort) if provider == "gemini" else "auto",
         instructions=await instructions(TEXT_AGENT, variables(websocket, text_only=True)),
         tools=[python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph, make_mcp_router(servers=SERVERS)],
         mcp_servers=SERVERS,
