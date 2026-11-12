@@ -4,8 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build && vite build --config vite.chat.config.ts",
-    "test": "playwright test",
+    "build": "tsc -b && vite build --config vite.chat.config.ts",
     "verify:components": "node scripts/verify-components.mjs",
     "lint": "oxlint"
   },

@@ -1,0 +1,30 @@
+{
+  "name": "ren-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "gen:robot": "node scripts/gen-ren-robot.mjs",
+    "check:robot": "node scripts/gen-ren-robot.mjs --check",
+    "build": "npm run check:robot && tsc -b && vite build",
+    "test": "playwright test --trace off"
+  },
+  "dependencies": {
+    "@react-three/fiber": "9.3.0",
+    "@react-three/postprocessing": "3.0.4",
+    "postprocessing": "6.39.5",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.19.2",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.180.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.5"
+  }
+}

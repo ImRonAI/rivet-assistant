@@ -30,6 +30,7 @@ import com.hiron.ren.testing.windowRoots
 import com.hiron.ren.ui.COMPOSER_TAG
 import com.hiron.ren.ui.MAX_ROBOT_CRASHES
 import com.hiron.ren.ui.MINI_STAGE_TAG
+import com.hiron.ren.ui.ROBOT_PAGE
 import com.hiron.ren.ui.STAGE_TAG
 import com.hiron.ren.ui.TAB_TAG_PREFIX
 import androidx.webkit.WebViewFeature
@@ -47,7 +48,6 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-private const val ROBOT_PAGE = "https://appassets.androidplatform.net/assets/ren/index.html"
 private const val CRASHING = "Ren's robot keeps crashing on this phone."
 private const val NOT_LOADED = "Ren's robot didn't load (error 404)."
 

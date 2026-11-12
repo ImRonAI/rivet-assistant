@@ -48,23 +48,8 @@ import com.hiron.ren.core.RobotCommand
 import org.json.JSONObject
 
 private const val ORIGIN = "https://appassets.androidplatform.net"
-private const val PAGE = "$ORIGIN/assets/ren/index.html"
-
-/** The noise texture the stage's ElevenLabs Orb loads by this exact URL; the page gets the bundled copy. */
-internal const val ORB_NOISE_URL = "https://storage.googleapis.com/eleven-public-cdn/images/perlin-noise.png"
-private const val ORB_NOISE_ASSET = "ren/vendor/perlin-noise.png"
-
-/**
- * The one request outside the app's assets the robot page may make: a GET for [ORB_NOISE_URL], answered from the
- * bundled copy (assets/ren/vendor/SOURCE.txt). three.js loads it as a `crossorigin="anonymous"` image, so the
- * answer allows the page's origin; without it WebGL can't use the texture. Anything else is null, so it stays blocked.
- */
-internal fun stageAsset(context: Context, method: String, url: String): WebResourceResponse? {
-    if (method != "GET" || url != ORB_NOISE_URL) return null
-    return WebResourceResponse(
-        "image/png", null, 200, "OK", mapOf("Access-Control-Allow-Origin" to ORIGIN), context.assets.open(ORB_NOISE_ASSET),
-    )
-}
+/** The robot's page, built from android/web/src/robot into the app's assets. */
+internal const val ROBOT_PAGE = "$ORIGIN/assets/ren/web/robot/index.html"
 
 /** A slot gives up on a renderer that dies this many times and offers Retry instead. */
 internal const val MAX_ROBOT_CRASHES = 3
@@ -139,9 +124,9 @@ private fun RobotProblem(text: String, modifier: Modifier = Modifier, onRetry: (
 }
 
 /**
- * Owns one WebView, which fills its slot. Pages load only from the app's assets (no network, no file access; the Orb's
- * noise texture comes from them too, see [stageAsset]) and talk back only through the `RenHost` listener for the
- * asset origin. Commands sent before the page says `ready` are dropped in favour of a full state replay once it
+ * Owns one WebView, which fills its slot. Pages load only from the app's assets and resources (no network, no file
+ * access; the page's font is `res/font/inter.ttf`) and talk back only through the `RenHost` listener for the asset
+ * origin. Commands sent before the page says `ready` are dropped in favour of a full state replay once it
  * does. [problem] says why the page isn't showing, if it isn't.
  */
 internal class RobotHost(
@@ -172,11 +157,11 @@ internal class RobotHost(
         isHorizontalScrollBarEnabled = false
         val loader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+            .addPathHandler("/res/", WebViewAssetLoader.ResourcesPathHandler(context))
             .build()
         webViewClient = object : WebViewClientCompat() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 loader.shouldInterceptRequest(request.url)
-                    ?: stageAsset(context, request.method, request.url.toString())
                     ?: WebResourceResponse("text/plain", "utf-8", 404, "blocked", null, null)
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
@@ -209,7 +194,7 @@ internal class RobotHost(
                 if (isMainFrame) onMessage(message.data.orEmpty())
             }
         }
-        loadUrl(PAGE)
+        loadUrl(ROBOT_PAGE)
     }
 
     fun run(command: RobotCommand) {

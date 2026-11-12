@@ -1,0 +1,47 @@
+/* The robot's page: one full-bleed WebGL stage on ren's paper (white, or black in Dark). */
+@font-face {
+  font-family: "Inter Variable";
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/res/font/inter.ttf") format("truetype");
+}
+:root {
+  --paper: #ffffff;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --paper: #0c0c0c;
+  color-scheme: dark;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  overflow: hidden;
+  background: var(--paper);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* The stage as CatoWeb lays it out (.gl-stage): the canvas fills it and the engine's SVG sits over it. */
+.gl-stage {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+}
+.gl-stage canvas {
+  display: block;
+  pointer-events: none !important;
+}
+/* The emotes are drawn for a white page; on ink they take ren's inverse ink. */
+:root[data-theme="dark"] .cato-host {
+  --bg: #0c0c0c;
+  --ink: #f5f5f5;
+  --ink-2: #bdbdbd;
+  --accent: #8d98fe;
+  --cy: #8d98fe;
+}
