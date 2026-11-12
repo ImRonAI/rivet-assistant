@@ -7,7 +7,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -15,7 +14,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import com.hiron.ren.MainActivity
 import com.hiron.ren.core.ApprovalAnswer
 import com.hiron.ren.core.ren
@@ -27,18 +28,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import com.hiron.ren.testing.shot
 import com.hiron.ren.testing.windowRoots
-import com.hiron.ren.ui.COMPOSER_TAG
+import com.hiron.ren.browser.Addresses
+import com.hiron.ren.browser.SearchLevel
+import com.hiron.ren.ui.ADDRESS_HINT
+import com.hiron.ren.ui.ADDRESS_TAG
+import com.hiron.ren.ui.ASK_REN_TAG
+import com.hiron.ren.ui.HOME_SEARCH_TAG
 import com.hiron.ren.ui.MAX_ROBOT_CRASHES
-import com.hiron.ren.ui.MINI_STAGE_TAG
+import com.hiron.ren.ui.MORE_TAG
+import com.hiron.ren.ui.TABS_TAG
 import com.hiron.ren.ui.ROBOT_PAGE
 import com.hiron.ren.ui.STAGE_TAG
-import com.hiron.ren.ui.TAB_TAG_PREFIX
 import androidx.webkit.WebViewFeature
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -50,6 +55,7 @@ import org.robolectric.annotation.GraphicsMode
 
 private const val CRASHING = "Ren's robot keeps crashing on this phone."
 private const val NOT_LOADED = "Ren's robot didn't load (error 404)."
+private const val SEARCH_PAGE = "https://appassets.androidplatform.net/assets/ren/web/search/index.html"
 
 /** Drives the real app (MainActivity, runtime, screens) and saves a screenshot of every screen to build/screens for review. */
 @RunWith(RobolectricTestRunner::class)
@@ -76,7 +82,7 @@ class AppFlowTest {
         compose.onNodeWithText("Set up").assertIsDisplayed()
         shot("00-onboarding")
         skipOnboarding()
-        shot("01-home-start")
+        shot("01-browser-home")
 
         // The text agent called request_approval: the sheet asks, and Deny goes back as the tool's result.
         val runtime = compose.activity.ren
@@ -90,16 +96,19 @@ class AppFlowTest {
         assertEquals(ApprovalAnswer(false), runBlocking { answer.await() })
         assertTrue(runtime.state.value.approvals.isEmpty())
 
-        tab("activity")
+        menu("Activity")
         until { compose.onAllNodesWithTextCount("Declined: ${request.details}") > 0 }
         shot("03-activity")
+        close()
 
-        tab("settings")
+        menu("Settings")
         shot("04-settings-top")
         compose.onNode(hasText("Turn on")).performScrollTo()
         shot("05-settings-call-answering")
         compose.onNode(hasText("Open Ren's app info")).performScrollTo().assertIsDisplayed()
         shot("06-settings-bottom")
+        close()
+        compose.onNodeWithTag(ADDRESS_TAG).assertIsDisplayed()
     }
 
     @Test
@@ -113,18 +122,28 @@ class AppFlowTest {
         assertTrue(compose.activity.ren.settings.onboarded)
     }
 
-    /** Skips the power-on screens; the app then opens on Home. */
+    /** Skips the power-on screens; the app then opens on the browser's home page. */
     private fun skipOnboarding() {
         compose.onNodeWithText("Not now").performClick()
         compose.waitForIdle()
         assertTrue(compose.activity.ren.settings.onboarded)
     }
 
-    /** The slot showing Ren on the screen the app opens on after onboarding: Home's stage. */
-    private fun landing(): Slot = Slot.Stage
+    /** Opens [item] from the browser's menu. */
+    private fun menu(item: String) {
+        compose.onNodeWithTag(MORE_TAG).performClick()
+        compose.onNodeWithText(item).performClick()
+        compose.waitForIdle()
+    }
 
-    private fun tab(name: String) {
-        compose.onNodeWithTag(TAB_TAG_PREFIX + name).performClick()
+    /** Closes the agent panel, Activity or Settings back to the browser. */
+    private fun close() {
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Close")).performClick()
+        compose.waitForIdle()
+    }
+
+    private fun askRen() {
+        compose.onNodeWithTag(ASK_REN_TAG).performClick()
         compose.waitForIdle()
     }
 
@@ -136,32 +155,10 @@ class AppFlowTest {
         else -> emptyList()
     }
 
-    /** A slot that can show the robot page. */
-    private enum class Slot {
-        /** The big stage: onboarding's or Home's. */
-        Stage,
-
-        /** The band under the app's header on Activity and Settings. */
-        Band,
-    }
-
-    private fun boundsOf(tag: String): List<Rect> = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().map { it.boundsInWindow }
+    private fun robots(): List<WebView> = webViews().filter { shadowOf(it).lastLoadedUrl == ROBOT_PAGE }
 
     private fun Rect.holds(inner: Rect): Boolean =
         inner.left >= left - 1f && inner.top >= top - 1f && inner.right <= right + 1f && inner.bottom <= bottom + 1f
-
-    /**
-     * The robot frame of each slot on screen. Every slot draws Ren in a [STAGE_TAG] frame; a band's frame sits
-     * inside its [MINI_STAGE_TAG] band.
-     */
-    private fun slotFrames(): Map<Slot, Rect> {
-        val bands = boundsOf(MINI_STAGE_TAG)
-        val (inBands, stages) = boundsOf(STAGE_TAG).partition { frame -> bands.any { it.holds(frame) } }
-        return buildMap {
-            stages.singleOrNull()?.let { put(Slot.Stage, it) }
-            inBands.firstOrNull()?.let { put(Slot.Band, it) }
-        }
-    }
 
     /** Where the page is drawn: the view Compose holds it in, since the stand-in WebView is never measured. */
     private fun WebView.drawnBounds(): Rect {
@@ -170,21 +167,14 @@ class AppFlowTest {
         return Rect(at[0].toFloat(), at[1].toFloat(), (at[0] + holder.width).toFloat(), (at[1] + holder.height).toFloat())
     }
 
-    /** Each of [slots] shows its own live robot page, drawn in its frame, and no other page is on screen. */
-    private fun assertPages(step: String, vararg slots: Slot): Map<Slot, WebView> {
+    /** The one live robot page on screen, drawn inside its stage. */
+    private fun robot(step: String): WebView {
         compose.waitForIdle()
-        val pages = webViews()
-        val frames = slotFrames()
-        assertEquals("robot pages after $step", slots.size, pages.size)
-        return slots.toList().associateWith { slot ->
-            val frame = frames[slot] ?: error("no $slot on screen after $step: $frames")
-            val inSlot = pages.filter { page -> frame.holds(page.drawnBounds()) }
-            val page = inSlot.singleOrNull() ?: error("${inSlot.size} pages in the $slot after $step: frames $frames")
-            assertTrue("the page in the $slot is drawn after $step", page.drawnBounds().let { it.width > 0f && it.height > 0f })
-            assertFalse("the page in the $slot is alive after $step", shadowOf(page).wasDestroyCalled())
-            assertEquals(ROBOT_PAGE, shadowOf(page).lastLoadedUrl)
-            page
-        }
+        val page = robots().singleOrNull() ?: error("${robots().size} robot pages after $step")
+        val stage = compose.onAllNodesWithTag(STAGE_TAG).fetchSemanticsNodes().single().boundsInWindow
+        assertTrue("the robot is drawn in its stage after $step", page.drawnBounds().let { it.width > 0f && it.height > 0f && stage.holds(it) })
+        assertFalse("the robot's page is alive after $step", shadowOf(page).wasDestroyCalled())
+        return page
     }
 
     /** Robolectric's WebView has no message listener, so the host takes a page as ready once it finishes loading. */
@@ -199,61 +189,30 @@ class AppFlowTest {
     }
 
     @Test
-    fun everyScreenShowsTheRobot() {
-        val onboarding = assertPages("launch", Slot.Stage).getValue(Slot.Stage)
+    fun theRobotIsOnOnboardingAndInTheAgentPanel() {
+        val onboarding = robot("launch")
         skipOnboarding()
         assertTrue("onboarding's page is destroyed", shadowOf(onboarding).wasDestroyCalled())
-        assertPages("finishing onboarding", landing())
+        assertEquals("the browser's home page shows no robot", emptyList<WebView>(), robots())
 
-        tab("activity")
-        val band = assertPages("Activity", Slot.Band).getValue(Slot.Band)
-        compose.onNodeWithTag(MINI_STAGE_TAG).assertIsDisplayed()
-        tab("settings")
-        assertSame("the band keeps its page from Activity to Settings", band, assertPages("Settings", Slot.Band).getValue(Slot.Band))
-        tab("ren")
-        assertPages("Home", Slot.Stage)
-        assertTrue("the band's page is destroyed", shadowOf(band).wasDestroyCalled())
-        compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
-        tab("settings")
-        assertPages("back to Settings", Slot.Band)
-
-        tab("ren")
-        assertPages("Home again", Slot.Stage)
-        compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
-    }
-
-    /** Taps a tab on a paused clock: the tap's state change is sent, and no frame runs until the test advances it. */
-    private fun tapTabNow(name: String) {
-        val key = compose.onNodeWithTag(TAB_TAG_PREFIX + name).fetchSemanticsNode()
-        compose.runOnUiThread { key.config[SemanticsActions.OnClick].action?.invoke() }
-        compose.waitForIdle()
+        askRen()
+        val panel = robot("Ask Ren")
+        shot("07-agent-panel")
+        close()
+        assertTrue("the panel's page is destroyed when it closes", shadowOf(panel).wasDestroyCalled())
+        assertEquals(emptyList<WebView>(), robots())
+        compose.onNodeWithTag(ADDRESS_TAG).assertIsDisplayed()
     }
 
     @Test
-    fun aQuickRoundTripLeavesOneRobotOnHome() {
+    fun aRendererCrashBringsAFreshPageToTheStage() {
         skipOnboarding()
-        tab("ren")
-        assertPages("Home", Slot.Stage)
-
-        // Back to Home before the tab crossfade (220 ms) and the band's entrance finish.
-        compose.mainClock.autoAdvance = false
-        tapTabNow("settings")
-        compose.mainClock.advanceTimeBy(100)
-        tapTabNow("ren")
-        repeat(3) { compose.mainClock.advanceTimeByFrame() }
-        compose.mainClock.autoAdvance = true
-        assertPages("tapping Ren mid-fade", Slot.Stage)
-    }
-
-    @Test
-    fun aRendererCrashBringsAFreshPageToTheSlotShowingIt() {
-        skipOnboarding()
-        tab("settings")
-        val page = assertPages("Settings", Slot.Band).getValue(Slot.Band)
+        askRen()
+        val page = robot("Ask Ren")
 
         crash(page)
         assertTrue("the dead page is destroyed", shadowOf(page).wasDestroyCalled())
-        val fresh = assertPages("the renderer crash", Slot.Band).getValue(Slot.Band)
+        val fresh = robot("the renderer crash")
         assertNotSame(page, fresh)
 
         // Commands wait for the fresh page; once it loads, Ren's state is replayed there.
@@ -265,22 +224,22 @@ class AppFlowTest {
     @Test
     fun aRendererThatKeepsCrashingSaysSoAndRetries() {
         skipOnboarding()
-        tab("ren")
-        repeat(MAX_ROBOT_CRASHES) { crash(webViews().single()) }
-        assertEquals("no page after $MAX_ROBOT_CRASHES crashes", emptyList<WebView>(), webViews())
+        askRen()
+        repeat(MAX_ROBOT_CRASHES) { crash(robots().single()) }
+        assertEquals("no page after $MAX_ROBOT_CRASHES crashes", emptyList<WebView>(), robots())
         compose.onNodeWithText(CRASHING).assertIsDisplayed()
         shot("app-robot-crashing")
 
         compose.onNodeWithText("Retry").performClick()
         compose.onNodeWithText(CRASHING).assertDoesNotExist()
-        assertPages("Retry", Slot.Stage)
+        robot("Retry")
     }
 
     @Test
     fun aPageThatFailsToLoadSaysWhyAndRetries() {
         skipOnboarding()
-        tab("ren")
-        val page = assertPages("Home", Slot.Stage).getValue(Slot.Stage)
+        askRen()
+        val page = robot("Ask Ren")
         val request = object : WebResourceRequest {
             override fun getUrl(): Uri = Uri.parse(ROBOT_PAGE)
 
@@ -301,55 +260,96 @@ class AppFlowTest {
 
         compose.onNodeWithText("Retry").performClick()
         compose.onNodeWithText(NOT_LOADED).assertDoesNotExist()
-        val fresh = assertPages("Retry", Slot.Stage).getValue(Slot.Stage)
+        val fresh = robot("Retry")
         assertNotSame(page, fresh)
         assertTrue("the failed page is destroyed", shadowOf(page).wasDestroyCalled())
     }
 
     @Test
-    fun miniStageOpensHome() {
-        skipOnboarding()
-        tab("activity")
-        compose.onNodeWithTag(MINI_STAGE_TAG).performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag(MINI_STAGE_TAG).assertDoesNotExist()
-        compose.onNodeWithTag(STAGE_TAG).assertIsDisplayed()
-        compose.onNodeWithTag(COMPOSER_TAG).assertIsDisplayed()
-    }
-
-    @Test
-    fun commandsReachEveryRobot() {
+    fun commandsReachTheRobot() {
         assertFalse(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER))
         skipOnboarding()
-        tab("settings")
-        val band = assertPages("Settings", Slot.Band).getValue(Slot.Band)
-        assertNull("commands wait for the page", shadowOf(band).lastEvaluatedJavascript)
-        ready(band)
-        assertEquals("""window.ren && window.ren.state("idle");""", shadowOf(band).lastEvaluatedJavascript)
+        askRen()
+        val page = robot("Ask Ren")
+        assertNull("commands wait for the page", shadowOf(page).lastEvaluatedJavascript)
+        ready(page)
+        // The page hears its theme and framing, then Ren's state.
+        assertEquals("""window.ren && window.ren.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
 
         compose.activity.ren.listening(true)
         compose.waitForIdle()
-        assertEquals("""window.ren && window.ren.state("listening");""", shadowOf(band).lastEvaluatedJavascript)
+        assertEquals("""window.ren && window.ren.state("listening");""", shadowOf(page).lastEvaluatedJavascript)
 
         compose.activity.ren.listening(false)
         compose.waitForIdle()
-        assertEquals("""window.ren && window.ren.state("idle");""", shadowOf(band).lastEvaluatedJavascript)
+        assertEquals("""window.ren && window.ren.state("idle");""", shadowOf(page).lastEvaluatedJavascript)
     }
 
-    private fun miniStageScreens(suffix: String) {
+    /** The active tab's page, once the tab has left home. */
+    private fun tabPage(): WebView = webViews().single { shadowOf(it).lastLoadedUrl != ROBOT_PAGE }
+
+    @Test
+    fun anAddressTypedOnHomeLoadsInTheTab() {
         skipOnboarding()
-        tab("activity")
-        shot("app-activity-mini-stage$suffix")
-        tab("settings")
-        shot("app-settings-mini-stage$suffix")
+        val browser = compose.activity.ren.browser
+        compose.onNodeWithText(ADDRESS_HINT).assertIsDisplayed()
+        assertEquals(emptyList<WebView>(), webViews())
+
+        compose.onNodeWithTag(HOME_SEARCH_TAG).performTextInput("example.com/docs")
+        compose.onNodeWithTag(HOME_SEARCH_TAG).performImeAction()
+        compose.waitForIdle()
+        assertEquals("https://example.com/docs", shadowOf(tabPage()).lastLoadedUrl)
+        assertEquals("https://example.com/docs", browser.state.value.current?.url)
+        // At rest the bar shows the page's identity, not its plumbing.
+        compose.onNodeWithText("example.com/docs").assertIsDisplayed()
+        shot("08-browser-page")
+
+        // Back from a tab's first page returns to home, and Forward goes to the page again.
+        compose.runOnUiThread { browser.back() }
+        compose.waitForIdle()
+        assertEquals(Addresses.HOME, browser.state.value.current?.url)
+        compose.onNodeWithTag(HOME_SEARCH_TAG).assertIsDisplayed()
+        assertTrue(browser.state.value.current?.canGoForward == true)
     }
 
     @Test
-    fun miniStageScreens() = miniStageScreens("")
+    fun aPhraseInTheAddressBarOpensRensSearchPage() {
+        skipOnboarding()
+        val runtime = compose.activity.ren
+        runtime.settings.searchLevel = SearchLevel.Deep
+        compose.onNodeWithTag(ADDRESS_TAG).performClick()
+        compose.onNodeWithTag(ADDRESS_TAG).performTextInput("best ramen in reno")
+        compose.onNodeWithTag(ADDRESS_TAG).performImeAction()
+        compose.waitForIdle()
+        assertEquals("$SEARCH_PAGE?q=best%20ramen%20in%20reno&level=medium", shadowOf(tabPage()).lastLoadedUrl)
+        assertEquals("ren://search?q=best%20ramen%20in%20reno&level=medium", runtime.browser.state.value.current?.url)
+        // The bar reads as the query.
+        compose.onNodeWithText("best ramen in reno").assertIsDisplayed()
+    }
 
     @Test
-    @Config(qualifiers = "w360dp-h800dp-xxhdpi", fontScale = 1.3f)
-    fun miniStageScreensNarrowLargeText() = miniStageScreens("-360-font130")
+    fun tabsOpenSwitchAndClose() {
+        skipOnboarding()
+        val browser = compose.activity.ren.browser
+        val first = checkNotNull(browser.state.value.active)
+        compose.onNodeWithTag(TABS_TAG).performClick()
+        shot("09-browser-tabs")
+        compose.onNodeWithText("New tab").performClick()
+        compose.waitForIdle()
+        assertEquals(2, browser.state.value.tabs.size)
+        val second = checkNotNull(browser.state.value.active)
+        assertTrue(first != second)
+
+        compose.runOnUiThread { browser.close(second) }
+        compose.waitForIdle()
+        assertEquals(listOf(first), browser.state.value.tabs.map { it.id })
+        assertEquals(first, browser.state.value.active)
+        // Closing the last tab leaves a fresh home tab, never an empty browser.
+        compose.runOnUiThread { browser.close(first) }
+        compose.waitForIdle()
+        assertEquals(1, browser.state.value.tabs.size)
+        assertTrue(browser.state.value.current?.home == true)
+    }
 
     private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onAllNodesWithTextCount(text: String): Int =
         onAllNodes(hasText(text, substring = true)).fetchSemanticsNodes().size

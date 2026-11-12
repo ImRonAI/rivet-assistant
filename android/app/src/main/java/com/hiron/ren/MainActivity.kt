@@ -7,25 +7,29 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
-import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.platform.testTag
+import com.hiron.ren.ui.BrowserScreen
+import com.hiron.ren.ui.Motion
+import com.hiron.ren.ui.Page
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Timeline
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -35,9 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hiron.ren.core.RenRuntime
@@ -49,10 +51,7 @@ import com.hiron.ren.ui.HomeScreen
 import com.hiron.ren.ui.HudHeader
 import com.hiron.ren.ui.LocalImages
 import com.hiron.ren.ui.LocalPalette
-import com.hiron.ren.ui.MiniStage
 import com.hiron.ren.ui.Onboarding
-import com.hiron.ren.ui.PendantTab
-import com.hiron.ren.ui.PendantTabs
 import com.hiron.ren.ui.RenTheme
 import com.hiron.ren.ui.Quick
 import com.hiron.ren.ui.SettingsScreen
@@ -78,11 +77,8 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Ren is dark first: light system-bar icons on its noir surfaces, whatever the system theme.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-        )
+        // Edge to edge, with the system bars' icons following the theme.
+        enableEdgeToEdge()
         // A recreated activity (rotation, theme change) must not replay the request that first opened it.
         if (savedInstanceState == null) handle(intent)
         setContent { RenTheme { CompositionLocalProvider(LocalImages provides ren.images) { RenAppUi(ren, listenRequests, focusRequests, homeRequests) } } }
@@ -96,10 +92,12 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         ren.visible = true
+        ren.browser.visible(true)
     }
 
     override fun onStop() {
         ren.visible = false
+        ren.browser.visible(false)
         if (ren.agent.mode == AgentMode.Voice) ren.agent.stop()
         super.onStop()
     }
@@ -127,17 +125,11 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-/** The tabs; each keeps its test tag ("tab-ren", …) from its name, whatever its label says. */
-private enum class Tab(val label: String) {
-    Ren("Ren"), Activity("Activity"), Settings("Settings");
-
-    val tag: String get() = name.lowercase()
-}
-
 @Composable
 private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int) {
     val state by runtime.state.collectAsStateWithLifecycle()
-    var tab by rememberSaveable { mutableStateOf(Tab.Ren) }
+    var panel by rememberSaveable { mutableStateOf(false) }
+    var page by rememberSaveable { mutableStateOf<Page?>(null) }
     var reviewing by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
@@ -161,11 +153,11 @@ private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: In
         }
     }
     LaunchedEffect(focusRequests, homeRequests) {
-        if (focusRequests > 0 || homeRequests > 0) tab = Tab.Ren
+        if (focusRequests > 0 || homeRequests > 0) panel = true
     }
     LaunchedEffect(listenRequests) {
         if (listenRequests > 0) {
-            tab = Tab.Ren
+            panel = true
             listen()
         }
     }
@@ -177,11 +169,21 @@ private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: In
     }
     Box(Modifier.fillMaxSize()) {
         if (onboarded) {
-            MainUi(runtime, state, tab, { tab = it }, listen, { reviewing = true }, focusRequests)
+            BrowserScreen(runtime, waiting = state.approvals.size, onAskRen = { panel = true }, onOpen = { page = it })
+            AnimatedVisibility(
+                panel,
+                enter = slideInVertically(tween(Motion.BASE, easing = Motion.Standard)) { it } + fadeIn(tween(Motion.QUICK)),
+                exit = slideOutVertically(tween(Motion.BASE, easing = Motion.Standard)) { it } + fadeOut(tween(Motion.QUICK)),
+            ) {
+                AgentPanel(runtime, state, listen, { reviewing = true }, focusRequests, onClose = { panel = false })
+            }
+            page?.let { shown -> SubPage(shown, runtime, state, onClose = { page = null }) }
         } else {
             Onboarding(runtime, onFinish = finish)
         }
     }
+    BackHandler(onboarded && page != null) { page = null }
+    BackHandler(onboarded && page == null && panel) { panel = false }
     if (onboarded && reviewing && state.approvals.isNotEmpty()) {
         ApprovalSheet(state.approvals.first(), onAnswer = runtime::answer, onDismiss = { reviewing = false })
     }
@@ -190,47 +192,33 @@ private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: In
     }
 }
 
-/** Header, the screen, and the tab strip; the strip steps aside while the keyboard is up. */
-@OptIn(ExperimentalLayoutApi::class)
+const val PANEL_TAG = "agent-panel"
+
+/** The agent panel: Ren over the browser, full height, with its stage, the conversation and the composer. */
 @Composable
-private fun MainUi(
-    runtime: RenRuntime,
-    state: RenState,
-    tab: Tab,
-    onTab: (Tab) -> Unit,
-    listen: () -> Unit,
-    onReviewApprovals: () -> Unit,
-    focusRequests: Int,
-) {
+private fun AgentPanel(runtime: RenRuntime, state: RenState, listen: () -> Unit, onReviewApprovals: () -> Unit, focusRequests: Int, onClose: () -> Unit) {
+    val p = LocalPalette.current
+    Column(Modifier.fillMaxSize().background(p.bg).imePadding().testTag(PANEL_TAG)) {
+        HudHeader(state, "Assistant", rule = false, onClose = onClose)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            HomeScreen(runtime, state, onListen = listen, onReviewApprovals = onReviewApprovals, focusRequests = focusRequests)
+        }
+        Spacer(Modifier.navigationBarsPadding())
+    }
+}
+
+/** Activity or Settings over the browser, under a header that closes back to it. */
+@Composable
+private fun SubPage(page: Page, runtime: RenRuntime, state: RenState, onClose: () -> Unit) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxSize().background(p.bg).imePadding()) {
-        HudHeader(
-            state,
-            when (tab) {
-                Tab.Ren -> "Assistant"
-                Tab.Activity -> "Activity"
-                Tab.Settings -> "Settings"
-            },
-            rule = tab != Tab.Ren,
-        )
-        MiniStage(runtime, state, visible = tab != Tab.Ren, onOpen = { onTab(Tab.Ren) })
-        Crossfade(tab, Modifier.weight(1f).fillMaxWidth(), animationSpec = tween(220), label = "tab") { shown ->
-            when (shown) {
-                Tab.Ren -> HomeScreen(runtime, state, onListen = listen, onReviewApprovals = onReviewApprovals, focusRequests = focusRequests)
-                Tab.Activity -> ActivityScreen(runtime, state)
-                Tab.Settings -> SettingsScreen(runtime)
+        HudHeader(state, if (page == Page.Activity) "Activity" else "Settings", onClose = onClose)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (page) {
+                Page.Activity -> ActivityScreen(runtime, state)
+                Page.Settings -> SettingsScreen(runtime)
             }
         }
-        if (!WindowInsets.isImeVisible) {
-            PendantTabs(
-                listOf(
-                    PendantTab(Tab.Ren, Tab.Ren.label, ImageVector.vectorResource(R.drawable.ic_ren), badge = state.approvals.size, tag = Tab.Ren.tag),
-                    PendantTab(Tab.Activity, Tab.Activity.label, Icons.Outlined.Timeline, tag = Tab.Activity.tag),
-                    PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune, tag = Tab.Settings.tag),
-                ),
-                tab,
-                onTab,
-            )
-        }
+        Spacer(Modifier.navigationBarsPadding())
     }
 }

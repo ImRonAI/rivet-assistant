@@ -1,6 +1,7 @@
 package com.hiron.ren.core
 
 import android.content.Context
+import com.hiron.ren.browser.SearchLevel
 import android.util.Base64
 import com.hiron.ren.BuildConfig
 import com.hiron.ren.device.CarrierStyle
@@ -37,6 +38,16 @@ class Settings(context: Context) {
         set(value) = prefs.edit().putString("forwarded_to", value.trim()).apply()
 
     /** The Brave Search plan's key, for the agents' search tools (web, news, images, videos, places, page text). */
+    /** The open tabs, as [com.hiron.ren.browser.BrowserStore] writes them. */
+    var browserTabs: String?
+        get() = prefs.getString("browser_tabs", null)
+        set(value) = prefs.edit().putString("browser_tabs", value).apply()
+
+    /** How hard a search from the address bar works. */
+    var searchLevel: SearchLevel
+        get() = SearchLevel.of(prefs.getString("search_level", null)) ?: SearchLevel.Default
+        set(value) = prefs.edit().putString("search_level", value.wire).apply()
+
     var braveSearchKey: String
         get() = prefs.getString("brave_search_key", null) ?: BuildConfig.DEFAULT_BRAVE_SEARCH_KEY
         set(value) = prefs.edit().putString("brave_search_key", value.trim()).apply()

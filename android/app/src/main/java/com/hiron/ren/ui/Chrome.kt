@@ -1,5 +1,7 @@
 package com.hiron.ren.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -59,10 +61,11 @@ private const val BRAND = "Ren"
 /**
  * The masthead across the top of every screen: the ren. logotype with the screen's name under it, and on the right
  * one quiet status line (a dot and plain words) with, under it, how many actions wait on the user.
- * On the robot's own screen it drops its rule so the header and the stage read as one surface.
+ * On the robot's own screen it drops its rule so the header and the stage read as one surface. [onClose] adds the
+ * key that closes the screen back to the browser.
  */
 @Composable
-fun HudHeader(state: RenState, unit: String, rule: Boolean = true) {
+fun HudHeader(state: RenState, unit: String, rule: Boolean = true, onClose: (() -> Unit)? = null) {
     val p = LocalPalette.current
     val status = status(state, p)
     // At large text sizes the screen's name gives the status line its room rather than being cut short.
@@ -82,6 +85,10 @@ fun HudHeader(state: RenState, unit: String, rule: Boolean = true) {
                 }
                 val waiting = state.approvals.size
                 if (waiting > 0) Odometer("$waiting waiting", Type.labelMd, p.ink2, overflow = TextOverflow.Ellipsis)
+            }
+            if (onClose != null) {
+                Spacer(Modifier.width(12.dp))
+                IconKey(Icons.Outlined.Close, "Close", onClose, size = 40.dp)
             }
         }
         if (rule) Rule(color = p.line)
@@ -134,60 +141,4 @@ private fun status(state: RenState, p: Palette): Status = when (state.activity) 
     Activity.Waiting -> Status("Needs your OK", p.amb, live = true)
     Activity.Done -> Status("Done", p.ok)
     Activity.Failed -> Status("Didn't finish", p.danger)
-}
-
-/** A tab: [tag] names its test tag (after [TAB_TAG_PREFIX]) and stays the same whatever the label says. */
-data class PendantTab<T>(val value: T, val label: String, val icon: ImageVector, val badge: Int = 0, val tag: String = label.lowercase())
-
-const val TAB_TAG_PREFIX = "tab-"
-
-/**
- * The bottom tab bar: chrome under a hairline, outlined icons and labels, ink for the active tab and grey for the
- * rest. A short volt bar settles over the active tab, and a signal-yellow count shows approvals.
- */
-@Composable
-fun <T> PendantTabs(tabs: List<PendantTab<T>>, selected: T, onSelect: (T) -> Unit) {
-    val p = LocalPalette.current
-    val haptics = LocalHapticFeedback.current
-    Column(Modifier.fillMaxWidth().background(p.chrome).navigationBarsPadding()) {
-        Rule(color = p.line)
-        BoxWithConstraints(Modifier.fillMaxWidth().height(64.dp)) {
-            val slot = maxWidth / tabs.size.coerceAtLeast(1)
-            val at = tabs.indexOfFirst { it.value == selected }.coerceAtLeast(0)
-            val x by animateDpAsState(slot * at, spring(dampingRatio = 0.9f, stiffness = 300f), label = "tab")
-            Box(Modifier.offset { IntOffset(x.roundToPx(), 0) }.width(slot).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
-                Box(Modifier.offset(y = (-1).dp).size(width = 22.dp, height = 2.dp).clip(RoundedCornerShape(1.dp)).background(p.accent))
-            }
-            Row(Modifier.fillMaxSize()) {
-                tabs.forEach { t ->
-                    val on = t.value == selected
-                    val ink by animateColorAsState(if (on) p.ink else p.ink2, tween(Motion.BASE), label = "tab-ink")
-                    Box(
-                        Modifier.weight(1f).fillMaxHeight().selectable(on, role = Role.Tab) {
-                            if (!on) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                            onSelect(t.value)
-                        }
-                            .testTag(TAB_TAG_PREFIX + t.tag),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box {
-                                Icon(t.icon, contentDescription = null, tint = ink, modifier = Modifier.size(22.dp))
-                                if (t.badge > 0) {
-                                    Box(
-                                        Modifier.align(Alignment.TopEnd).offset(x = 10.dp, y = (-5).dp).defaultMinSize(minWidth = 16.dp).height(16.dp)
-                                            .clip(CircleShape).background(p.amb).border(1.5.dp, p.bg, CircleShape).padding(horizontal = 4.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text("${t.badge}", style = Type.labelSm.copy(fontFeatureSettings = "tnum"), color = LightPalette.ink, maxLines = 1)
-                                    }
-                                }
-                            }
-                            Text(t.label, style = Type.labelMd.copy(fontSize = 12.sp, letterSpacing = 0.sp), color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

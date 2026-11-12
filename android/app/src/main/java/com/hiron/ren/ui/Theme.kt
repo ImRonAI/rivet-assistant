@@ -119,9 +119,9 @@ val DarkPalette = Palette(
 val LocalPalette = staticCompositionLocalOf { LightPalette }
 
 @OptIn(ExperimentalTextApi::class)
-private fun bricolage(weight: Int, width: Float) = Font(
+private fun bricolage(weight: Int, width: Float, opticalSize: Float) = Font(
     R.font.bricolage_grotesque, FontWeight(weight),
-    variationSettings = FontVariation.Settings(FontVariation.weight(weight), FontVariation.width(width)),
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight), FontVariation.width(width), FontVariation.Setting("opsz", opticalSize)),
 )
 
 @OptIn(ExperimentalTextApi::class)
@@ -131,10 +131,10 @@ private fun inter(weight: Int) = Font(R.font.inter, FontWeight(weight), variatio
 private fun jetBrainsMono(weight: Int) =
     Font(R.font.jetbrains_mono, FontWeight(weight), variationSettings = FontVariation.Settings(FontVariation.weight(weight)))
 
-/** Bricolage Grotesque: headings, heavy and tight. */
-val Display = FontFamily(bricolage(700, 100f), bricolage(800, 100f))
+/** Bricolage Grotesque: headings, heavy and tight, at the optical size of the sizes they are set in. */
+val Display = FontFamily(bricolage(700, 100f, 24f), bricolage(800, 100f, 24f))
 /** The poster cut of the display face (`.ren-display`): 800 at 86% width, for heroes. */
-val Poster = FontFamily(bricolage(800, 86f))
+val Poster = FontFamily(bricolage(800, 86f, 40f))
 /** Inter: every piece of interface text. */
 val Sans = FontFamily(inter(400), inter(500), inter(600))
 /** JetBrains Mono: code, numbers in data and tag labels. */

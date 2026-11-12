@@ -4,15 +4,9 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Timeline
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
@@ -24,7 +18,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
-import com.hiron.ren.R
 import com.hiron.ren.core.ChatMessage
 import com.hiron.ren.core.RenState
 import com.hiron.ren.core.ren
@@ -38,7 +31,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.hiron.ren.core.Activity as RenActivity
 
-/** Home in the states people see, at the narrowest phone width, saved to build/screens/g2-*.png. */
+/** The agent panel in the states people see, at the narrowest phone width, saved to build/screens/g2-*.png. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w360dp-h780dp-xxhdpi")
@@ -55,25 +48,13 @@ class HomeScreenTest {
                 CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale)) {
                     val p = LocalPalette.current
                     Column(Modifier.fillMaxSize().background(p.bg)) {
-                        HudHeader(state.value, "Assistant", rule = false)
+                        HudHeader(state.value, "Assistant", rule = false, onClose = {})
                         Column(Modifier.weight(1f)) { HomeScreen(compose.activity.ren, state.value, onListen = {}, onReviewApprovals = {}) }
-                        Tabs(state.value.approvals.size)
                     }
                 }
             }
         }
     }
-
-    @Composable
-    private fun Tabs(badge: Int) = PendantTabs(
-        listOf(
-            PendantTab("ren", "Ren", ImageVector.vectorResource(R.drawable.ic_ren), badge = badge, tag = "ren"),
-            PendantTab("activity", "Activity", Icons.Outlined.Timeline),
-            PendantTab("settings", "Settings", Icons.Outlined.Tune),
-        ),
-        "ren",
-        {},
-    )
 
     private fun shot(name: String) = shot(compose, compose.activity, name)
 
