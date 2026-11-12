@@ -113,9 +113,9 @@ object Share {
 }
 
 /**
- * An image result full screen: pinch to zoom, Close and Open page across the top, and a caption over a soft noir
- * fade with its number and title in serif, its source and size in Geist, and Share (the image itself, the porcelain
- * pill). A tap on the image hides or shows the caption; Back closes it.
+ * An image result full screen: pinch to zoom, Close and Open page across the top, and a caption over a soft dark
+ * fade with its number and title in the display face, its source and size in Inter, and Share (the image itself, the
+ * primary pill). A tap on the image hides or shows the caption; Back closes it.
  */
 @Composable
 fun ImageViewer(item: ImageItem, n: Int, onDismiss: () -> Unit) {

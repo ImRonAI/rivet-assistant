@@ -251,10 +251,10 @@ private fun BoxScope.StageGreeting(visible: Boolean, state: RenState, voice: Boo
     ) { Greeting(state, voice) }
 }
 
-/** The greeting's serif, a size up from the type scale's: the hero line of the page. */
+/** The greeting in the poster cut: the hero line of the page. */
 private val GREETING = Type.greeting
 
-/** The date and time as an eyebrow, the greeting set large in the serif, and one quiet line on what comes next. */
+/** The date and time as an eyebrow, the greeting set large in the poster cut, and one quiet line on what comes next. */
 @Composable
 private fun Greeting(state: RenState, voice: Boolean) {
     val p = LocalPalette.current
@@ -266,7 +266,7 @@ private fun Greeting(state: RenState, voice: Boolean) {
         }
     }
     val hour = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)
-    // The second word is set in the serif's italic: the one emphasised word of the line.
+    // The line's two words, by the hour.
     val (lead, lift) = when (hour) {
         in 5..11 -> "Good" to "morning"
         in 12..16 -> "Good" to "afternoon"
@@ -293,7 +293,7 @@ private fun Greeting(state: RenState, voice: Boolean) {
         )
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // Something that needs the user is a status: a dot in its colour and the words in porcelain.
+            // Something that needs the user is a status: a dot in its colour and the words in ink.
             if (tone != null) {
                 SignalDot(tone, live = tone == p.amb)
                 Spacer(Modifier.width(10.dp))
@@ -303,7 +303,7 @@ private fun Greeting(state: RenState, voice: Boolean) {
     }
 }
 
-/** Approvals waiting: a breathing honey dot and a sentence on glass, and the porcelain Review pill. */
+/** Approvals waiting: a live signal dot and a sentence on a card, and the Review pill. */
 @Composable
 private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
     val p = LocalPalette.current
@@ -353,7 +353,7 @@ private fun QuickPill(text: String, onClick: () -> Unit) {
 }
 
 /**
- * The composer: a rounded field card on a hairline that takes a halo ring, border and caret while focused.
+ * The composer: a rounded field card on a hairline that takes a volt ring, border and caret while focused.
  * [fieldModifier] goes on the text field itself.
  */
 @Composable
@@ -438,7 +438,7 @@ private fun Dock(
                 fieldModifier = Modifier.focusRequester(focus).testTag(COMPOSER_TAG),
             )
             Spacer(Modifier.width(10.dp))
-            // A field-high slot: the talk key's halo spills past it without changing the row's height.
+            // A field-high slot: the talk key's ring spills past it without changing the row's height.
             Box(Modifier.size(width = 56.dp, height = 52.dp), contentAlignment = Alignment.Center) {
                 val unbounded = Modifier.wrapContentSize(unbounded = true)
                 when {

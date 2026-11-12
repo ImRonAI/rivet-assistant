@@ -59,7 +59,7 @@ object MapPage {
 }
 
 /**
- * [pins] on an OpenFreeMap map (MapLibre GL in a WebView). Under it, numbered pins drawn on a quiet noir dot grid
+ * [pins] on an OpenFreeMap map (MapLibre GL in a WebView). Under it, numbered pins drawn on a quiet dot grid
  * show until the map draws, and wherever WebGL doesn't. [interactive] false takes no gestures, so the map never
  * fights a scrolling list; [onSelect] hears a tapped pin.
  */

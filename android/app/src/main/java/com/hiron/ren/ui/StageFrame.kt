@@ -56,7 +56,7 @@ import com.hiron.ren.core.Activity
 import kotlin.math.min
 
 /**
- * The robot's stage: a noir window with a soft spotlight and a pool of light on the floor ringed by two faint
+ * The robot's stage: a paper window with a soft spotlight and a pool of light on the floor ringed by two faint
  * circles, shown until the robot page has loaded (and under Robolectric), and an optional [hint] in a glass pill at
  * the bottom. [framed] sets it in a [radius]-cornered window behind a 1dp hairline. The WebView goes in [content]
  * and draws over the backdrop once its page is up.
@@ -96,7 +96,7 @@ fun StageFrame(
     }
 }
 
-/** A soft spotlight falling from above the stage: a tall, faint porcelain ellipse centred high. */
+/** A soft spotlight falling from above the stage: a tall, faint ink ellipse centred high. */
 private fun DrawScope.spotlight(ink: Color) {
     val c = Offset(size.width * 0.5f, size.height * 0.30f)
     val rx = size.width * 0.55f
@@ -106,7 +106,7 @@ private fun DrawScope.spotlight(ink: Color) {
     }
 }
 
-/** The pool of light the robot stands in, seen from a low pitch: a soft porcelain wash and two faint concentric rings. */
+/** The pool of light the robot stands in, seen from a low pitch: a soft ink wash and two faint concentric rings. */
 private fun DrawScope.floorRings(ink: Color) {
     val rx = min(size.width * 0.36f, size.height * 0.8f)
     val ry = rx * 0.22f
@@ -119,7 +119,7 @@ private fun DrawScope.floorRings(ink: Color) {
     drawOval(ink.copy(alpha = 0.06f), topLeft = Offset(c.x - rx * k, c.y - ry * k), size = Size(rx * 2 * k, ry * 2 * k), style = Stroke(1.dp.toPx()))
 }
 
-/** The step dots, the current one a short porcelain capsule, with "Step 2 of 4" on the right. */
+/** The step dots, the current one a short capsule, with "Step 2 of 4" on the right. */
 @Composable
 fun StepIndicator(step: Int, total: Int, modifier: Modifier = Modifier) {
     val p = LocalPalette.current

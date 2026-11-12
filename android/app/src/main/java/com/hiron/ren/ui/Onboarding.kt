@@ -144,13 +144,13 @@ val ACCESS_GROUPS = listOf(
 
 private const val STEPS = 4
 
-/** The steps' serif headline: the greeting size, shrinking (never below [HEADLINE_MIN]) to stay on one line. */
+/** The steps' display headline: the greeting size, shrinking (never below [HEADLINE_MIN]) to stay on one line. */
 private val Headline = Type.greeting
 private val HEADLINE_MIN = 28.sp
 
 /**
  * Ren's first run, in four steps around one robot stage: meet Ren, its voice and text models, the default
- * assistant, and what it may use. Each step's serif headline sits over the stage and its list and keys under it; the
+ * assistant, and what it may use. Each step's display headline sits over the stage and its list and keys under it; the
  * stage is hoisted so the robot page is never rebuilt between steps.
  */
 @Composable
@@ -201,7 +201,7 @@ private fun AnimatedContentTransitionScope<Int>.stepMotion(slide: Int, reduce: B
         (slideOutHorizontally(move) { -dir * slide } + fadeOut(fade))
 }
 
-/** Each step's headline, ended by the halo stop ("Meet Ren" with the name in italic), and the warm line under it. */
+/** Each step's headline, ended by the volt stop, and the warm line under it. */
 private fun stepCopy(step: Int): Pair<AnnotatedString, String> = when (step) {
     1 -> buildAnnotatedString {
         append("Meet ")
@@ -219,7 +219,7 @@ private fun headline(text: String) = buildAnnotatedString {
 }
 
 /**
- * The serif headline over the stage and its sub-line. The sub-line always holds two lines, so the stage stays put
+ * The display headline over the stage and its sub-line. The sub-line always holds two lines, so the stage stays put
  * from step to step.
  */
 @Composable
@@ -462,7 +462,7 @@ private fun AccessStep(onFinish: () -> Unit) {
     }
 }
 
-/** A step's porcelain key; it drops its arrow when the label would otherwise be cut short (narrow phones, large text). */
+/** A step's primary key; it drops its arrow when the label would otherwise be cut short (narrow phones, large text). */
 @Composable
 private fun StepKey(text: String, onClick: () -> Unit) {
     val measurer = rememberTextMeasurer()

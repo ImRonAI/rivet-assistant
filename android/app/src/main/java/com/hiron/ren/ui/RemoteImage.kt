@@ -89,7 +89,7 @@ private const val UNBOUNDED_WIDTH_PX = 1080
 /** The app's [Images]; screens without one show the placeholders. */
 val LocalImages = staticCompositionLocalOf<Images?> { null }
 
-/** A result image: a quiet noir tile while it loads, a faint broken-image glyph when it can't. */
+/** A result image: a quiet tile while it loads, a faint broken-image glyph when it can't. */
 @Composable
 fun RemoteImage(
     url: String?,

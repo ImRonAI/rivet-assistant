@@ -48,7 +48,7 @@ import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** The trace's serif heading. */
+/** The trace's display heading. */
 private val TraceTitle = Type.step.copy(fontSize = 28.sp, lineHeight = 32.sp)
 
 /** Times in the trace: small JetBrains Mono figures. */

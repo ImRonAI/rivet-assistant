@@ -64,7 +64,7 @@ import com.hiron.ren.core.PermAction
 
 private val SheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 
-/** The approval's headline: the sheet's serif moment. */
+/** The approval's headline: the sheet's display line. */
 private val Headline = Type.step.copy(fontSize = 30.sp, lineHeight = 35.sp)
 
 /**

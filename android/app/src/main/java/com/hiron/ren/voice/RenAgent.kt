@@ -183,7 +183,7 @@ class RenAgent(
                     }
                 }
             },
-            // The agent's audio level as the SDK reports it (every 50 ms in a voice session), for the stage's Orb.
+            // The agent's audio level as the SDK reports it (every 50 ms in a voice session), for the robot.
             onAudioLevelChanged = { level -> if (voice) onMain(gen) { robot(RobotDirector.level(level)) } },
             onStatusChange = { status ->
                 if (status == ConversationStatus.DISCONNECTED || status == ConversationStatus.ERROR) onMain(gen) { activity(Activity.Idle) }

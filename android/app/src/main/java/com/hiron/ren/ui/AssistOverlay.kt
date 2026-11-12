@@ -110,7 +110,7 @@ const val ASSIST_FIELD_TAG = "assist-field"
 /** How many recent microphone levels the meter shows when the panel is wide enough for all of them. */
 private const val METER_BARS = 24
 
-/** The words as they are heard: a serif line, the user's own voice on the page. */
+/** The words as they are heard: a display line, the user's own voice on the page. */
 private val Words = Type.step.copy(fontSize = 26.sp, lineHeight = 31.sp)
 
 /** A blocked overlay's headline. */
@@ -119,7 +119,7 @@ private val BlockedTitle = Type.step.copy(fontSize = 24.sp, lineHeight = 29.sp)
 private const val CARET = "caret"
 
 /**
- * Ren over another app: a scrim, and a floating glass panel with the Ren wordmark and status, the words in serif
+ * Ren over another app: a scrim, and a floating glass panel with the Ren wordmark and status, the words in the display face
  * as they are heard, Ren's reply as it streams, and the voice disc, type and open-app keys. Tapping the scrim
  * closes it.
  */
@@ -255,7 +255,7 @@ private fun caret(): Map<String, InlineTextContent> {
     )
 }
 
-/** The user's words in serif, with a halo caret and a level meter while the microphone is live. */
+/** The user's words in the display face, with a volt caret and a level meter while the microphone is live. */
 @Composable
 private fun Heard(ui: AssistUi) {
     val p = LocalPalette.current
@@ -276,7 +276,7 @@ private fun Heard(ui: AssistUi) {
 }
 
 /**
- * The last few microphone levels as rounded halo bars, newest on the right. It shows as many of [METER_BARS] as fit,
+ * The last few microphone levels as rounded volt bars, newest on the right. It shows as many of [METER_BARS] as fit,
  * so a narrow phone or a large font never clips it.
  */
 @Composable
@@ -406,7 +406,7 @@ private fun TypeRow(onSend: (String) -> Unit) {
 }
 
 /**
- * The key row: the porcelain voice disc, Type and Open Ren. When the overlay can't listen, the one action that
+ * The key row: the volt voice disc, Type and Open Ren. When the overlay can't listen, the one action that
  * unblocks it (unlocking, or allowing the microphone) takes the full width above.
  */
 @Composable

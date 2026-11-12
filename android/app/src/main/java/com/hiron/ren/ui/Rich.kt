@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.em
 
 /**
  * Ren's replies as readable text: the markdown the model writes (headings, bullets, bold, italics, code,
- * links) becomes styling instead of stray symbols, links read in the halo, and citation markers like `[2]` become
- * small halo superscript figures. Anything unfinished mid-stream stays as typed until it closes.
+ * links) becomes styling instead of stray symbols, links read in volt, and citation markers like `[2]` become
+ * small volt superscript figures. Anything unfinished mid-stream stays as typed until it closes.
  */
 object Rich {
     private val INLINE = Regex(

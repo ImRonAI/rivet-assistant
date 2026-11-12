@@ -91,14 +91,14 @@ import com.hiron.ren.service.Notifications
 import org.json.JSONObject
 import com.hiron.ren.voice.Provider
 
-/** A section's serif title. */
+/** A section's display title. */
 private val SectionTitle = Type.step.copy(fontSize = 28.sp, lineHeight = 32.sp)
 
 /** The inset of a row inside a settings card, and of the hairlines between rows. */
 private val RowInset = 18.dp
 
 /**
- * Settings, set like a table of contents: each section a quiet figure on a hairline and a serif title, over glass
+ * Settings, set like a table of contents: each section a quiet figure on a hairline and a display title, over glass
  * cards whose rows carry Inter labels, grey details, slim switches and hairline dividers.
  */
 @Composable
@@ -140,7 +140,7 @@ fun SettingsScreen(runtime: RenRuntime) {
 @Composable
 private fun gutter(): Dp = if (with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < 360.dp) 16.dp else 20.dp
 
-/** A section: its number in small figures on a hairline, a serif title, then its cards. */
+/** A section: its number in small figures on a hairline, a display title, then its cards. */
 @Composable
 private fun Section(number: Int, title: String, content: @Composable ColumnScope.() -> Unit) {
     val p = LocalPalette.current

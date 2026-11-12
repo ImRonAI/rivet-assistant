@@ -150,13 +150,13 @@ private fun EyebrowText(text: String, color: Color, modifier: Modifier = Modifie
     )
 }
 
-private const val HALO_STOP = "volt-stop"
+private const val VOLT_STOP = "volt-stop"
 
 /**
  * The volt dot, the logotype's full stop, ending a one-word line or a hero heading in place of punctuation. It is read
  * as [spoken] (a full stop by default), so the line still announces as a sentence.
  */
-internal fun AnnotatedString.Builder.appendVoltStop(spoken: String = ".") = appendInlineContent(HALO_STOP, spoken)
+internal fun AnnotatedString.Builder.appendVoltStop(spoken: String = ".") = appendInlineContent(VOLT_STOP, spoken)
 
 /** The inline content that draws [appendVoltStop]: a volt dot sitting on the baseline. */
 @Composable
@@ -164,7 +164,7 @@ internal fun voltStopContent(): Map<String, InlineTextContent> {
     val p = LocalPalette.current
     return remember(p) {
         mapOf(
-            HALO_STOP to InlineTextContent(Placeholder(0.26.em, 0.42.em, PlaceholderVerticalAlign.AboveBaseline)) {
+            VOLT_STOP to InlineTextContent(Placeholder(0.26.em, 0.42.em, PlaceholderVerticalAlign.AboveBaseline)) {
                 Canvas(Modifier.fillMaxSize()) {
                     val r = size.width * 0.36f
                     drawCircle(p.accent, r, Offset(size.width * 0.56f, size.height - r))

@@ -33,7 +33,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import com.hiron.ren.core.Activity as RenActivity
 
-/** The shared Noir components on one page each, saved to build/screens/kit-gallery*.png for review. */
+/** The shared components on one page each, saved to build/screens/kit-gallery*.png for review. */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w411dp-h1760dp-xxhdpi")

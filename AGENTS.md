@@ -288,7 +288,7 @@ android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent 
   stage-ui/  the chat page's build (ElevenLabs UI on Ink & Volt tokens), bundled into assets/ren/chat (in git)
 deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Strands
            agents), hub/ (Ren's hub), search/ (ren desktop's search routers), laptop/ (OpenCode config, workspace AGENTS.md)
-docs/      design/ (the ren. logotype; REN_DESIGN.md and REN_MATRIX.md still describe the Noir design they replaced)
+docs/      design/ (REN_DESIGN.md: Ink & Volt on the phone; ren-logotype.json)
 .github/   CI: android.yml (tests, lint, release build)
 ```
 
@@ -363,10 +363,8 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
    `start_background_task` and `call_as_emrys` for them, and the hub's `/hub/agents/mcp` on the ElevenLabs text and
    voice agents (the owner asked for both agents to be connected; it needs the token as a workspace secret).
 8. **ren mobile:** the agent panel's chat on ren desktop's components (it is the ElevenLabs UI page from
-   `android/stage-ui`, on Ink & Volt tokens); Kotlin comments that still use Noir's words (serif, porcelain, halo);
-   the Glass theme; the robot in ren desktop; an
-   "Open on desktop" action that uses `HubLink.call`; the design documents
-   in `docs/design/` rewritten for Ink & Volt; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
+   `android/stage-ui`, on Ink & Volt tokens); the Glass theme; the robot in ren desktop; an
+   "Open on desktop" action that uses `HubLink.call`; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
    before changing who answers +17608769757).
 
 ## Before launch (checklist)
@@ -387,8 +385,8 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
 - **ElevenLabs UI:** https://github.com/elevenlabs/ui
 - **Telnyx MCP server:** https://github.com/ImRonAI/OubliTelnyxMCP, live at https://oubli-catolabs.fastmcp.app/mcp
 - **Desktop Commander:** https://github.com/wonderwhy-er/DesktopCommanderMCP
-- **Design:** ren desktop's `tailwind.config.ts`, `src/index.css` and `docs/brand.md` (`ImRonAI/TheBrowser`);
-  `docs/design/ren-logotype.json`
+- **Design:** `docs/design/REN_DESIGN.md`; ren desktop's `tailwind.config.ts`, `src/index.css` and `docs/brand.md`
+  (`ImRonAI/TheBrowser`)
 - **FastMCP:** https://gofastmcp.com (proxy providers, mounting, transforms); MCP Kotlin SDK
   github.com/modelcontextprotocol/kotlin-sdk (0.16.0)
 
