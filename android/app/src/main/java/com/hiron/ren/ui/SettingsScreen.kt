@@ -99,7 +99,7 @@ private val RowInset = 18.dp
 
 /**
  * Settings, set like a table of contents: each section a quiet figure on a hairline and a serif title, over glass
- * cards whose rows carry Geist labels, grey details, slim switches and hairline dividers.
+ * cards whose rows carry Inter labels, grey details, slim switches and hairline dividers.
  */
 @Composable
 fun SettingsScreen(runtime: RenRuntime) {
@@ -480,7 +480,7 @@ private fun <T> Choices(options: List<Pair<T, String>>, selected: T, onSelect: (
     }
 }
 
-/** A setting row: a Geist label, an optional grey [detail] under it and a slim switch; the whole row toggles. */
+/** A setting row: an Inter label, an optional grey [detail] under it and a slim switch; the whole row toggles. */
 @Composable
 private fun Toggle(label: String, value: Boolean, detail: String? = null, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current

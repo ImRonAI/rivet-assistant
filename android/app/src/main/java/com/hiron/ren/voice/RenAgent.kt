@@ -26,6 +26,7 @@ import io.elevenlabs.ConversationConfig
 import io.elevenlabs.ConversationSession
 import io.elevenlabs.models.ConversationMode
 import io.elevenlabs.models.ConversationStatus
+import io.elevenlabs.models.DisconnectionDetails
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -153,9 +154,17 @@ class RenAgent(
             clientTools = AgentTools.build(::runOnPhone) + (AgentTools.REQUEST_APPROVAL to AgentTools.approval(approve)) +
                 SearchTools.build(search, update),
             onConnect = { connected.complete(Unit) },
-            onDisconnect = {
+            onDisconnect = { details ->
                 connected.completeExceptionally(IllegalStateException("the agent ended the session"))
-                onMain(gen) { if (session != null) stop() }
+                onMain(gen) {
+                    // A session ElevenLabs closes with anything but a normal close says why (no credits left, for one).
+                    if (details is DisconnectionDetails.Error) {
+                        stop()
+                        failed(ENDED_BY_ELEVENLABS + (details.exception.message ?: details.reason))
+                    } else if (session != null) {
+                        stop()
+                    }
+                }
             },
             // The SDK reports a mode with every data packet; only changes matter.
             onModeChange = { mode ->
@@ -252,8 +261,11 @@ class RenAgent(
     private fun fail(gen: Int, error: String) {
         if (gen != generation) return
         mode = null
-        update { RenStore.note(it.copy(lastError = error, activity = Activity.Failed), System.currentTimeMillis(), "error", error) }
+        failed(error)
     }
+
+    private fun failed(error: String) =
+        update { RenStore.note(it.copy(lastError = error, activity = Activity.Failed), System.currentTimeMillis(), "error", error) }
 
     companion object {
         /** Ren's public ElevenLabs agents. */
@@ -264,6 +276,7 @@ class RenAgent(
 
         const val NEEDS_MICROPHONE = "Ren needs the microphone to talk. Tap the mic to allow it."
         const val COULD_NOT_START = "Couldn't reach the ElevenLabs agent. Check your connection and try again."
+        const val ENDED_BY_ELEVENLABS = "ElevenLabs ended the conversation: "
     }
 }
 

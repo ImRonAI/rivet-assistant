@@ -80,8 +80,7 @@ fun PlaceMap(pins: List<MapPin>, interactive: Boolean, selected: Int?, onSelect:
 
 /**
  * The pins laid out by longitude and latitude on a faint dot grid that falls away into the page at its edges, in the
- * map page's style: a noir glass disc with a porcelain hairline and figure, and the chosen one in porcelain with a
- * halo light.
+ * map page's style: a paper disc with a hairline and an ink figure, and the chosen one in volt.
  */
 @Composable
 private fun PinBoard(pins: List<MapPin>, selected: Int?, modifier: Modifier) {
@@ -145,7 +144,10 @@ private class MapHost(context: Context, private val onSelect: (Int) -> Unit) {
         settings.javaScriptEnabled = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
-        val loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
+        val loader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+            .addPathHandler("/res/", WebViewAssetLoader.ResourcesPathHandler(context))
+            .build()
         webViewClient = object : WebViewClientCompat() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 loader.shouldInterceptRequest(request.url)?.let { return it }

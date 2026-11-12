@@ -229,7 +229,10 @@ private class ChatHost(context: Context, background: Int, private val onImage: (
         settings.javaScriptEnabled = true
         settings.allowFileAccess = false
         settings.allowContentAccess = false
-        val loader = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context)).build()
+        val loader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+            .addPathHandler("/res/", WebViewAssetLoader.ResourcesPathHandler(context))
+            .build()
         webViewClient = object : WebViewClientCompat() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 loader.shouldInterceptRequest(request.url)

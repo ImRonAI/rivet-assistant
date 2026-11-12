@@ -328,7 +328,7 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
 
 const val COMPOSER_TAG = "composer"
 
-/** A quick request: a soft outline pill in Geist, its touch area kept at 48dp. */
+/** A quick request: a soft outline pill in Inter, its touch area kept at 48dp. */
 @Composable
 private fun QuickPill(text: String, onClick: () -> Unit) {
     val p = LocalPalette.current

@@ -289,7 +289,7 @@ private fun Ruled(index: Int, last: Boolean = false, content: @Composable Column
 }
 
 /**
- * A row of a step's list: an icon well, a Geist title (with an optional status [note] beside it) over a line of
+ * A row of a step's list: an icon well, an Inter title (with an optional status [note] beside it) over a line of
  * body, and [trailing] on the right. A non-null [checked] makes the row report a switch's state, and [onToggle]
  * (when set) lets the whole row flip it; the well lifts while it is on.
  */

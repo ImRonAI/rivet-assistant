@@ -33,7 +33,7 @@ object Rich {
     private val BULLET = Regex("""^(\s*)[-*•]\s+""")
     private val HEADING = Regex("""^#{1,4}\s+""")
 
-    /** A citation figure: small Geist Medium with tabular figures, raised like a footnote mark. */
+    /** A citation figure: small Inter Medium with tabular figures, raised like a footnote mark. */
     private val CITATION = SpanStyle(
         fontFamily = Sans, fontWeight = FontWeight.Medium, fontSize = 0.68.em, fontFeatureSettings = "tnum", baselineShift = BaselineShift.Superscript,
     )

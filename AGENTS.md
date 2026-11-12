@@ -71,6 +71,11 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
 - **The Strands agents on the hub** (`deploy/vm/gemini/app.py`): the server `ren-hub` (`http://hub:8300/mcp`,
   unprefixed) replaces the phone's Tailscale address, so Gemini, NIM and Mistral reach the phone and ren desktop
   whichever is attached.
+- **ElevenLabs is out of credits (2026-11-12):** a typed question on the emulator opened a session with the text
+  agent (tools registered, both MCP servers connected), and ElevenLabs closed it 8 s later with WebSocket code 1002,
+  "This request exceeds your quota limit." The SDK reports any close but 1000 as `DisconnectionDetails.Error`, and the
+  panel now shows it ("ElevenLabs ended the conversation: …") where it used to go back to Ready in silence. No
+  ElevenLabs reply has been seen in ren mobile yet.
 - **Live, 2026-11-12:** with the hub deployed, the emulator's app and ren desktop's backend (the branch above, run
   from a clone on the owner's Mac) both attached. A client on `/hub/mcp` listed 76 tools (40 from the phone, 36 from
   the desktop); `device_status` returned the emulator's real battery and network; the desktop's own Strands
@@ -273,7 +278,7 @@ android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent 
   web/       the app's bundled pages, built by Vite into assets/ren/web by Gradle (webInstall, webBuild; needs Node):
              src/cato (Cato, unmodified), src/robot (ren's robot), src/ren (ren desktop's search page, unmodified),
              src/search (the phone's mount of it)
-  stage-ui/  the chat page's build (ElevenLabs UI), bundled into assets/ren/chat
+  stage-ui/  the chat page's build (ElevenLabs UI on Ink & Volt tokens), bundled into assets/ren/chat (in git)
 deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Strands
            agents), hub/ (Ren's hub), search/ (ren desktop's search routers), laptop/ (OpenCode config, workspace AGENTS.md)
 docs/      design/ (the ren. logotype; REN_DESIGN.md and REN_MATRIX.md still describe the Noir design they replaced)
@@ -350,8 +355,9 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
    same token. Not run live yet: a search from the app, and a chat with each Strands provider. Next:
    `start_background_task` and `call_as_emrys` for them, and the hub's `/hub/agents/mcp` on the ElevenLabs text and
    voice agents (the owner asked for both agents to be connected; it needs the token as a workspace secret).
-8. **ren mobile:** the agent panel's chat on ren desktop's components (it is still the ElevenLabs UI page from
-   `android/stage-ui`, with its Geist fonts in `assets/ren/fonts`); the Glass theme; the robot in ren desktop; an
+8. **ren mobile:** the agent panel's chat on ren desktop's components (it is the ElevenLabs UI page from
+   `android/stage-ui`, on Ink & Volt tokens); Kotlin comments that still use Noir's words (serif, porcelain, halo);
+   the Glass theme; the robot in ren desktop; an
    "Open on desktop" action that uses `HubLink.call`; trusted touch events for `browser_click`; the design documents
    in `docs/design/` rewritten for Ink & Volt; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
    before changing who answers +17608769757).

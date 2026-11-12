@@ -313,7 +313,7 @@ private fun Blocked(ui: AssistUi) {
     }
 }
 
-/** Ren's side: a quiet glass card with an eyebrow that says what it is doing, and the reply in Geist. */
+/** Ren's side: a quiet glass card with an eyebrow that says what it is doing, and the reply in Inter. */
 @Composable
 private fun Reply(ui: AssistUi, onReview: () -> Unit) {
     val p = LocalPalette.current

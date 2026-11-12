@@ -51,7 +51,7 @@ import org.json.JSONObject
 /** The trace's serif heading. */
 private val TraceTitle = Type.step.copy(fontSize = 28.sp, lineHeight = 32.sp)
 
-/** Times in the trace: small Geist Mono figures. */
+/** Times in the trace: small JetBrains Mono figures. */
 private val TraceTime = Type.mono.copy(fontSize = 11.sp, lineHeight = 14.sp)
 
 /** The trace's first line (a kind's label and its time) starts this far down its row. */
