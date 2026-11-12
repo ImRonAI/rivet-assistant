@@ -82,13 +82,10 @@ PERMISSIONS = (
 )
 HOME = "/config/emrys-gemini"
 
-# The ElevenLabs agents' MCP servers plus the phone's own, unprefixed so the tool names match the prompt.
+# The ElevenLabs agents' MCP servers plus Ren's hub, unprefixed so the tool names match the prompt. The hub serves
+# the phone's tools under their own names and ren desktop's under `desktop_`, whichever of the two is attached.
 SERVERS: dict[str, MCPServerConfig] = {
-    "phone": {
-        "url": "${PHONE_MCP_URL}",
-        "headers": {"Authorization": "Bearer ${PHONE_MCP_TOKEN}"},
-        "prefix": "",
-    },
+    "ren-hub": {"url": "http://hub:8300/mcp", "prefix": ""},
     "emrys-computer": {"url": "http://computer:8080/computer/mcp", "prefix": ""},
     "oubliai-telnyx": {
         "url": "https://oubli-catolabs.fastmcp.app/mcp",
