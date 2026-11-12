@@ -106,21 +106,22 @@ class LauncherArtTest {
     }
 
     /**
-     * The Android 12+ splash as the platform lays it out: the icon's foreground at 240 dp on the window's noir,
-     * inside the 160 dp circle an icon background allows.
+     * The Android 12+ splash as the platform lays it out: the icon's foreground at 240 dp on the ink stage, inside
+     * the 160 dp volt circle its icon background fills.
      */
     @Test
-    fun theSplashIsTheSigilOnNoir() {
+    fun theSplashIsTheLogotypeOnVolt() {
         val w = px(411f)
         val h = px(891f)
         val sheet = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(sheet)
-        canvas.drawColor(context.getColor(R.color.ren_bg))
+        canvas.drawColor(context.getColor(R.color.ren_stage))
         val icon = px(240f)
         val left = (w - icon) / 2
         val top = (h - icon) / 2
         canvas.save()
         canvas.clipPath(Path().apply { addCircle(w / 2f, h / 2f, px(80f).toFloat(), Path.Direction.CW) })
+        canvas.drawColor(context.getColor(R.color.ren_accent_tile))
         context.getDrawable(R.drawable.ic_launcher_foreground)!!.apply { setBounds(left, top, left + icon, top + icon) }.draw(canvas)
         canvas.restore()
         save(sheet, "splash")
@@ -161,18 +162,18 @@ class LauncherArtTest {
         save(sheet, "icon-notification")
     }
 
-    /** The long-press shortcuts and the marks the widgets and the app draw, at their sizes, on noir. */
+    /** The long-press shortcuts and the marks the widgets and the app draw, at their sizes, on paper. */
     @Test
-    fun theShortcutsAndMarksDrawOnNoir() {
+    fun theShortcutsAndMarksDrawOnPaper() {
         val shortcuts = listOf(R.drawable.shortcut_talk, R.drawable.shortcut_type, R.drawable.shortcut_catchup, R.drawable.shortcut_myday)
         val gap = px(16f)
         val s = px(48f)
         val sheet = Bitmap.createBitmap(gap + (s + gap) * 6, s + gap * 2, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(sheet)
-        canvas.drawColor(0xFF0A0A0C.toInt())
-        (shortcuts + R.drawable.ren_head + R.drawable.ren_sigil).forEachIndexed { i, id ->
+        canvas.drawColor(context.getColor(R.color.ren_bg))
+        (shortcuts + R.drawable.ren_mark + R.drawable.ic_ren).forEachIndexed { i, id ->
             val d = context.getDrawable(id)!!.mutate()
-            if (id == R.drawable.ren_sigil) d.setTint(context.getColor(R.color.ren_accent))
+            if (id == R.drawable.ic_ren) d.setTint(context.getColor(R.color.ren_accent))
             val x = gap + i * (s + gap)
             d.setBounds(x, gap, x + s, gap + s)
             d.draw(canvas)
@@ -180,9 +181,9 @@ class LauncherArtTest {
         save(sheet, "icon-shortcuts")
     }
 
-    /** Ren's notifications each carry the sigil and the halo accent. */
+    /** Ren's notifications each carry the Ren icon and volt. */
     @Test
-    fun notificationsCarryTheSigilAndTheHalo() {
+    fun notificationsCarryTheRenIconAndVolt() {
         shadowOf(context as android.app.Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
         Notifications.createChannels(context)
         val manager = context.getSystemService(NotificationManager::class.java)

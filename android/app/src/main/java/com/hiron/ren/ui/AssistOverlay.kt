@@ -157,11 +157,11 @@ private data class Led(val color: Color, val live: Boolean)
 
 private fun led(phase: AssistPhase, p: Palette) = when (phase) {
     AssistPhase.Ready -> Led(p.ok, false)
-    AssistPhase.Listening -> Led(p.rec, true)
-    AssistPhase.Working, AssistPhase.Replying -> Led(p.cy, true)
+    AssistPhase.Listening -> Led(p.danger, true)
+    AssistPhase.Working, AssistPhase.Replying -> Led(p.accent, true)
     AssistPhase.Done -> Led(p.ok, false)
     AssistPhase.Waiting -> Led(p.amb, true)
-    AssistPhase.Failed -> Led(p.rec, false)
+    AssistPhase.Failed -> Led(p.danger, false)
     AssistPhase.NeedsMic, AssistPhase.Locked -> Led(p.amb, false)
 }
 
@@ -237,20 +237,19 @@ private fun Header(status: String, led: Led) {
             Text("Assistant", style = Type.labelMd, color = p.ink2, maxLines = 1, modifier = Modifier.padding(start = 1.dp))
         }
         Spacer(Modifier.width(12.dp))
-        Capsule(sentenceCase(status), led.color, led.live)
+        Capsule(sentenceCase(status), led.color)
     }
 }
 
-/** The thin halo caret at the end of the words while the microphone is live; it breathes unless motion is reduced. */
+/** The thin volt caret at the end of the words while the microphone is live. */
 @Composable
 private fun caret(): Map<String, InlineTextContent> {
     val p = LocalPalette.current
-    val a = pulse(low = 0.25f, periodMs = 1200)
     return mapOf(
         CARET to InlineTextContent(Placeholder(0.32.em, 0.86.em, PlaceholderVerticalAlign.TextCenter)) {
             Canvas(Modifier.fillMaxSize()) {
                 val w = 2.dp.toPx()
-                drawRoundRect(p.accent.copy(alpha = a), Offset(size.width - w, 0f), Size(w, size.height), CornerRadius(w / 2))
+                drawRoundRect(p.accent, Offset(size.width - w, 0f), Size(w, size.height), CornerRadius(w / 2))
             }
         },
     )
@@ -322,7 +321,7 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
     // Waiting and failing show as a tinted hairline, never a wash of colour.
     val edge = when (ui.phase) {
         AssistPhase.Waiting -> p.amb.copy(alpha = 0.4f)
-        AssistPhase.Failed -> p.rec.copy(alpha = 0.4f)
+        AssistPhase.Failed -> p.danger.copy(alpha = 0.4f)
         else -> p.line
     }
     val scroll = rememberScrollState()
@@ -331,13 +330,13 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             when (ui.phase) {
                 AssistPhase.Working -> {
-                    Eyebrow("Ren", tone = Tone.Cyan, live = true)
+                    Eyebrow("Ren", tone = Tone.Info)
                     Spacer(Modifier.width(12.dp))
                     Thinking()
                 }
-                AssistPhase.Replying -> Eyebrow("Ren", tone = Tone.Cyan, live = true)
+                AssistPhase.Replying -> Eyebrow("Ren", tone = Tone.Info)
                 AssistPhase.Waiting -> {
-                    Eyebrow("Needs your OK", Modifier.weight(1f), tone = Tone.Amber, live = true)
+                    Eyebrow("Needs your OK", Modifier.weight(1f), tone = Tone.Amber)
                     Spacer(Modifier.width(12.dp))
                     Keycap("Review", onReview, tone = KeyTone.Accent)
                 }
@@ -355,7 +354,7 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
             Text(
                 buildAnnotatedString {
                     append(body)
-                    if (ui.phase == AssistPhase.Replying && ui.reply.isNotBlank()) withStyle(SpanStyle(color = p.cy)) { append(" ▍") }
+                    if (ui.phase == AssistPhase.Replying && ui.reply.isNotBlank()) withStyle(SpanStyle(color = p.info)) { append(" ▍") }
                 },
                 style = Type.bodyLg, color = p.ink, modifier = Modifier.heightIn(max = 220.dp).verticalScroll(scroll),
             )
@@ -369,16 +368,10 @@ private fun Reply(ui: AssistUi, onReview: () -> Unit) {
     }
 }
 
-/** Three glacier dots that breathe one after another while Ren works. */
+/** The word that shimmers while Ren works. */
 @Composable
 private fun Thinking() {
-    val p = LocalPalette.current
-    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-        repeat(3) { i ->
-            val a = pulse(low = 0.25f, periodMs = 900 + i * 150)
-            Box(Modifier.size(5.dp).alpha(a).clip(CircleShape).background(p.cy))
-        }
-    }
+    ShimmerText("Ren is working", Type.body)
 }
 
 @Composable
@@ -438,7 +431,7 @@ private fun Keys(ui: AssistUi, onMic: () -> Unit, onTyping: (Boolean) -> Unit, o
                 val icon = (if (disc) 76.dp else 0.dp) + 36.dp * 2 + 12.dp + 26.dp + words <= maxWidth
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (disc) {
-                        HaloTalkKey(
+                        TalkKey(
                             if (listening) TalkState.Listening else TalkState.Idle,
                             onMic,
                             if (listening) "Stop listening" else "Speak to Ren",

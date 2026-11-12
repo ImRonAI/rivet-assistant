@@ -67,7 +67,7 @@ class HomeScreenTest {
     @Composable
     private fun Tabs(badge: Int) = PendantTabs(
         listOf(
-            PendantTab("ren", "Ren", ImageVector.vectorResource(R.drawable.ren_sigil), badge = badge, tag = "ren"),
+            PendantTab("ren", "Ren", ImageVector.vectorResource(R.drawable.ic_ren), badge = badge, tag = "ren"),
             PendantTab("activity", "Activity", Icons.Outlined.Timeline),
             PendantTab("settings", "Settings", Icons.Outlined.Tune),
         ),

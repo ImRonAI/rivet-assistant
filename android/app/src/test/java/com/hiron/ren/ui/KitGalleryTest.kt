@@ -67,7 +67,7 @@ class KitGalleryTest {
                     }
                     RenCard(selected = true, onClick = {}) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            IconWell(Icons.Outlined.Psychology, tone = Tone.Cyan, selected = true)
+                            IconWell(Icons.Outlined.Psychology, tone = Tone.Info, selected = true)
                             Readout("Text model", "Always on", Modifier.weight(1f))
                             RenToggle(true, null, enabled = false)
                         }
@@ -79,7 +79,7 @@ class KitGalleryTest {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         StatusTag("Best", Tone.Accent, outline = true)
-                        Capsule("Listening", LocalPalette.current.rec, live = true)
+                        Capsule("Listening", LocalPalette.current.danger)
                     }
                     TrustFooter("Revocable any time in Android settings")
                     PrimaryKey("Get started", {})
@@ -116,13 +116,13 @@ class KitGalleryTest {
             Column(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     StageFrame(Modifier.fillMaxWidth().height(248.dp), hint = STAGE_HINT) {}
-                    Eyebrow("Listening", tone = Tone.Red, live = true)
+                    Eyebrow("Listening", tone = Tone.Red)
                     RenCard {
                         LevelMeter(listOf(0.2f, 0.5f, 0.8f, 0.4f, 0.95f, 0.6f, 0.3f, 0.7f, 0.5f, 0.35f, 0.2f, 0.1f), Modifier.fillMaxWidth())
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                        HaloTalkKey(TalkState.Idle, {}, "Speak to Ren")
-                        HaloTalkKey(TalkState.Listening, {}, "Stop listening")
+                        TalkKey(TalkState.Idle, {}, "Speak to Ren")
+                        TalkKey(TalkState.Listening, {}, "Stop listening")
                         SendKey({})
                     }
                     RecessedField("", {}, label = "Server address", placeholder = "https://ren-brain.fly.dev")

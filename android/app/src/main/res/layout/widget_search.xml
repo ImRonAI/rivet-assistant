@@ -20,10 +20,9 @@
             android:id="@+id/head"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="@drawable/widget_head_bg"
             android:contentDescription="@string/app_name"
-            android:padding="9dp"
-            android:src="@drawable/ren_head" />
+            android:padding="5dp"
+            android:src="@drawable/ren_mark" />
 
         <TextView
             android:id="@+id/ask"
@@ -31,13 +30,13 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:ellipsize="end"
-            android:fontFamily="@font/geist_regular"
+            android:fontFamily="@font/inter_ui"
             android:gravity="center_vertical"
             android:maxLines="1"
             android:paddingStart="12dp"
             android:paddingEnd="8dp"
             android:text="@string/widget_ask"
-            android:textColor="@color/ren_ink2"
+            android:textColor="@color/ren_muted"
             android:textSize="15sp" />
 
         <ImageView

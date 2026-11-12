@@ -28,7 +28,7 @@ object Plain {
     )
 
     private val KINDS = mapOf(
-        "device" to ("Phone" to Tone.Cyan), "approval" to ("Approval" to Tone.Amber), "error" to ("Problem" to Tone.Red),
+        "device" to ("Phone" to Tone.Info), "approval" to ("Approval" to Tone.Amber), "error" to ("Problem" to Tone.Red),
         "call" to ("Call" to Tone.Green),
     )
 

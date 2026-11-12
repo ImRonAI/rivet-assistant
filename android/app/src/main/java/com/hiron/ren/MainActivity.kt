@@ -224,7 +224,7 @@ private fun MainUi(
         if (!WindowInsets.isImeVisible) {
             PendantTabs(
                 listOf(
-                    PendantTab(Tab.Ren, Tab.Ren.label, ImageVector.vectorResource(R.drawable.ren_sigil), badge = state.approvals.size, tag = Tab.Ren.tag),
+                    PendantTab(Tab.Ren, Tab.Ren.label, ImageVector.vectorResource(R.drawable.ic_ren), badge = state.approvals.size, tag = Tab.Ren.tag),
                     PendantTab(Tab.Activity, Tab.Activity.label, Icons.Outlined.Timeline, tag = Tab.Activity.tag),
                     PendantTab(Tab.Settings, Tab.Settings.label, Icons.Outlined.Tune, tag = Tab.Settings.tag),
                 ),

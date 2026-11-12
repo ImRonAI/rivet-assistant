@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- A quick key on the panel: a soft outline pill with a Geist label, each as wide as its label plus an equal share of the row. -->
+    <!-- A quick key on the panel: a pill with an Inter label, each as wide as its label plus an equal share of the row. -->
     <style name="WidgetKey">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">30dp</item>
@@ -13,8 +13,9 @@
         <item name="android:paddingEnd">5dp</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
-        <item name="android:fontFamily">@font/geist_medium</item>
-        <item name="android:textColor">@color/ren_ink</item>
-        <item name="android:textSize">12.5sp</item>
+        <item name="android:fontFamily">@font/inter_ui</item>
+        <item name="android:textFontWeight">500</item>
+        <item name="android:textColor">@color/ren_ink2</item>
+        <item name="android:textSize">12sp</item>
     </style>
 </resources>

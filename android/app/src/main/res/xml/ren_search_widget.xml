@@ -6,7 +6,7 @@
     android:minHeight="56dp"
     android:minResizeWidth="180dp"
     android:minResizeHeight="56dp"
-    android:previewImage="@drawable/ren_head"
+    android:previewImage="@drawable/ren_mark"
     android:previewLayout="@layout/widget_search"
     android:resizeMode="horizontal"
     android:targetCellWidth="4"

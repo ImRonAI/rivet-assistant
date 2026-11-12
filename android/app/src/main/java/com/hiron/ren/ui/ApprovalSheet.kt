@@ -96,7 +96,7 @@ fun ApprovalSheet(request: ApprovalRequest, onAnswer: (String, ApprovalAnswer) -
         },
     ) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = gutter).padding(bottom = 20.dp)) {
-            Eyebrow("Needs your OK", Modifier.padding(top = 10.dp), tone = Tone.Amber, live = true)
+            Eyebrow("Needs your OK", Modifier.padding(top = 10.dp), tone = Tone.Amber)
             Spacer(Modifier.height(22.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(iconFor(request.action), contentDescription = null, tint = p.ink2, modifier = Modifier.size(18.dp))

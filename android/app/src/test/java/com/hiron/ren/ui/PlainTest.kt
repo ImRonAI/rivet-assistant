@@ -35,7 +35,7 @@ class PlainTest {
 
     @Test
     fun kindsHaveWordsAndTones() {
-        assertEquals("Phone" to Tone.Cyan, Plain.kind("device"))
+        assertEquals("Phone" to Tone.Info, Plain.kind("device"))
         assertEquals("Approval" to Tone.Amber, Plain.kind("approval"))
         assertEquals("Problem" to Tone.Red, Plain.kind("error"))
         assertEquals("Call" to Tone.Green, Plain.kind("call"))

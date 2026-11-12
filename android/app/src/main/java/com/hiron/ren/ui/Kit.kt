@@ -72,14 +72,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** How a key reads: a plain key, the one primary action (porcelain), or a destructive one (coral). */
+/** How a key reads: a secondary key, or the one primary action in volt. */
 enum class KeyTone { Plain, Accent }
 
-private val KeyShape = RoundedCornerShape(50)
+private val KeyShape = RoundedCornerShape(Radius.control)
 
 /**
- * A soft pill key: a quiet fill and a 1dp hairline, brightening while pressed. [KeyTone.Accent] is the porcelain
- * primary; [KeyTone.Danger] carries coral ink on a coral hairline. [tag] is a small quiet note after the label.
+ * A button: a flat neutral fill that darkens while pressed. [KeyTone.Accent] is the volt primary. [tag] is a small
+ * quiet note after the label.
  */
 @Composable
 fun Keycap(
@@ -99,10 +99,7 @@ fun Keycap(
     }
 }
 
-/**
- * A round key holding one icon: the composer's talk and send keys, the viewer's actions. [ring] lights a thin
- * breathing ring around it (coral while the microphone is live).
- */
+/** A square key holding one icon: the viewer's actions, the toolbar's keys. [ring] draws a thin ring around it. */
 @Composable
 fun IconKey(
     icon: ImageVector,
@@ -114,26 +111,14 @@ fun IconKey(
     ring: Color? = null,
 ) {
     val c = keyColors(LocalPalette.current, tone)
-    val glow = if (ring != null) breathe(0.4f, 1f, Motion.BREATHE / 2) else 0f
-    Box(
-        modifier.size(size).drawBehind {
-            if (ring != null) {
-                val grow = 4.dp.toPx()
-                val outline = CircleShape.createOutline(Size(this.size.width + grow * 2, this.size.height + grow * 2), layoutDirection, this)
-                translate(-grow, -grow) { drawOutline(outline, ring.copy(alpha = 0.6f * glow), style = Stroke(1.dp.toPx())) }
-            }
-        },
-    ) {
-        KeyBody(
-            onClick, Modifier.fillMaxSize().semantics { contentDescription = description }, c, enabled = true, role = Role.Button, square = true,
-            shape = CircleShape,
-        ) {
+    Box(modifier.size(size).then(if (ring != null) Modifier.ring(ring, KeyShape, true, gap = 3.dp) else Modifier)) {
+        KeyBody(onClick, Modifier.fillMaxSize().semantics { contentDescription = description }, c, enabled = true, role = Role.Button, square = true) {
             Icon(icon, contentDescription = null, tint = c.icon, modifier = Modifier.size(21.dp))
         }
     }
 }
 
-/** A latching pill in the secondary-key look, porcelain while it is on; [height] and [radius] match it to the keys beside it. */
+/** A latching pill, an ink fill while it is on; [height] and [radius] match it to the keys beside it. */
 @Composable
 fun SysKey(
     text: String,
@@ -149,8 +134,7 @@ fun SysKey(
     val pressed by source.collectIsPressedAsState()
     val shape = RoundedCornerShape(radius)
     Box(
-        modifier.height(height).clip(shape).background(if (on) p.ink else if (pressed) p.cardHi else p.key)
-            .border(1.dp, if (on) p.ink else if (pressed) p.lineHi else p.line, shape)
+        modifier.height(height).clip(shape).background(if (on) p.ink else if (pressed) p.keyHi else p.key)
             .toggleable(on, interactionSource = source, indication = null, role = Role.Switch) {
                 haptics.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
                 onToggle(it)
@@ -162,11 +146,11 @@ fun SysKey(
     }
 }
 
-private data class KeyColors(val fill: Color, val pressed: Color, val line: Color, val pressedLine: Color, val ink: Color, val icon: Color)
+private data class KeyColors(val fill: Color, val pressed: Color, val ink: Color, val icon: Color)
 
 private fun keyColors(p: Palette, tone: KeyTone) = when (tone) {
-    KeyTone.Plain -> KeyColors(p.key, p.cardHi, p.line, p.lineHi, p.ink, p.ink2)
-    KeyTone.Accent -> KeyColors(p.ink, p.ink, p.ink, p.accentHi, p.accentInk, p.accentInk)
+    KeyTone.Plain -> KeyColors(p.key, p.keyHi, p.ink, p.ink2)
+    KeyTone.Accent -> KeyColors(p.accent, p.accentHi, p.accentInk, p.accentInk)
 }
 
 @Composable
@@ -187,10 +171,8 @@ private fun KeyBody(
     Row(
         modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
             .alpha(if (enabled) 1f else 0.4f)
-            .graphicsLayer { if (down) { scaleX = 0.98f; scaleY = 0.98f } }
-            .then(if (down) Modifier.ring(c.pressedLine.copy(alpha = 0.6f), shape, true, gap = 2.dp) else Modifier)
+            .graphicsLayer { if (down) translationY = 1.dp.toPx() }
             .clip(shape).background(if (down) c.pressed else c.fill)
-            .border(1.dp, if (down) c.pressedLine else c.line, shape)
             .clickable(enabled = enabled, interactionSource = source, indication = null, role = role) {
                 haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
                 onClick()
@@ -200,14 +182,6 @@ private fun KeyBody(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         content = content,
     )
-}
-
-/** An infinitely breathing value between [from] and [to]; reduced-motion hosts hold it at [to]. */
-@Composable
-private fun breathe(from: Float, to: Float, halfPeriodMs: Int): Float {
-    if (rememberReduceMotion()) return to
-    val t = rememberInfiniteTransition(label = "breathe")
-    return t.animateFloat(to, from, infiniteRepeatable(tween(halfPeriodMs, easing = Motion.Standard), RepeatMode.Reverse), label = "breathe").value
 }
 
 @Composable
@@ -237,10 +211,7 @@ fun Odometer(text: String, style: TextStyle, color: Color, modifier: Modifier = 
     ) { value -> Text(value, style = style, color = color, maxLines = 1, overflow = overflow) }
 }
 
-/**
- * An input: a rounded field fill and a hairline at rest; focused, a halo border, a faint halo ring and a halo
- * caret. [label] sits above in Geist, as written.
- */
+/** An input: a field fill and a hairline at rest; focused, a volt border, a soft volt ring and a volt caret. [label] sits above. */
 @Composable
 fun RecessedField(
     value: String,
@@ -258,7 +229,7 @@ fun RecessedField(
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(14.dp)
+    val shape = RoundedCornerShape(Radius.control)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (label != null) Text(label, style = Type.labelLg, color = if (focused) p.accent else p.ink2)
         BasicTextField(
@@ -275,13 +246,13 @@ fun RecessedField(
             interactionSource = source,
             decorationBox = { inner ->
                 Box(
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).ring(p.accent.copy(alpha = 0.16f), shape, focused, gap = 2.dp)
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).ring(p.accent.copy(alpha = 0.2f), shape, focused, width = 2.dp)
                         .clip(shape).background(p.field)
-                        .border(1.dp, if (focused) p.accent.copy(alpha = 0.6f) else p.line, shape)
+                        .border(1.dp, if (focused) p.accent else p.line, shape)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     contentAlignment = Alignment.CenterStart,
                 ) {
-                    if (value.isEmpty() && placeholder != null) Text(placeholder, style = Type.bodyLg, color = p.ink2.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (value.isEmpty() && placeholder != null) Text(placeholder, style = Type.bodyLg, color = p.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     inner()
                 }
             },
@@ -289,7 +260,7 @@ fun RecessedField(
     }
 }
 
-/** A label/value row: a quiet label and its value. [mono] sets the value in Geist Mono, for codes, addresses and ids. */
+/** A label/value row: a quiet label and its value. [mono] sets the value in JetBrains Mono, for codes, addresses and ids. */
 @Composable
 fun Readout(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color? = null, mono: Boolean = false) {
     val p = LocalPalette.current

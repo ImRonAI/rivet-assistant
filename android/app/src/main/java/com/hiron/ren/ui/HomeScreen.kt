@@ -219,10 +219,10 @@ private fun ErrorNote(error: String, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val shape = RoundedCornerShape(20.dp)
     Column(
-        modifier.fillMaxWidth().clip(shape).background(p.hud).border(1.dp, p.line, shape).padding(horizontal = 18.dp, vertical = 16.dp),
+        modifier.fillMaxWidth().clip(shape).background(p.raised).border(1.dp, p.line, shape).padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        DotLine(error, p.rec)
+        DotLine(error, p.danger)
     }
 }
 
@@ -252,7 +252,7 @@ private fun BoxScope.StageGreeting(visible: Boolean, state: RenState, voice: Boo
 }
 
 /** The greeting's serif, a size up from the type scale's: the hero line of the page. */
-private val GREETING = Type.greeting.copy(fontSize = 52.sp, lineHeight = 54.sp)
+private val GREETING = Type.greeting
 
 /** The date and time as an eyebrow, the greeting set large in the serif, and one quiet line on what comes next. */
 @Composable
@@ -286,10 +286,10 @@ private fun Greeting(state: RenState, voice: Boolean) {
         Text(
             buildAnnotatedString {
                 append("$lead ")
-                withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(lift) }
-                appendHaloStop()
+                append(lift)
+                appendVoltStop()
             },
-            style = GREETING, color = p.ink, textAlign = TextAlign.Center, inlineContent = haloStopContent(),
+            style = GREETING, color = p.ink, textAlign = TextAlign.Center, inlineContent = voltStopContent(),
         )
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -310,7 +310,7 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
     val shape = RoundedCornerShape(20.dp)
     Row(
         Modifier.padding(horizontal = gutter(), vertical = 8.dp).fillMaxWidth()
-            .clip(shape).background(p.hud).border(1.dp, p.amb.copy(alpha = 0.28f), shape)
+            .clip(shape).background(p.raised).border(1.dp, p.amb.copy(alpha = 0.28f), shape)
             .clickable(onClick = onClick)
             .padding(start = 20.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -443,7 +443,7 @@ private fun Dock(
                 val unbounded = Modifier.wrapContentSize(unbounded = true)
                 when {
                     sendable -> SendKey(send, unbounded)
-                    voice -> HaloTalkKey(if (listening) TalkState.Listening else TalkState.Idle, onListen, "Speak to Ren", unbounded)
+                    voice -> TalkKey(if (listening) TalkState.Listening else TalkState.Idle, onListen, "Speak to Ren", unbounded)
                     else -> Box(
                         unbounded.alpha(0.4f).clearAndSetSemantics {
                             contentDescription = "Send"

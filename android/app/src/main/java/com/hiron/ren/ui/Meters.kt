@@ -66,48 +66,20 @@ import androidx.compose.ui.unit.dp
 
 enum class TalkState { Idle, Listening }
 
-/** A ring that grows from 1 to 2 times its size while fading out, repeating; null when motion is reduced. */
-@Composable
-private fun ping(): Float? {
-    if (rememberReduceMotion()) return null
-    return rememberInfiniteTransition(label = "ping").animateFloat(0f, 1f, infiniteRepeatable(tween(Motion.PING, easing = Motion.Emphasized)), label = "ping").value
-}
-
-/** A halo ring's alpha, breathing from .55 to 1 and back; held at 1 when motion is reduced. */
-@Composable
-private fun breathing(): Float {
-    if (rememberReduceMotion()) return 1f
-    return rememberInfiniteTransition(label = "halo").animateFloat(0.55f, 1f, infiniteRepeatable(tween(Motion.BREATHE / 2, easing = Motion.Standard), RepeatMode.Reverse), label = "halo").value
-}
-
-/** The aurora, the live voice's gradient, swept round a ring: accentHi → accent → accentDeep and back. */
-private fun aurora(p: Palette, alpha: Float) = Brush.sweepGradient(
-    listOf(p.accentHi, p.accent, p.accentDeep, p.cy.copy(alpha = 0.9f), p.accent, p.accentHi).map { it.copy(alpha = it.alpha * alpha) },
-)
-
-/** A ring of [diameter] stroked [width] wide in the aurora at [alpha], centred in this draw scope. */
-private fun DrawScope.auroraRing(p: Palette, diameter: Dp, width: Dp, alpha: Float) {
-    drawCircle(aurora(p, alpha), diameter.toPx() / 2 - width.toPx() / 2, style = Stroke(width.toPx()))
-}
-
 /**
- * The voice key of the dock and the overlay, 64dp: a porcelain disc with a noir mic, inside a thin aurora ring.
- * [TalkState.Listening] swaps the mic for a noir stop mark,
- * and the ring breathes in the aurora with a soft ring travelling outward.
+ * The voice key of the dock and the overlay: a volt disc with a mic. [TalkState.Listening] turns it danger red with a
+ * stop mark inside a thin ring, so a live microphone is never in doubt.
  */
 @Composable
-fun HaloTalkKey(state: TalkState, onClick: () -> Unit, description: String, modifier: Modifier = Modifier) {
+fun TalkKey(state: TalkState, onClick: () -> Unit, description: String, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val listening = state == TalkState.Listening
-    val box = 64.dp
-    val breath = if (listening) breathing() else 1f
-    val ping = if (listening) ping() else null
-    val core = 52.dp
+    val fill = if (listening) p.danger else if (pressed) p.accentHi else p.accent
     Box(
-        modifier.size(box)
+        modifier.size(64.dp)
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
                 haptics.performHapticFeedback(HapticFeedbackType.VirtualKey)
                 onClick()
@@ -115,33 +87,12 @@ fun HaloTalkKey(state: TalkState, onClick: () -> Unit, description: String, modi
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        // The light: a faint halo at rest, the aurora's bloom while live.
         Box(
-            Modifier.size(box).drawBehind {
-                val a = if (listening) 0.16f * breath else 0.06f
-                drawCircle(Brush.radialGradient(listOf(p.accent.copy(alpha = a), Color.Transparent)), size.minDimension / 2)
-            },
-        )
-        if (ping != null) {
-            val base = 56.dp
-            Box(
-                Modifier.size(base).drawBehind {
-                    val r = size.minDimension / 2 * (1f + ping * 0.9f)
-                    val fade = 1f - ping
-                    drawCircle(aurora(p, 0.55f * fade), r - 0.5.dp.toPx(), style = Stroke(1.dp.toPx()))
-                },
-            )
-        }
-        Box(Modifier.size(62.dp).drawBehind { auroraRing(p, 62.dp, if (listening) 1.5.dp else 1.dp, if (listening) breath else 0.55f) })
-        Box(
-            Modifier.size(core)
-                .graphicsLayer { if (pressed) { scaleX = 0.96f; scaleY = 0.96f } }
-                .glow(if (listening) Glows.live.copy(color = Glows.live.color.copy(alpha = Glows.live.color.alpha * breath)) else Glows.talk, CircleShape)
-                .clip(CircleShape).background(if (pressed) p.accentHi else p.ink),
+            Modifier.size(52.dp).ring(p.danger.copy(alpha = 0.4f), CircleShape, listening, gap = 3.dp, width = 2.dp).clip(CircleShape).background(fill),
             contentAlignment = Alignment.Center,
         ) {
             if (listening) {
-                Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(p.accentInk))
+                Box(Modifier.size(16.dp).clip(RoundedCornerShape(4.dp)).background(Color.White))
             } else {
                 Icon(Icons.Outlined.Mic, contentDescription = null, tint = p.accentInk, modifier = Modifier.size(24.dp))
             }
@@ -149,25 +100,16 @@ fun HaloTalkKey(state: TalkState, onClick: () -> Unit, description: String, modi
     }
 }
 
-/**
- * A rounded-bar level meter in the halo. [levels] run 0 to 1; louder bars are brighter and the loudest carries a
- * soft light.
- */
+/** A rounded-bar level meter in volt. [levels] run 0 to 1; louder bars are stronger. */
 @Composable
 fun LevelMeter(levels: List<Float>, modifier: Modifier = Modifier, height: Dp = 56.dp) {
     val p = LocalPalette.current
-    val peak = levels.indices.maxByOrNull { levels[it] }
     Row(modifier.height(height), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
         levels.forEachIndexed { i, raw ->
             val v = raw.coerceIn(0f, 1f)
             val h by animateDpAsState(4.dp + (height - 4.dp) * v, tween(80), label = "level")
             val a = if (v < 0.45f) 0.35f else if (v < 0.75f) 0.6f else 1f
-            val shape = RoundedCornerShape(50)
-            Box(
-                Modifier.width(4.dp).height(h)
-                    .then(if (i == peak && v > 0f) Modifier.glow(Glows.peak, shape) else Modifier)
-                    .clip(shape).background(Brush.verticalGradient(listOf(p.accentHi.copy(alpha = a), p.accentDeep.copy(alpha = a)))),
-            )
+            Box(Modifier.width(4.dp).height(h).clip(RoundedCornerShape(50)).background(p.accent.copy(alpha = a)))
             if (i < levels.lastIndex) Spacer(Modifier.width(9.dp))
         }
     }

@@ -121,7 +121,7 @@ data class AccessGroup(
 val ACCESS_GROUPS = listOf(
     AccessGroup(
         "Screen context", "Reads the screen when you ask, so Ren can help in any app.",
-        Icons.Outlined.ScreenSearchDesktop, Tone.Cyan, emptyList(), screen = true,
+        Icons.Outlined.ScreenSearchDesktop, Tone.Info, emptyList(), screen = true,
     ),
     AccessGroup(
         "Notifications & calendar", "Checks your day, adds events, and brings you reminders and approvals.",
@@ -134,7 +134,7 @@ val ACCESS_GROUPS = listOf(
     ),
     AccessGroup(
         "Messages & actions", "Reads and sends texts, finds contacts and calls people back, asking before it sends or calls.",
-        Icons.Outlined.Forum, Tone.Cyan,
+        Icons.Outlined.Forum, Tone.Info,
         listOf(
             Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS, Manifest.permission.READ_CONTACTS,
             Manifest.permission.CALL_PHONE, Manifest.permission.READ_CALL_LOG,
@@ -205,8 +205,8 @@ private fun AnimatedContentTransitionScope<Int>.stepMotion(slide: Int, reduce: B
 private fun stepCopy(step: Int): Pair<AnnotatedString, String> = when (step) {
     1 -> buildAnnotatedString {
         append("Meet ")
-        withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append("Ren") }
-        appendHaloStop()
+        append("Ren")
+        appendVoltStop()
     } to "An AI assistant you can see, with an honest heart."
     2 -> headline("Talk or type") to "Ren's ElevenLabs agents answer you, out loud or in text."
     3 -> headline("Default assistant") to "Set Ren as your phone's assistant so it's always one press away."
@@ -215,7 +215,7 @@ private fun stepCopy(step: Int): Pair<AnnotatedString, String> = when (step) {
 
 private fun headline(text: String) = buildAnnotatedString {
     append(text)
-    appendHaloStop()
+    appendVoltStop()
 }
 
 /**
@@ -235,7 +235,7 @@ private fun StepHeading(step: Int) {
             Modifier.fillMaxWidth().semantics { heading() },
             style = Headline.copy(color = p.ink, textAlign = TextAlign.Center),
             maxLines = 1,
-            inlineContent = haloStopContent(),
+            inlineContent = voltStopContent(),
             autoSize = TextAutoSize.StepBased(minFontSize = HEADLINE_MIN, maxFontSize = Headline.fontSize, stepSize = 1.sp),
         )
         Spacer(Modifier.height(8.dp))

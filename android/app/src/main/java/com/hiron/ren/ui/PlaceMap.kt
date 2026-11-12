@@ -108,9 +108,9 @@ private fun PinBoard(pins: List<MapPin>, selected: Int?, modifier: Modifier) {
             Box(
                 Modifier.offset(x = pad + (maxWidth - pad * 2) * fx - 14.dp, y = pad + (maxHeight - pad * 2) * fy - 14.dp)
                     .size(28.dp)
-                    .then(if (on) Modifier.glow(p.accent.copy(alpha = 0.55f), 14.dp).ring(p.accent.copy(alpha = 0.55f), CircleShape, true, gap = 3.dp) else Modifier)
-                    .clip(CircleShape).background(if (on) p.ink else p.glass)
-                    .border(1.dp, if (on) p.ink else p.ink.copy(alpha = 0.55f), CircleShape),
+                    .ring(p.accent.copy(alpha = 0.4f), CircleShape, on, gap = 3.dp, width = 2.dp)
+                    .clip(CircleShape).background(if (on) p.accent else p.raised)
+                    .border(1.dp, if (on) p.accent else p.lineHi, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("${pin.n}", style = Type.labelMd.copy(fontFeatureSettings = "tnum", letterSpacing = 0.sp), color = if (on) p.accentInk else p.ink)

@@ -57,9 +57,8 @@ import com.hiron.ren.core.RenState
 private const val BRAND = "Ren"
 
 /**
- * The masthead across the top of every screen: the Ren sigil and serif wordmark with the screen's name under
- * them, and on the right one quiet status line (a dot and plain words) with, under it, how many actions wait on
- * the user.
+ * The masthead across the top of every screen: the ren. logotype with the screen's name under it, and on the right
+ * one quiet status line (a dot and plain words) with, under it, how many actions wait on the user.
  * On the robot's own screen it drops its rule so the header and the stage read as one surface.
  */
 @Composable
@@ -68,7 +67,7 @@ fun HudHeader(state: RenState, unit: String, rule: Boolean = true) {
     val status = status(state, p)
     // At large text sizes the screen's name gives the status line its room rather than being cut short.
     val named = LocalDensity.current.fontScale <= 1.15f
-    Column(Modifier.fillMaxWidth().background(p.bg).statusBarsPadding()) {
+    Column(Modifier.fillMaxWidth().background(p.chrome).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             Column {
                 RenWordmark()
@@ -89,27 +88,34 @@ fun HudHeader(state: RenState, unit: String, rule: Boolean = true) {
     }
 }
 
-/** The brand lockup: the dot-matrix sigil at the serif's cap height, then "Ren" in Instrument Serif. Read as "Ren". */
+/**
+ * The logo: the ren. logotype as outlines, ink with a volt full stop. It is sized like text: [size] is the font size
+ * whose x-height the letters match, as in ren desktop's `RenWordmark`. Read as "Ren".
+ */
 @Composable
 internal fun RenWordmark(modifier: Modifier = Modifier, size: Float = 28f) {
     val p = LocalPalette.current
-    Row(modifier.clearAndSetSemantics { text = AnnotatedString(BRAND); heading() }, verticalAlignment = Alignment.CenterVertically) {
-        Icon(painterResource(R.drawable.ren_sigil), contentDescription = null, tint = p.accent, modifier = Modifier.size((size * 0.84f).dp))
-        Spacer(Modifier.width((size * 0.28f).dp))
-        Text(BRAND, style = Type.brand.copy(fontSize = size.sp, lineHeight = (size + 2).sp), color = p.ink, maxLines = 1)
+    val box = Modifier.size(width = (size * LOGOTYPE_WIDTH_EM).dp, height = (size * LOGOTYPE_HEIGHT_EM).dp)
+    Box(modifier.clearAndSetSemantics { text = AnnotatedString(BRAND); heading() }) {
+        Icon(painterResource(R.drawable.ren_logotype), contentDescription = null, tint = p.ink, modifier = box)
+        Icon(painterResource(R.drawable.ren_logotype_dot), contentDescription = null, tint = p.accent, modifier = box)
     }
 }
 
-/** A status pill on glass: a dot and words that settle softly when they change. */
+/** The logotype's advance box in ems (docs/design/ren-logotype.json: 1506.7 by 554 font units). */
+private const val LOGOTYPE_WIDTH_EM = 1.5067f
+private const val LOGOTYPE_HEIGHT_EM = 0.554f
+
+/** A status pill: a dot and words that settle softly when they change. */
 @Composable
-fun Capsule(text: String, color: Color, live: Boolean, modifier: Modifier = Modifier) {
+fun Capsule(text: String, color: Color, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val pill = RoundedCornerShape(50)
     Row(
-        modifier.height(32.dp).clip(pill).background(p.glass).border(1.dp, p.line, pill).padding(start = 12.dp, end = 14.dp),
+        modifier.height(32.dp).clip(pill).background(p.tile).padding(start = 12.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SignalDot(color, live = live)
+        SignalDot(color)
         Spacer(Modifier.width(8.dp))
         Odometer(text, Type.labelLg, p.ink)
     }
@@ -119,15 +125,15 @@ private data class Status(val text: String, val color: Color, val live: Boolean 
 
 private fun status(state: RenState, p: Palette): Status = when (state.activity) {
     Activity.Idle -> Status("Ready", p.ok)
-    Activity.Listening -> Status("Listening", p.rec, live = true)
-    Activity.Thinking -> Status("Thinking", p.cy, live = true)
-    Activity.Searching -> Status("Searching", p.cy, live = true)
-    Activity.Working -> Status("Working", p.cy, live = true)
-    Activity.Texting -> Status("Texting", p.cy, live = true)
-    Activity.Emailing -> Status("Emailing", p.cy, live = true)
+    Activity.Listening -> Status("Listening", p.danger, live = true)
+    Activity.Thinking -> Status("Thinking", p.accent, live = true)
+    Activity.Searching -> Status("Searching", p.accent, live = true)
+    Activity.Working -> Status("Working", p.accent, live = true)
+    Activity.Texting -> Status("Texting", p.accent, live = true)
+    Activity.Emailing -> Status("Emailing", p.accent, live = true)
     Activity.Waiting -> Status("Needs your OK", p.amb, live = true)
     Activity.Done -> Status("Done", p.ok)
-    Activity.Failed -> Status("Didn't finish", p.rec)
+    Activity.Failed -> Status("Didn't finish", p.danger)
 }
 
 /** A tab: [tag] names its test tag (after [TAB_TAG_PREFIX]) and stays the same whatever the label says. */
@@ -136,21 +142,21 @@ data class PendantTab<T>(val value: T, val label: String, val icon: ImageVector,
 const val TAB_TAG_PREFIX = "tab-"
 
 /**
- * The bottom tab bar: glass under a hairline, outlined icons and Geist labels, porcelain for the active tab and
- * grey for the rest. A short porcelain bar settles over the active tab, and a honey count shows approvals.
+ * The bottom tab bar: chrome under a hairline, outlined icons and labels, ink for the active tab and grey for the
+ * rest. A short volt bar settles over the active tab, and a signal-yellow count shows approvals.
  */
 @Composable
 fun <T> PendantTabs(tabs: List<PendantTab<T>>, selected: T, onSelect: (T) -> Unit) {
     val p = LocalPalette.current
     val haptics = LocalHapticFeedback.current
-    Column(Modifier.fillMaxWidth().background(p.glass).navigationBarsPadding()) {
+    Column(Modifier.fillMaxWidth().background(p.chrome).navigationBarsPadding()) {
         Rule(color = p.line)
         BoxWithConstraints(Modifier.fillMaxWidth().height(64.dp)) {
             val slot = maxWidth / tabs.size.coerceAtLeast(1)
             val at = tabs.indexOfFirst { it.value == selected }.coerceAtLeast(0)
             val x by animateDpAsState(slot * at, spring(dampingRatio = 0.9f, stiffness = 300f), label = "tab")
             Box(Modifier.offset { IntOffset(x.roundToPx(), 0) }.width(slot).fillMaxHeight(), contentAlignment = Alignment.TopCenter) {
-                Box(Modifier.offset(y = (-1).dp).size(width = 22.dp, height = 2.dp).clip(RoundedCornerShape(1.dp)).background(p.ink))
+                Box(Modifier.offset(y = (-1).dp).size(width = 22.dp, height = 2.dp).clip(RoundedCornerShape(1.dp)).background(p.accent))
             }
             Row(Modifier.fillMaxSize()) {
                 tabs.forEach { t ->
@@ -173,7 +179,7 @@ fun <T> PendantTabs(tabs: List<PendantTab<T>>, selected: T, onSelect: (T) -> Uni
                                             .clip(CircleShape).background(p.amb).border(1.5.dp, p.bg, CircleShape).padding(horizontal = 4.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        Text("${t.badge}", style = Type.labelSm.copy(fontFeatureSettings = "tnum"), color = p.accentInk, maxLines = 1)
+                                        Text("${t.badge}", style = Type.labelSm.copy(fontFeatureSettings = "tnum"), color = LightPalette.ink, maxLines = 1)
                                     }
                                 }
                             }
