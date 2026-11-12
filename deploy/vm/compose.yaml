@@ -98,8 +98,11 @@ services:
     restart: unless-stopped
     env_file: search.env
     mem_limit: 2g
+    volumes:
+      - search_sessions:/home/ren/sessions
 
 volumes:
+  search_sessions:
   caddy_data:
   caddy_config:
   laptop_home:

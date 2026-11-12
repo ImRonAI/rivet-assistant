@@ -9,8 +9,9 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/ImRonAI/TheBro
     && git checkout --detach "$REN_COMMIT"
 RUN bash deploy/prepare-strands.sh && pip install --no-cache-dir -r agent/api/requirements.txt
 COPY app.py /opt/ren/ren_search.py
-RUN useradd --create-home --uid 1000 ren
+# ren keeps a search's session (for its follow-up questions) under SESSION_STORAGE_DIR; compose mounts a volume there.
+RUN useradd --create-home --uid 1000 ren && install -d -o ren -g ren /home/ren/sessions
 USER 1000:1000
-ENV PYTHONPATH=/opt/ren PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/opt/ren PYTHONUNBUFFERED=1 SESSION_STORAGE_DIR=/home/ren/sessions
 EXPOSE 8200
 CMD ["python", "-m", "uvicorn", "ren_search:app", "--host", "0.0.0.0", "--port", "8200"]
