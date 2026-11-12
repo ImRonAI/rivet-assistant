@@ -20,7 +20,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -88,7 +90,9 @@ class HubLink(
                 attachUntilClosed { wait = FIRST_RETRY }
                 "The hub closed the link."
             } catch (cancelled: CancellationException) {
-                throw cancelled
+                // A socket that closes cancels the calls waiting on it; only this link's own cancellation ends the loop.
+                currentCoroutineContext().ensureActive()
+                "The hub closed the link."
             } catch (error: Exception) {
                 error.message ?: error.javaClass.simpleName
             }
