@@ -30,7 +30,7 @@ PROVIDERS: tuple[ProviderName, ...] = ("nim", "mistral", "gemini")
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
 NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
 MISTRAL_DEFAULT_MODEL = os.getenv("MISTRAL_MODEL") or "mistral-large-latest"
-GEMINI_DEFAULT_MODEL = "gemini-4-argon"
+GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-4-argon"
 
 #: ``reasoning_effort`` values of the NIM chat-completions reference for each model
 #: (https://docs.api.nvidia.com/nim/reference/z-ai-glm-5-3-flash-infer); unlisted ids take none.

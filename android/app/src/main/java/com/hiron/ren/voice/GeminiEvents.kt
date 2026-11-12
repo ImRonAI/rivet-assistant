@@ -21,6 +21,9 @@ import java.util.UUID
  */
 object GeminiEvents {
     /** The tools that run on the phone, which the chat shows as the phone's own. */
+    /** A turn the model's provider failed (`{"error": …}`, its own words after this). */
+    const val TURN_FAILED = "The agent couldn't answer: "
+
     private val PHONE = AgentTools.NAMES.toSet() + AgentTools.REQUEST_APPROVAL + SearchTools.NAMES.keys
 
     /** [state] after [event]; events the chat doesn't show leave it unchanged. */
@@ -29,6 +32,7 @@ object GeminiEvents {
         event.has("data") -> streamed(state, event.optString("data"))
         event.has("message") -> message(state, event.optJSONObject("message") ?: return state)
         event.has("stop_reason") -> ended(state, event.optJSONArray("interrupts"))
+        event.has("error") -> state.copy(lastError = TURN_FAILED + event.optString("error"), activity = Activity.Failed)
         else -> state
     }
 

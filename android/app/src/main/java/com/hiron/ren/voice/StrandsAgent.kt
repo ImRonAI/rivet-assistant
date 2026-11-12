@@ -154,7 +154,11 @@ class StrandsAgent(
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            onMain(gen) { stop() }
+            onMain(gen) {
+                stop()
+                // Anything but a normal close is the workspace ending the conversation on an error.
+                if (code != NORMAL_CLOSE) failed(ENDED_BY_WORKSPACE + reason.ifBlank { "code $code" })
+            }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -223,6 +227,8 @@ class StrandsAgent(
     companion object {
         /** The Strands service on the workspace VM, behind Caddy's bearer token. */
         const val SERVICE = "https://rivet.ron-ai.dev/gemini"
+        const val ENDED_BY_WORKSPACE = "The agents on the workspace ended the conversation: "
+        private const val NORMAL_CLOSE = 1000
         const val COULD_NOT_REACH = "Couldn't reach the agents on the workspace. Check your connection and try again."
         private const val NORMAL_CLOSURE = 1000
     }

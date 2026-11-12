@@ -59,7 +59,7 @@ from strands.vended_tools import (
     swarm,
     write,
 )
-from strands_harness import Effort, create_harness
+from strands_harness import BuiltinToolsConfig, Effort, create_harness
 from strands_harness.models import EFFORT_LEVELS
 from strands_harness.tools.programmatic_tool_caller import programmatic_tool_caller
 
@@ -81,6 +81,9 @@ PERMISSIONS = (
     "perm_create_music",
 )
 HOME = "/config/emrys-gemini"
+# The harness's built-ins for Gemini. Its native web search is Google Search grounding, which a Gemini API key on the
+# free tier is refused (429 on every request that carries it); `GEMINI_WEB_SEARCH=0` leaves it out for such a key.
+GEMINI_BUILTINS: BuiltinToolsConfig = {"web_search": os.getenv("GEMINI_WEB_SEARCH", "1") != "0"}
 
 # The ElevenLabs agents' MCP servers plus Ren's hub, unprefixed so the tool names match the prompt. The hub serves
 # the phone's tools under their own names and ren desktop's under `desktop_`, whichever of the two is attached.
@@ -216,6 +219,7 @@ async def text(
         effort=harness_effort(effort) if provider == "gemini" else "auto",
         instructions=await instructions(TEXT_AGENT, variables(websocket, text_only=True)),
         tools=[python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph, make_mcp_router(servers=SERVERS)],
+        builtin_tools=GEMINI_BUILTINS if provider == "gemini" else None,
         mcp_servers=SERVERS,
         session={"id": conversation, "dir": f"{HOME}/sessions"},
         memory={"dir": f"{HOME}/memory"},
@@ -230,16 +234,23 @@ async def text(
                     if pending
                     else said
                 )
-                async for event in agent.stream_async(prompt):
-                    if "data" in event:
-                        await websocket.send_json({"data": event["data"]})
-                    elif "message" in event:
-                        await websocket.send_json({"message": to_jsonable_python(event["message"], bytes_mode="base64")})
-                    elif "result" in event:
-                        pending = list(event["result"].interrupts or [])
-                        await websocket.send_json(
-                            {"stop_reason": event["result"].stop_reason, "interrupts": [str(interrupt.reason) for interrupt in pending]}
-                        )
+                try:
+                    async for event in agent.stream_async(prompt):
+                        if "data" in event:
+                            await websocket.send_json({"data": event["data"]})
+                        elif "message" in event:
+                            await websocket.send_json({"message": to_jsonable_python(event["message"], bytes_mode="base64")})
+                        elif "result" in event:
+                            pending = list(event["result"].interrupts or [])
+                            await websocket.send_json(
+                                {"stop_reason": event["result"].stop_reason, "interrupts": [str(interrupt.reason) for interrupt in pending]}
+                            )
+                except WebSocketDisconnect:
+                    raise
+                except Exception as error:
+                    # A turn the provider failed (no quota, a model it has retired) is told to the phone as it is,
+                    # and the conversation stays open for the next message.
+                    await websocket.send_json({"error": f"{type(error).__name__}: {error}"})
     except WebSocketDisconnect:
         pass
 

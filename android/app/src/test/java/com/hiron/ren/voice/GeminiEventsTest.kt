@@ -40,6 +40,13 @@ class GeminiEventsTest {
     }
 
     @Test
+    fun aTurnTheProviderFailsShowsItsReason() {
+        val state = replay("""{"error": "ModelThrottledException: You exceeded your current quota"}""")
+        assertEquals(Activity.Failed, state.activity)
+        assertEquals(GeminiEvents.TURN_FAILED + "ModelThrottledException: You exceeded your current quota", state.lastError)
+    }
+
+    @Test
     fun aFailedToolAndAHandoffQuestion() {
         val state = replay(
             """{"message": {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "name": "shell", "input": {}}}]}}""",
