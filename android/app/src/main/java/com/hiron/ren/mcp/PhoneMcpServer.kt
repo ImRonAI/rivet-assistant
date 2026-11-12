@@ -1,5 +1,7 @@
 package com.hiron.ren.mcp
 
+import com.hiron.ren.browser.Browser
+import com.hiron.ren.browser.SearchLevel
 import com.hiron.ren.device.ToolResult
 import io.modelcontextprotocol.kotlin.sdk.server.Server
 import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
@@ -12,12 +14,15 @@ import io.modelcontextprotocol.kotlin.sdk.types.success
 import org.json.JSONObject
 
 /**
- * Ren's phone tools as one MCP server. The device tools go to [run], the same function the client tools use;
- * `request_approval` goes to [approve] and the search tools to [search], which answer what the agent is told or why
- * the call failed. [version] is the app's version name, reported in `initialize`.
+ * Ren's phone as one MCP server: the phone tools, `request_approval`, the search tools and the browser's tools. The
+ * device tools go to [run], the same function the client tools use; `request_approval` goes to [approve] and the search
+ * tools to [search], which answer what the agent is told or why the call failed; the `browser_*` tools drive [browser].
+ * [version] is the app's version name, reported in `initialize`.
  */
 class PhoneMcpServer(
     private val version: String,
+    private val browser: Browser,
+    private val level: () -> SearchLevel,
     private val approve: suspend (JSONObject) -> Result<String>,
     private val search: suspend (String, JSONObject) -> Result<String>,
     private val run: suspend (String, JSONObject) -> ToolResult,
@@ -30,6 +35,8 @@ class PhoneMcpServer(
         PhoneTools.all.forEach { tool -> server.addTool(tool) { request -> answer(run(tool.name, input(request))) } }
         server.addTool(PhoneTools.approval) { request -> answer(approve(input(request))) }
         PhoneTools.searches.forEach { tool -> server.addTool(tool) { request -> answer(search(tool.name, input(request))) } }
+        val pages = BrowserTools(browser, level)
+        pages.tools.forEach { tool -> server.addTool(tool) { request -> pages.call(tool.name, input(request)) } }
         return server
     }
 

@@ -1,5 +1,6 @@
 package com.hiron.ren.service
 
+import com.hiron.ren.mcp.HubState
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -123,12 +124,12 @@ object Notifications {
         )
     }
 
-    /** The phone's MCP server, while it runs: where the agents reach it, or what it is waiting for. */
-    fun server(context: Context, address: String?): Notification = NotificationCompat.Builder(context, SERVER)
+    /** The link to Ren's hub, while Remote tools is on: attached, or what it is waiting for. */
+    fun hub(context: Context, state: HubState): Notification = NotificationCompat.Builder(context, SERVER)
         .setSmallIcon(R.drawable.ic_ren)
         .setColor(context.getColor(R.color.ren_accent))
-        .setContentTitle("Ren phone tools")
-        .setContentText(if (address != null) "Reachable at $address:8765" else "Turn on Tailscale so the agents can reach this phone")
+        .setContentTitle("Ren remote tools")
+        .setContentText(hubStatus(state))
         .setOngoing(true)
         .setContentIntent(openApp(context))
         .setCategory(NotificationCompat.CATEGORY_SERVICE)
@@ -190,5 +191,13 @@ object Notifications {
         }
         NotificationManagerCompat.from(context).notify(id, builder.build())
         return true
+    }
+
+    /** Where the hub link stands, in plain words. */
+    fun hubStatus(state: HubState): String = when (state) {
+        HubState.Off -> "Off"
+        HubState.Connecting -> "Connecting to Ren's hub"
+        HubState.Attached -> "Connected: Ren's agents and ren desktop can use this phone"
+        is HubState.Retrying -> "Not connected, trying again: ${state.reason}"
     }
 }

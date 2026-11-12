@@ -82,10 +82,13 @@ import com.hiron.ren.device.CarrierStyle
 import com.hiron.ren.device.RenNotificationListener
 import com.hiron.ren.device.ForwardMode
 import com.hiron.ren.device.ScreenOperator
-import com.hiron.ren.mcp.PHONE_MCP_PATH
-import com.hiron.ren.mcp.PHONE_MCP_PORT
-import com.hiron.ren.mcp.PhoneMcpService
-import com.hiron.ren.mcp.tailnetAddress
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.hiron.ren.mcp.HubLink
+import com.hiron.ren.mcp.HubService
+import com.hiron.ren.mcp.HubState
+import com.hiron.ren.service.Notifications
+import org.json.JSONObject
 import com.hiron.ren.voice.Provider
 
 /** A section's serif title. */
@@ -210,31 +213,34 @@ private fun AgentPermissions(runtime: RenRuntime, refresh: Int) {
     InfoStrip("On: Ren does it without asking. Off: it asks you first. Changes apply from the next conversation.")
 }
 
-/** The phone's MCP server: on or off, where the agents reach it over Tailscale, and its token. */
+/** The link to Ren's hub: on or off, where it stands, and whether ren desktop is on the hub too. */
 @Composable
 private fun RemoteTools(runtime: RenRuntime, refresh: Int) {
     val context = LocalContext.current
     val s = runtime.settings
-    var on by remember(refresh) { mutableStateOf(s.phoneMcpEnabled) }
-    val address = remember(refresh, on) { tailnetAddress()?.hostAddress }
+    var on by remember(refresh) { mutableStateOf(s.hubEnabled) }
+    val state by runtime.hub.state.collectAsStateWithLifecycle()
+    var desktop by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state) {
+        desktop = if (state != HubState.Attached) null else runCatching {
+            if (JSONObject(runtime.hub.call(HubLink.PEERS)).optBoolean("desktop")) "Connected" else "Not connected"
+        }.getOrElse { it.message ?: "Couldn't ask the hub" }
+    }
     RenCard(padding = PaddingValues(0.dp)) {
-        Toggle("Reachable by the agents", on, detail = if (on) "The phone tools are served over Tailscale" else "Off") { value ->
+        Toggle("Connect to Ren's hub", on, detail = if (on) Notifications.hubStatus(state) else "Off") { value ->
             on = value
-            s.phoneMcpEnabled = value
-            val service = Intent(context, PhoneMcpService::class.java)
+            s.hubEnabled = value
+            val service = Intent(context, HubService::class.java)
             if (value) ContextCompat.startForegroundService(context, service) else context.stopService(service)
         }
         RowRule()
-        Readout(
-            "Address", address?.let { "http://$it:$PHONE_MCP_PORT$PHONE_MCP_PATH" } ?: "Tailscale is off on this phone",
-            Modifier.padding(horizontal = RowInset, vertical = 14.dp), mono = true,
-        )
-        RowRule()
-        TextKey("Copy token", {
-            context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Ren phone token", s.phoneMcpToken))
-        }, Modifier.padding(horizontal = RowInset - 10.dp, vertical = 6.dp))
+        Readout("Hub", s.hubUrl.substringAfter("://"), Modifier.padding(horizontal = RowInset, vertical = 14.dp), mono = true)
+        desktop?.let {
+            RowRule()
+            Readout("ren desktop", it, Modifier.padding(horizontal = RowInset, vertical = 14.dp))
+        }
     }
-    InfoStrip("Only the workspace VM on your Tailscale network can reach the phone, with this token. Paste the token into the VM's env file.")
+    InfoStrip("While this is on, Ren's agents and ren desktop can use this phone's tools and its browser through the hub, and Ren can use ren desktop's.")
 }
 
 /** The colophon: the Ren wordmark, which build it is, who made it and where to get help. */

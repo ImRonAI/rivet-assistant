@@ -170,12 +170,12 @@
         </service>
 
         <service
-            android:name=".mcp.PhoneMcpService"
+            android:name=".mcp.HubService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Serves the owner's phone tools to the owner's own assistant agents over their private Tailscale network" />
+                android:value="Keeps the owner's phone tools available to the owner's own assistant agents and desktop browser through the owner's own server" />
         </service>
 
     </application>

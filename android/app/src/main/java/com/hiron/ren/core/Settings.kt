@@ -2,12 +2,10 @@ package com.hiron.ren.core
 
 import android.content.Context
 import com.hiron.ren.browser.SearchLevel
-import android.util.Base64
 import com.hiron.ren.BuildConfig
 import com.hiron.ren.device.CarrierStyle
 import com.hiron.ren.device.ForwardMode
 import com.hiron.ren.voice.Provider
-import java.security.SecureRandom
 import java.util.UUID
 
 /** This phone's settings, and the permissions the user granted the agents ("Always allow"). */
@@ -84,22 +82,20 @@ class Settings(context: Context) {
 
     fun setEffort(provider: Provider, effort: String) = prefs.edit().putString("effort_${provider.name}", effort).apply()
 
-    /** The bearer token for the Strands agents on the workspace VM. */
+    /** The bearer token for the workspace VM: the Strands agents, Ren's hub and Ren's search. */
     var geminiToken: String
         get() = prefs.getString("gemini_token", null) ?: BuildConfig.DEFAULT_GEMINI_TOKEN
         set(value) = prefs.edit().putString("gemini_token", value.trim()).apply()
 
-    /** The agents reach this phone's MCP server with this token; made once per install. */
-    val phoneMcpToken: String
-        get() = prefs.getString("phone_mcp_token", null) ?: newToken().also { prefs.edit().putString("phone_mcp_token", it).apply() }
+    /** Whether the phone stays attached to Ren's hub (Settings › Remote tools). */
+    var hubEnabled: Boolean
+        get() = prefs.getBoolean("hub_enabled", false)
+        set(value) = prefs.edit().putBoolean("hub_enabled", value).apply()
 
-    /** Whether the phone's MCP server runs (Settings › Remote tools). */
-    var phoneMcpEnabled: Boolean
-        get() = prefs.getBoolean("phone_mcp_enabled", false)
-        set(value) = prefs.edit().putBoolean("phone_mcp_enabled", value).apply()
-
-    private fun newToken(): String = ByteArray(32).also { SecureRandom().nextBytes(it) }
-        .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
+    /** Ren's hub on the workspace VM, as a WebSocket base. */
+    var hubUrl: String
+        get() = prefs.getString("hub_url", null) ?: DEFAULT_HUB_URL
+        set(value) = prefs.edit().putString("hub_url", value.trim()).apply()
 
     fun granted(action: PermAction): Boolean = prefs.getString(action.variable, PROMPT) == GRANTED
 
@@ -112,5 +108,8 @@ class Settings(context: Context) {
         const val GRANTED = "granted"
         const val PROMPT = "prompt"
         const val AUTO = "auto"
+
+        /** Ren's hub on the owner's workspace VM. */
+        const val DEFAULT_HUB_URL = "wss://rivet.ron-ai.dev/hub"
     }
 }

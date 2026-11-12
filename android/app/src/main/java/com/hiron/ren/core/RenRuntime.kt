@@ -12,8 +12,9 @@ import com.hiron.ren.device.RenCallScreening
 import com.hiron.ren.device.ReminderStore
 import com.hiron.ren.device.ReminderStoreFile
 import com.hiron.ren.device.Reminders
+import com.hiron.ren.mcp.HubLink
 import com.hiron.ren.mcp.PhoneMcpServer
-import com.hiron.ren.mcp.PhoneMcpService
+import com.hiron.ren.mcp.HubService
 import com.hiron.ren.service.Notifications
 import com.hiron.ren.ui.ImageLoader
 import com.hiron.ren.voice.AgentTools
@@ -45,7 +46,7 @@ class RenApp : Application() {
         super.onCreate()
         Notifications.createChannels(this)
         runtime = RenRuntime(this)
-        if (runtime.settings.phoneMcpEnabled) ContextCompat.startForegroundService(this, Intent(this, PhoneMcpService::class.java))
+        if (runtime.settings.hubEnabled) ContextCompat.startForegroundService(this, Intent(this, HubService::class.java))
         RenWidgets.follow(this, runtime)
     }
 }
@@ -130,13 +131,18 @@ class RenRuntime(private val app: Context) {
         settings.setEffort(provider, effort)
     }
 
-    /** The same phone tools, approvals and searches, for agents that reach the phone over MCP ([PhoneMcpService]). */
+    /** The phone tools, approvals, searches and the browser's tools as an MCP server, served through Ren's hub ([hub]). */
     val phoneServer = PhoneMcpServer(
         BuildConfig.VERSION_NAME,
+        browser,
+        level = { settings.searchLevel },
         approve = { input -> AgentTools.askApproval(input.opt("action_type") as? String, input.opt("details") as? String, ::approve) },
         search = { name, input -> SearchTools.call(name, PhoneMcpServer.parameters(input), search::search, ::update) },
         run = tools::run,
     )
+
+    /** The phone's link to Ren's hub, where it serves [phoneServer] and reaches ren desktop. */
+    val hub = HubLink(scope, { settings.hubUrl }, { settings.geminiToken }, BuildConfig.VERSION_NAME) { phoneServer.build() }
 
     init {
         RenCallScreening.onIncoming = { number -> note("call", "Incoming call from ${number.ifBlank { "unknown number" }}") }

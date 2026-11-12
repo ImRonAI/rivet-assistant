@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.MutableContextWrapper
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.os.Environment
 import android.os.Message
@@ -25,12 +26,15 @@ import android.webkit.WebView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.util.UUID
+import kotlin.coroutines.resume
 
 /** One tab as the chrome draws it. [url] is what the address bar holds: a web address or one of Ren's `ren://` pages. */
 data class BrowserTab(
@@ -193,6 +197,23 @@ class Browser(private val context: Context, private val store: BrowserStore) {
         fullscreen.value = null
     }
 
+    /**
+     * Runs [script] in the tab's page and returns what it evaluates to, as the JSON the WebView hands back. Null when
+     * the tab has no page (it is on home).
+     */
+    suspend fun evaluate(id: String, script: String): String? {
+        val view = shown(id) ?: return null
+        return suspendCancellableCoroutine { answer -> view.evaluateJavascript(script) { answer.resume(it) } }
+    }
+
+    /** The tab's page as it is drawn now, as a PNG; null when the tab has no page or it isn't laid out on screen. */
+    fun capture(id: String): ByteArray? {
+        val view = shown(id)?.takeIf { it.width > 0 && it.height > 0 } ?: return null
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        return ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    }
+
     /** Pauses or resumes every page's timers and media with the app. */
     fun visible(visible: Boolean) {
         views.values.forEach { if (visible) it.onResume() else it.onPause() }
@@ -248,6 +269,8 @@ class Browser(private val context: Context, private val store: BrowserStore) {
         setDownloadListener { url, userAgent, disposition, mime, bytes ->
             val name = URLUtil.guessFileName(url, disposition, mime)
             downloadRequest.value = DownloadRequest(url, name, Uri.parse(url).host.orEmpty(), mime, bytes, userAgent)
+            // A download leaves the page where it was.
+            update(id) { it.copy(loading = false) }
         }
     }
 
@@ -258,7 +281,11 @@ class Browser(private val context: Context, private val store: BrowserStore) {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url
             return when (url.scheme) {
-                "http", "https" -> false
+                "http", "https" -> {
+                    // The earliest sign of a navigation: the tab is loading from the tap, not from the first response.
+                    if (request.isForMainFrame) update(id) { it.copy(loading = true, progress = 0) }
+                    false
+                }
                 "ren" -> {
                     if (request.isForMainFrame) load(id, url.toString())
                     true
@@ -293,7 +320,7 @@ class Browser(private val context: Context, private val store: BrowserStore) {
     }
 
     private inner class Chrome(private val id: String) : WebChromeClient() {
-        override fun onProgressChanged(view: WebView, newProgress: Int) = update(id) { it.copy(progress = newProgress) }
+        override fun onProgressChanged(view: WebView, newProgress: Int) = update(id) { it.copy(progress = newProgress, loading = it.loading && newProgress < 100) }
 
         override fun onReceivedTitle(view: WebView, title: String?) = sync(id, view)
 
