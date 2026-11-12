@@ -9,11 +9,14 @@ side serves at the moment and nothing is copied or cached.
 The phone's tools keep their own names (``sms_send``, ``browser_navigate``), the names the agents' prompts use; the
 desktop's are under ``desktop_``. ``hub_peers`` says which sides are attached. Caddy puts the hub at
 ``https://rivet.ron-ai.dev/hub/`` behind the bearer token; the agents on the VM reach it at ``http://hub:8300/mcp``.
+
+``/agents/mcp`` is the same hub for the ElevenLabs agents, which already run the phone's own tools as client tools on
+the phone: it serves what they lack, the phone's browser (``browser_*``) and ren desktop (``desktop_*``).
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Literal, Unpack, get_args
 
@@ -25,6 +28,9 @@ from fastmcp import Client, FastMCP
 from fastmcp.client.transports import ClientTransport, FastMCPTransport
 from fastmcp.client.transports.base import SessionKwargs
 from fastmcp.server.providers.proxy import ProxyProvider
+from fastmcp.server.transforms import GetToolNext, Transform
+from fastmcp.tools.base import Tool
+from fastmcp.utilities.versions import VersionSpec
 from mcp import ClientSession
 from mcp.server.websocket import websocket_server
 from mcp.shared.message import SessionMessage
@@ -80,14 +86,41 @@ def session(peer: Peer) -> Client[Attached] | Client[FastMCPTransport]:
     return live if live is not None else Client(ABSENT[peer])
 
 
-hub.add_provider(ProxyProvider(lambda: session("phone"), cache_ttl=0))
-hub.add_provider(ProxyProvider(lambda: session("desktop"), cache_ttl=0), namespace="desktop")
+class Only(Transform):
+    """Keeps the tools whose names start with a prefix; the others are neither listed nor callable."""
+
+    def __init__(self, prefix: str) -> None:
+        self.prefix = prefix
+
+    async def list_tools(self, tools: Sequence[Tool]) -> Sequence[Tool]:
+        return [tool for tool in tools if tool.name.startswith(self.prefix)]
+
+    async def get_tool(self, name: str, call_next: GetToolNext, *, version: VersionSpec | None = None) -> Tool | None:
+        return await call_next(name, version=version) if name.startswith(self.prefix) else None
 
 
-@hub.tool(annotations={"readOnlyHint": True})
 def hub_peers() -> dict[Peer, bool]:
     """Which of Ren's sides are attached to the hub right now: the phone and ren desktop."""
     return {peer: peer in attached for peer in PEERS}
+
+
+hub.add_provider(ProxyProvider(lambda: session("phone"), cache_ttl=0))
+hub.add_provider(ProxyProvider(lambda: session("desktop"), cache_ttl=0), namespace="desktop")
+hub.tool(hub_peers, annotations={"readOnlyHint": True})
+
+#: The hub as the ElevenLabs agents see it: the phone's browser and ren desktop.
+agents: FastMCP[None] = FastMCP(
+    "ren-hub",
+    instructions=(
+        "Ren's browsers. `browser_*` tools drive the browser in the ren app on the phone; tools under `desktop_` run "
+        "in ren desktop (its browser and Ren's agent there). Call hub_peers to see which are attached."
+    ),
+)
+phone_browser = ProxyProvider(lambda: session("phone"), cache_ttl=0)
+phone_browser.add_transform(Only("browser_"))
+agents.add_provider(phone_browser)
+agents.add_provider(ProxyProvider(lambda: session("desktop"), cache_ttl=0), namespace="desktop")
+agents.tool(hub_peers, annotations={"readOnlyHint": True})
 
 
 async def attach(websocket: WebSocket) -> None:
@@ -111,7 +144,19 @@ async def attach(websocket: WebSocket) -> None:
 
 
 mcp_app = hub.http_app(path="/mcp")
-app = Starlette(routes=[WebSocketRoute("/attach/{peer}", attach), Mount("/", app=mcp_app)], lifespan=mcp_app.lifespan)
+agents_app = agents.http_app(path="/mcp")
+
+
+@asynccontextmanager
+async def lifespan(app: Starlette) -> AsyncIterator[None]:
+    async with mcp_app.lifespan(app), agents_app.lifespan(app):
+        yield
+
+
+app = Starlette(
+    routes=[WebSocketRoute("/attach/{peer}", attach), Mount("/agents", app=agents_app), Mount("/", app=mcp_app)],
+    lifespan=lifespan,
+)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8300)
