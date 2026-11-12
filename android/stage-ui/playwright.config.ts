@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test"
 
-// The real robot page (android/app/src/main/assets/emrys/index.html, with the built stage layer) served over HTTP at
+// The real robot page (android/app/src/main/assets/ren/index.html, with the built stage layer) served over HTTP at
 // the path the app's WebView uses. PLAYWRIGHT_CHROMIUM_EXECUTABLE points at a local Chromium when Playwright's own
 // browser isn't installed.
 const PORT = Number(process.env["STAGE_PORT"] ?? 8772)
@@ -22,7 +22,7 @@ export default defineConfig({
   },
   webServer: {
     command: `python3 -m http.server ${PORT} --bind 127.0.0.1 --directory ../app/src/main`,
-    url: `${BASE_URL}/assets/emrys/index.html`,
+    url: `${BASE_URL}/assets/ren/index.html`,
     reuseExistingServer: true,
   },
 })

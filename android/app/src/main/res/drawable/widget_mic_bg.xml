@@ -16,5 +16,5 @@
             </gradient>
         </aapt:attr>
     </path>
-    <path android:fillColor="@color/emrys_ink" android:pathData="M4.5,24a19.5,19.5 0 1 0 39,0a19.5,19.5 0 1 0 -39,0z" />
+    <path android:fillColor="@color/ren_ink" android:pathData="M4.5,24a19.5,19.5 0 1 0 39,0a19.5,19.5 0 1 0 -39,0z" />
 </vector>

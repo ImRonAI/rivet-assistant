@@ -5,7 +5,7 @@ import { edge, loop, paint } from "./raster"
 
 /**
  * The armor's light: the gauntlets (3×11 forearm plates, column 0 at the wrist) and the mouth (3×15 across the
- * lower visor), after docs/design/EMRYS_MATRIX.md §4–5.
+ * lower visor), after docs/design/REN_MATRIX.md §4–5.
  */
 export const GAUNTLET = { rows: 3, cols: 11 }
 export const MOUTH = { rows: 3, cols: 15 }
@@ -33,7 +33,7 @@ function chase(period: number, side: number, peak: number): Program {
   )
 }
 
-/** The gauntlet for a state: an ambient chase, quicker while Emrys works, a slow breath while it waits. */
+/** The gauntlet for a state: an ambient chase, quicker while Ren works, a slow breath while it waits. */
 export function gauntletFor(state: string, side: 0 | 1): Program {
   if (state === "waiting")
     return programs(`gauntlet-wait${side}`, () =>

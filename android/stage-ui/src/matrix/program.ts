@@ -14,7 +14,7 @@ export type Program = {
   then?: Program
 }
 
-/** What the live shows read from the ticker (ticker.ts): Emrys's speech as it happens. */
+/** What the live shows read from the ticker (ticker.ts): Ren's speech as it happens. */
 export type Tick = {
   /** The speech envelope, 0..1: the agent's audio level while it speaks, else how open the viseme is. */
   env: number

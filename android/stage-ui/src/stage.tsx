@@ -7,9 +7,9 @@ import { Halo, hasWebGL2 } from "@/halo"
 import { Panel } from "@/matrix/panel"
 import { emblemShow, floorShow, gauntletShow, mouthShow, type Moment } from "@/matrix/show"
 import { SlotPortal, SLOTS, slotBox, useSlotRoots, useSlotStates, type SlotName } from "@/matrix/slots"
-import { useDarkClass, usePageVisible, useReducedMotion, useStageInfo, WORKING, type StageInfo } from "@/emrys"
+import { useDarkClass, usePageVisible, useReducedMotion, useStageInfo, WORKING, type StageInfo } from "@/ren"
 
-/** How long the boot show runs on a freshly loaded page (docs/design/EMRYS_MATRIX.md §5). */
+/** How long the boot show runs on a freshly loaded page (docs/design/REN_MATRIX.md §5). */
 const BOOT_MS = 2200
 const CALM: Partial<Record<string, string>> = {
   idle: "Ready",
@@ -28,13 +28,13 @@ const words = (info: StageInfo) => (info.talking ? "Speaking" : (WORKING[info.st
  */
 function SharedGradient() {
   return (
-    <div aria-hidden="true" className="emrys-matrix pointer-events-none absolute top-0 left-0 size-px overflow-hidden opacity-0">
+    <div aria-hidden="true" className="ren-matrix pointer-events-none absolute top-0 left-0 size-px overflow-hidden opacity-0">
       <Matrix rows={1} cols={1} pattern={[[0]]} ariaLabel="" />
     </div>
   )
 }
 
-/** The band's 7×7 glyph, beside Emrys on a squeezed stage. */
+/** The band's 7×7 glyph, beside Ren on a squeezed stage. */
 function BandGlyph({ info, moment, paused }: { info: StageInfo; moment: Moment; paused: boolean }) {
   const glyph = Math.round(Math.min(64, Math.max(28, info.height * 0.5)))
   const gap = glyph >= 42 ? 2 : 1
@@ -43,18 +43,18 @@ function BandGlyph({ info, moment, paused }: { info: StageInfo; moment: Moment; 
   const left = Math.min(info.width - glyph - 12, x)
   return (
     <div
-      data-emrys="band"
+      data-ren="band"
       data-glyph={moment.talking ? "speaking" : moment.state}
-      className="emrys-matrix absolute"
+      className="ren-matrix absolute"
       style={{ left, top: (info.height - glyph) / 2, width: glyph, height: glyph }}
     >
-      <Panel rows={7} cols={7} size={size} gap={gap} show={emblemShow(moment, 7)} wipes paused={paused} label={`Emrys: ${words(info)}`} brightness={1} />
+      <Panel rows={7} cols={7} size={size} gap={gap} show={emblemShow(moment, 7)} wipes paused={paused} label={`Ren: ${words(info)}`} brightness={1} />
     </div>
   )
 }
 
 /**
- * The ElevenLabs UI layer on the robot stage: the Orb as a backlight behind Emrys (in `back`, the stage's first child,
+ * The ElevenLabs UI layer on the robot stage: the Orb as a backlight behind Ren (in `back`, the stage's first child,
  * under its svg), the caption and the band glyph over it (in `front`, the stage's last child), and the Matrix in the
  * robot page's armor and floor slots.
  */
@@ -100,11 +100,11 @@ export function StageLayer({ stage, front }: { stage: HTMLElement; front: HTMLEl
     <>
       <SharedGradient />
       {halo && <Halo info={info} />}
-      {slot("floor", floorShow(moment), false, "Emrys's light floor")}
-      {slot("chest", emblemShow(moment, 13), true, `Emrys's emblem: ${words(info)}`)}
-      {slot("mouth", mouthShow(moment), false, "Emrys's voice")}
-      {slot("gauntlet-l", gauntletShow(moment, 0), true, "Emrys's left gauntlet")}
-      {slot("gauntlet-r", gauntletShow(moment, 1), true, "Emrys's right gauntlet")}
+      {slot("floor", floorShow(moment), false, "Ren's light floor")}
+      {slot("chest", emblemShow(moment, 13), true, `Ren's emblem: ${words(info)}`)}
+      {slot("mouth", mouthShow(moment), false, "Ren's voice")}
+      {slot("gauntlet-l", gauntletShow(moment, 0), true, "Ren's left gauntlet")}
+      {slot("gauntlet-r", gauntletShow(moment, 1), true, "Ren's right gauntlet")}
       {createPortal(
         <>
           <Caption info={info} reduced={reduced} />

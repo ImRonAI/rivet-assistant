@@ -19,14 +19,14 @@ export default defineConfig({
   },
   publicDir: false,
   build: {
-    outDir: path.resolve(__dirname, "../app/src/main/assets/emrys/vendor"),
+    outDir: path.resolve(__dirname, "../app/src/main/assets/ren/vendor"),
     emptyOutDir: false,
     target: "es2022",
     assetsInlineLimit: 0,
     sourcemap: false,
     lib: {
       entry: path.resolve(__dirname, "src/main.tsx"),
-      name: "EmrysStage",
+      name: "RenStage",
       formats: ["iife"],
       fileName: () => "stage-ui.js",
       cssFileName: "stage-ui",

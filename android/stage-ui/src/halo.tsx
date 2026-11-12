@@ -1,9 +1,9 @@
 import { Component, Suspense, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { Orb, type AgentState } from "@/components/ui/orb"
-import { readSpeech, WORKING, type Mood, type StageInfo } from "@/emrys"
+import { readSpeech, WORKING, type Mood, type StageInfo } from "@/ren"
 
-/** The Orb's two ramp colours per mood (docs/design/EMRYS_DESIGN.md §3): aurora at rest and while Emrys speaks. */
+/** The Orb's two ramp colours per mood (docs/design/REN_DESIGN.md §3): aurora at rest and while Ren speaks. */
 const AURORA: [string, string] = ["#CDD5FF", "#B7C2FF"]
 const MOOD_COLORS: Readonly<Record<Mood, [string, string]>> = {
   cy: ["#8FDBE8", "#C3EBF2"],
@@ -16,7 +16,7 @@ export function haloColors(info: StageInfo): [string, string] {
   return info.talking || !info.mood ? AURORA : MOOD_COLORS[info.mood]
 }
 
-/** The Orb's agentState for what Emrys is doing: speech wins, then a live mic, then any kind of work. */
+/** The Orb's agentState for what Ren is doing: speech wins, then a live mic, then any kind of work. */
 export function haloState(info: StageInfo): AgentState {
   if (info.talking) return "talking"
   if (info.state === "listening" || info.turn === "listening") return "listening"
@@ -58,7 +58,7 @@ const SEED = 4096
 const FEATHER = "radial-gradient(closest-side, #000 18%, transparent 82%)"
 
 /**
- * The hero's backlight: an ElevenLabs Orb centred on Emrys's chest and head, large, soft and faint so the robot and
+ * The hero's backlight: an ElevenLabs Orb centred on Ren's chest and head, large, soft and faint so the robot and
  * its Matrix read in front of it. While an ElevenLabs voice agent speaks, its real audio level drives it
  * (`volumeMode="manual"`); otherwise the Orb animates itself from agentState, as the component documents.
  */
@@ -88,7 +88,7 @@ export function Halo({ info }: { info: StageInfo }) {
   const cy = a ? a.y + height * 0.32 : info.height * 0.42
   return (
     <div
-      data-emrys="halo"
+      data-ren="halo"
       data-agent-state={haloState(info) ?? "idle"}
       data-volume={real ? "manual" : "auto"}
       data-colors={colors.join(" ")}

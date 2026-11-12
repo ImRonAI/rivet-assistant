@@ -1,5 +1,5 @@
 import type { Frame } from "@/components/ui/matrix"
-import sigilSource from "../../../../docs/design/emrys-sigil.json"
+import sigilSource from "../../../../docs/design/ren-sigil.json"
 
 import { anim, cache, once, still, type Program } from "./program"
 import {
@@ -19,14 +19,14 @@ import {
 } from "./raster"
 
 /**
- * The light language on the chest emblem (13×13) and the mini band (7×7): the Emrys sigil and one glyph per state,
- * after docs/design/EMRYS_MATRIX.md §4. Geometry is in cell units so each glyph draws at both sizes.
+ * The light language on the chest emblem (13×13) and the mini band (7×7): the Ren sigil and one glyph per state,
+ * after docs/design/REN_MATRIX.md §4. Geometry is in cell units so each glyph draws at both sizes.
  */
 
 const programs = cache<Program>()
 const levelSets = cache<Frame[]>()
 
-/** The seal: an E in a halo ring of dots, its middle bar ending in a half-lit spark (docs/design/emrys-sigil.json). */
+/** The seal: an E in a halo ring of dots, its middle bar ending in a half-lit spark (docs/design/ren-sigil.json). */
 export const SIGIL_13: Frame = sigilSource.frame
 /** The same seal for the band's 7×7 grid. */
 export const SIGIL_7: Frame = [
@@ -316,7 +316,7 @@ export function restingGlyph(state: string, n: number): Program {
   })
 }
 
-/** The chest's radial VU while Emrys speaks: the speech envelope, 0..1, as a disc growing from the centre. */
+/** The chest's radial VU while Ren speaks: the speech envelope, 0..1, as a disc growing from the centre. */
 export function radialVu(n: number, env: number): Frame {
   const levels = levelSets(`vu${n}`, () =>
     Array.from({ length: 9 }, (_, l) =>

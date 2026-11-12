@@ -7,7 +7,7 @@ import { cache, once, still, type Live, type Program, type Show, type Tick } fro
 import { nth } from "./raster"
 
 /**
- * Which show each slot plays (docs/design/EMRYS_MATRIX.md §4–6): the boot show first, then speech, then the state's
+ * Which show each slot plays (docs/design/REN_MATRIX.md §4–6): the boot show first, then speech, then the state's
  * own glyph. Reduced motion keeps every slot on its resting glyph; lowFx keeps the chest still and drops the floor and
  * gauntlets; the squeezed stage has only the band glyph (and a still chest).
  */

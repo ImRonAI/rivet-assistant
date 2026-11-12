@@ -142,7 +142,7 @@ function Steps({ steps }: { steps: Step[] }) {
   )
 }
 
-/** The turn's reasoning summary, folded under how long Emrys thought. The text renders like a reply. */
+/** The turn's reasoning summary, folded under how long Ren thought. The text renders like a reply. */
 function Thinking({ reasoning }: { reasoning: Reasoning }) {
   return (
     <Collapsible className="not-prose mb-4">

@@ -1,8 +1,8 @@
-/* Emrys app bridge. Loaded after the robot page's own script, so it shares its top-level bindings
+/* Ren app bridge. Loaded after the robot page's own script, so it shares its top-level bindings
    (play, D, time, cam, stage, LETTER_VIS, and for the stage layer BONES, BN, mPt, proj, body, lowFx).
-   The app drives it with window.emrys.{state,mouth,quiet,viseme,theme,focus,voice,level}; the page reports back to
-   the app through the EmrysHost web message listener the app installs. The stage layer (android/stage-ui, loaded
-   after this script) reads window.emrys.stageInfo() and window.emrys.speech(), and hears an `emrys:stage` event on
+   The app drives it with window.ren.{state,mouth,quiet,viseme,theme,focus,voice,level}; the page reports back to
+   the app through the RenHost web message listener the app installs. The stage layer (android/stage-ui, loaded
+   after this script) reads window.ren.stageInfo() and window.ren.speech(), and hears an `ren:stage` event on
    document whenever stageInfo changes. */
 (() => {
   /** @type {Record<string, string>} */
@@ -14,10 +14,10 @@
 
   /** @param {{ type: string }} message */
   function post(message) {
-    try { window.EmrysHost && window.EmrysHost.postMessage(JSON.stringify(message)); } catch (e) { }
+    try { window.RenHost && window.RenHost.postMessage(JSON.stringify(message)); } catch (e) { }
   }
 
-  /* the stage glows behind Emrys in the Noir status colour of what it is doing: glacier working, honey waiting on
+  /* the stage glows behind Ren in the Noir status colour of what it is doing: glacier working, honey waiting on
      the user, sage done, coral listening (a live mic) or stuck */
   /** @type {Record<string, Mood>} */
   const MOOD = {
@@ -54,7 +54,7 @@
   /* What is being said, for the stage layer: the viseme on the mouth now and its weight (0 between letters), and
      whether words are being spoken, from the first word until the app says quiet. */
   const SPEECH = { viseme: 'sil', weight: 0, mouthing: false };
-  const pageViseme = window.emrys.viseme;
+  const pageViseme = window.ren.viseme;
   /** @param {string} key @param {number} value */
   function viseme(key, value) {
     pageViseme(key, value);
@@ -70,7 +70,7 @@
   let mouthKey = null;
   function quiet() {
     clearInterval(mouthTimer);
-    if (mouthKey) window.emrys.viseme(mouthKey, 0);
+    if (mouthKey) window.ren.viseme(mouthKey, 0);
     mouthKey = null;
   }
   /** @param {string} word @param {number} seconds */
@@ -82,10 +82,10 @@
     const step = Math.max(40, ((seconds > 0 ? seconds : letters.length / 13) * 1000) / letters.length);
     let i = 0;
     mouthTimer = setInterval(() => {
-      if (mouthKey) window.emrys.viseme(mouthKey, 0);
+      if (mouthKey) window.ren.viseme(mouthKey, 0);
       if (i >= letters.length) { clearInterval(mouthTimer); mouthKey = null; return; }
       mouthKey = LETTER_VIS[letters.charAt(i++)] || 'nn';
-      window.emrys.viseme(mouthKey, 0.85);
+      window.ren.viseme(mouthKey, 0.85);
     }, step);
     publish();
   }
@@ -129,7 +129,7 @@
      back to at rest (a lower one lifts the robot in the frame); a double tap resets the view to zoom 1 and the
      framing is put back after it. */
   const FOCUS = { stage: { zoom: 1, ty: 1.1 }, card: { zoom: 1.3, ty: .86 }, greet: { zoom: 1.25, ty: .5 } };
-  /* a short greeting stage (large text, small phones) stands Emrys further back so its feet stay above the words */
+  /* a short greeting stage (large text, small phones) stands Ren further back so its feet stay above the words */
   const GREET_SHORT = { zoom: 1.5, ty: .34 };
   /** @type {keyof typeof FOCUS} */
   let focusMode = 'stage';
@@ -150,7 +150,7 @@
   window.addEventListener('resize', () => { if (focusMode === 'greet') focus(focusMode); });
   stage.addEventListener('dblclick', () => { cam.zoom = focusZoom; cam.dirty = true; });
 
-  /* Where Emrys stands on the stage, in stage pixels: the head (just above the head bone) and the feet, through the
+  /* Where Ren stands on the stage, in stage pixels: the head (just above the head bone) and the feet, through the
      page's own camera. Null when the page has no such skeleton. */
   const view = document.getElementById('view');
   const svg = view instanceof SVGSVGElement ? view : null;
@@ -182,8 +182,8 @@
   }
   let info = stageInfo();
   let infoKey = '';
-  /* What the stage layer draws from, published as an `emrys:stage` event when any of it changes; the anchor moves
-     with Emrys and the page can drop to lowFx on its own, so it is also looked at four times a second. */
+  /* What the stage layer draws from, published as an `ren:stage` event when any of it changes; the anchor moves
+     with Ren and the page can drop to lowFx on its own, so it is also looked at four times a second. */
   function publish() {
     const next = stageInfo();
     if (next.talking) html.setAttribute('data-voice', 'speaking');
@@ -192,11 +192,11 @@
     if (key === infoKey) return;
     infoKey = key;
     info = next;
-    document.dispatchEvent(new Event('emrys:stage'));
+    document.dispatchEvent(new Event('ren:stage'));
   }
   setInterval(publish, 250);
 
-  Object.assign(window.emrys, { state, mouth, quiet: hush, viseme, theme, focus, voice, level, speech, stageInfo: () => info });
+  Object.assign(window.ren, { state, mouth, quiet: hush, viseme, theme, focus, voice, level, speech, stageInfo: () => info });
   publish();
   post({ type: 'ready' });
 })();

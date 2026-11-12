@@ -7,20 +7,20 @@ plugins {
 }
 
 android {
-    namespace = "com.hiron.emrys"
+    namespace = "com.hiron.ren"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.hiron.emrys"
+        applicationId = "com.hiron.ren"
         minSdk = 29
         targetSdk = 36
         // Phones only: the ElevenLabs SDK's WebRTC library is ~12 MB per ABI, and the x86/armv7 copies were 34 MB.
         ndk { abiFilters += "arm64-v8a" }
         versionCode = 13
         versionName = "0.5.0"
-        // Ready-to-use defaults from emrys.local.properties (never committed); they stay editable in Settings.
+        // Ready-to-use defaults from ren.local.properties (never committed); they stay editable in Settings.
         val local = Properties().apply {
-            rootProject.file("emrys.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+            rootProject.file("ren.local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         fun baked(key: String) = "\"" + local.getProperty(key, "").replace("\\", "\\\\").replace("\"", "\\\"") + "\""
         buildConfigField("String", "DEFAULT_ANSWERING_NUMBER", baked("answeringNumber"))
@@ -52,7 +52,7 @@ android {
         unitTests.all {
             // Real rendering for the screen tests' screenshots.
             it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
-            it.systemProperty("emrys.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
+            it.systemProperty("ren.screenshots", rootProject.layout.buildDirectory.dir("screens").get().asFile.path)
         }
     }
     lint {

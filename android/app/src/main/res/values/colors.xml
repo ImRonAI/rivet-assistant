@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Emrys's Noir palette for the home-screen widgets, which draw with RemoteViews and can't use the Compose theme. -->
+<!-- Ren's Noir palette for the home-screen widgets, which draw with RemoteViews and can't use the Compose theme. -->
 <resources>
-    <!-- emrys_bg lives in themes.xml with the window background. -->
-    <color name="emrys_ink">#FFF3F2EE</color>
-    <color name="emrys_ink2">#FF9E9DA4</color>
-    <color name="emrys_accent">#FFB7C2FF</color>
-    <color name="emrys_accent_ink">#FF0A0A0C</color>
-    <color name="emrys_ok">#FF97D4A6</color>
-    <color name="emrys_amber">#FFE8C07C</color>
+    <!-- ren_bg lives in themes.xml with the window background. -->
+    <color name="ren_ink">#FFF3F2EE</color>
+    <color name="ren_ink2">#FF9E9DA4</color>
+    <color name="ren_accent">#FFB7C2FF</color>
+    <color name="ren_accent_ink">#FF0A0A0C</color>
+    <color name="ren_ok">#FF97D4A6</color>
+    <color name="ren_amber">#FFE8C07C</color>
     <!-- Glass: the search bar's fill and its hairline. -->
-    <color name="emrys_glass">#E6141417</color>
-    <color name="emrys_edge">#17FFFFFF</color>
+    <color name="ren_glass">#E6141417</color>
+    <color name="ren_edge">#17FFFFFF</color>
 </resources>

@@ -31,5 +31,5 @@ jobs:
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: emrys-apk
+          name: ren-apk
           path: android/app/build/outputs/apk/release/app-release.apk

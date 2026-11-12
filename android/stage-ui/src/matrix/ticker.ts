@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from "react"
 
 import type { Frame } from "@/components/ui/matrix"
 
-import { readSpeech } from "@/emrys"
+import { readSpeech } from "@/ren"
 
 import { OPEN, visemeName } from "./armor"
 import type { Live, Tick } from "./program"

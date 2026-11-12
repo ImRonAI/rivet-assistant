@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Emrys</string>
-    <string name="operator_stop">■  Stop Emrys</string>
-    <string name="operator_label">Emrys app operator</string>
-    <string name="operator_description">Lets Emrys read the screen and tap, type and scroll in other apps when you ask it to. Emrys never reads or types passwords, shows a Stop button while it works, and asks you before anything that sends, pays or deletes.</string>
-    <string name="widget_ask">Ask Emrys</string>
-    <string name="widget_talk">Talk to Emrys</string>
-    <string name="widget_mark">Emrys</string>
+    <string name="app_name">Ren</string>
+    <string name="operator_stop">■  Stop Ren</string>
+    <string name="operator_label">Ren app operator</string>
+    <string name="operator_description">Lets Ren read the screen and tap, type and scroll in other apps when you ask it to. Ren never reads or types passwords, shows a Stop button while it works, and asks you before anything that sends, pays or deletes.</string>
+    <string name="widget_ask">Ask Ren</string>
+    <string name="widget_talk">Talk to Ren</string>
+    <string name="widget_mark">Ren</string>
     <string name="widget_unit">Your assistant</string>
-    <string name="widget_waiting">Ask Emrys for anything: your day, your texts, a call back.</string>
+    <string name="widget_waiting">Ask Ren for anything: your day, your texts, a call back.</string>
     <plurals name="widget_needs_ok">
-        <item quantity="one">Emrys is waiting on your OK for %d action. Tap to review it.</item>
-        <item quantity="other">Emrys is waiting on your OK for %d actions. Tap to review them.</item>
+        <item quantity="one">Ren is waiting on your OK for %d action. Tap to review it.</item>
+        <item quantity="other">Ren is waiting on your OK for %d actions. Tap to review them.</item>
     </plurals>
     <string name="widget_key_catchup">Catch up</string>
     <string name="widget_key_myday">My day</string>
     <string name="widget_key_texts">Texts</string>
     <string name="widget_key_calls">Calls</string>
-    <string name="widget_search_label">Emrys bar</string>
-    <string name="widget_search_description">Ask Emrys, or tap the voice key to talk.</string>
-    <string name="widget_panel_label">Emrys panel</string>
-    <string name="widget_panel_description">Emrys\'s status and latest reply, the ask bar and quick keys.</string>
-    <string name="shortcut_talk">Talk to Emrys</string>
-    <string name="shortcut_type">Ask Emrys</string>
+    <string name="widget_search_label">Ren bar</string>
+    <string name="widget_search_description">Ask Ren, or tap the voice key to talk.</string>
+    <string name="widget_panel_label">Ren panel</string>
+    <string name="widget_panel_description">Ren\'s status and latest reply, the ask bar and quick keys.</string>
+    <string name="shortcut_talk">Talk to Ren</string>
+    <string name="shortcut_type">Ask Ren</string>
     <string name="shortcut_catchup">Catch me up</string>
     <string name="shortcut_myday">My day</string>
 </resources>

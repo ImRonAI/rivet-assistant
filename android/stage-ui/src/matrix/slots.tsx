@@ -1,15 +1,15 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
-import { readSlots, type SlotState } from "@/emrys"
+import { readSlots, type SlotState } from "@/ren"
 
 export type SlotName = "chest" | "mouth" | "gauntlet-l" | "gauntlet-r" | "floor"
 type Slot = { id: string; rows: number; cols: number; width: number; height: number; gap: number; round: boolean; brightness: number }
 
 /**
- * The robot page's slots (docs/design/EMRYS_MATRIX.md §3), each a `.emrys-slot-root` with a fixed local box.
+ * The robot page's slots (docs/design/REN_MATRIX.md §3), each a `.ren-slot-root` with a fixed local box.
  * `brightness` is the Matrix's own multiplier: the floor's quiet patterns are lifted past the glow threshold so
- * the light floor reads as the stage's second visual after Emrys.
+ * the light floor reads as the stage's second visual after Ren.
  */
 export const SLOTS: Readonly<Record<SlotName, Slot>> = {
   chest: { id: "slot-chest", rows: 13, cols: 13, width: 130, height: 130, gap: 2, round: true, brightness: 1.3 },
@@ -23,7 +23,7 @@ type Roots = Record<SlotName, HTMLElement | null>
 
 function find(stage: HTMLElement): Roots {
   const root = (name: SlotName) => {
-    const found = stage.querySelector(`#${SLOTS[name].id} .emrys-slot-root`)
+    const found = stage.querySelector(`#${SLOTS[name].id} .ren-slot-root`)
     return found instanceof HTMLElement ? found : null
   }
   return { chest: root("chest"), mouth: root("mouth"), "gauntlet-l": root("gauntlet-l"), "gauntlet-r": root("gauntlet-r"), floor: root("floor") }
@@ -87,9 +87,9 @@ export function SlotPortal({ name, root, children }: { name: SlotName; root: HTM
   const height = root.clientHeight || slot.height
   return createPortal(
     <div
-      data-emrys={`slot-${name}`}
+      data-ren={`slot-${name}`}
       {...(name === "floor" ? { "aria-hidden": true } : {})}
-      className="emrys-matrix pointer-events-none"
+      className="ren-matrix pointer-events-none"
       style={slot.round ? { width, height, clipPath: "circle(50%)" } : { width, height }}
     >
       {children}

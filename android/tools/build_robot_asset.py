@@ -1,8 +1,8 @@
-"""Builds app/src/main/assets/emrys/index.html from the robot page.
+"""Builds app/src/main/assets/ren/index.html from the robot page.
 
 Four changes, nothing else: Google Fonts links become local @font-face rules for the Noir faces (the app works
 offline), an ``embedded`` class makes the stage fill the WebView, bridge.js is appended after the page script, and the
-stage layer (the ElevenLabs UI layer built from android/stage-ui into assets/emrys/vendor/stage-ui.{js,css} by
+stage layer (the ElevenLabs UI layer built from android/stage-ui into assets/ren/vendor/stage-ui.{js,css} by
 ``npm ci && npm run build`` there, and checked in) is linked from the head and loaded after the bridge.
 ``--check`` also type-checks bridge.js with TypeScript (robot/tsconfig.json), fetched at its pinned version by npx.
 
@@ -17,9 +17,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "robot" / "Emrys_the_Robot.html"
+SOURCE = ROOT / "robot" / "Ren_the_Robot.html"
 BRIDGE = ROOT / "robot" / "bridge.js"
-OUT = ROOT / "app" / "src" / "main" / "assets" / "emrys" / "index.html"
+OUT = ROOT / "app" / "src" / "main" / "assets" / "ren" / "index.html"
 VENDOR = OUT.parent / "vendor"
 STAGE_FILES = ("stage-ui.js", "stage-ui.css", "perlin-noise.png")
 TYPESCRIPT = "7.0.2"

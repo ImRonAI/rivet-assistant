@@ -4,7 +4,7 @@ import { anim, cache, once, type Program } from "./program"
 import { band, dist, edge, hash, inCircle, loop, nth, paint, turn } from "./raster"
 
 /**
- * The light floor under Emrys's feet (17×17, circular): ripples, radar and celebrations (docs/design/EMRYS_MATRIX.md
+ * The light floor under Ren's feet (17×17, circular): ripples, radar and celebrations (docs/design/REN_MATRIX.md
  * §4–5). Patterns stay at or under 0.5; the slot's brightness lifts them (slots.tsx). The design names 25×25 (625
  * dots, about 900 on the page with the armor); every animated dot repaints through its 300 ms fade, and with 4× CPU
  * throttling the floor was the largest single cost, so it is 17×17 (289 dots, about 570 on the page).
@@ -79,7 +79,7 @@ const sonar = () =>
     )
   )
 
-/** waiting: one slow honey ring held under Emrys. */
+/** waiting: one slow honey ring held under Ren. */
 const held = () =>
   programs("floor-held", () =>
     anim(
@@ -126,7 +126,7 @@ export function floorFor(state: string): Program {
 /** The boot show's floor: it ignites outward from the feet in one ripple, then rests. */
 export const bootFloor = (then: Program) => ring("floor:boot", false, 1.0, then)
 
-/** While Emrys speaks the floor breathes with the speech envelope, low. */
+/** While Ren speaks the floor breathes with the speech envelope, low. */
 export function floorBreath(env: number): Frame {
   const levels = levelSets("floor-breath", () =>
     Array.from({ length: 9 }, (_, l) =>
