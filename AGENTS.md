@@ -62,7 +62,8 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   `browser_close`, `browser_read`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot`) through the
   same handlers as the client tools. `HubLink.tools()` and `call()` make the phone an MCP client of the hub too. The
   old listener on the phone's Tailscale address is gone (the owner's Mac has no Tailscale, so nothing could reach it).
-  `browser_click` runs the page's `click()` without a user gesture, so Chromium may not add a history entry for it.
+  `browser_click` taps the element's place on screen (`Browser.tap`), so the page sees a real gesture; a tab that
+  isn't on screen gets the element's own `click()`.
 - **ren desktop on the hub** (`agent/api/core/ren_mcp.py` in `ImRonAI/TheBrowser`): FastMCP server `ren-desktop` at
   `/mcp/` with the browser under `browser_` (a proxy over the `electron-playwright-mcp` server its own agents drive)
   and Ren's agent as `ask_ren`, `ren_threads`, `ren_thread` and `ren_cancel`. With `REN_HUB_URL` and `REN_HUB_TOKEN`
@@ -80,8 +81,14 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   from a clone on the owner's Mac) both attached. A client on `/hub/mcp` listed 76 tools (40 from the phone, 36 from
   the desktop); `device_status` returned the emulator's real battery and network; the desktop's own Strands
   `MCPClient` (`hub_client_factory`) opened https://example.com in the phone's browser and read it back; and
-  `/hub/agents/mcp` listed 50 tools. The search page rendered in the app. Not run: ren desktop's browser tools
-  through the hub (Electron wasn't running), anything on a physical phone.
+  `/hub/agents/mcp` listed 50 tools. Through the hub, `browser_click` on example.com's link went to iana.org,
+  `browser_back` returned to example.com and `browser_forward` to iana.org. Both sides re-attached by themselves each
+  time the hub's container was replaced. The search page rendered in the app, and `deploy/vm/search/app.py`, run on
+  the owner's Mac with the three keys `search.env` carries, answered one real search at level `fast`: five Brave
+  sections (`web` 31, `news` 31, `videos` 50, `images` 50, `places` 2) and a Brave Answers answer with citations;
+  the shopping agent on NIM was still reasoning when the 120 s the request was given ran out. Not run: a search from
+  the app against the VM, ren desktop's browser tools through the hub (Electron wasn't running), anything on a
+  physical phone.
 
 ## How it works
 
@@ -358,7 +365,7 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
 8. **ren mobile:** the agent panel's chat on ren desktop's components (it is the ElevenLabs UI page from
    `android/stage-ui`, on Ink & Volt tokens); Kotlin comments that still use Noir's words (serif, porcelain, halo);
    the Glass theme; the robot in ren desktop; an
-   "Open on desktop" action that uses `HubLink.call`; trusted touch events for `browser_click`; the design documents
+   "Open on desktop" action that uses `HubLink.call`; the design documents
    in `docs/design/` rewritten for Ink & Volt; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
    before changing who answers +17608769757).
 

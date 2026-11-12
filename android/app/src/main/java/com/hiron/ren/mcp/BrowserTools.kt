@@ -13,6 +13,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import io.modelcontextprotocol.kotlin.sdk.types.error
 import io.modelcontextprotocol.kotlin.sdk.types.success
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -74,7 +75,7 @@ internal class BrowserTools(private val browser: Browser, private val level: () 
         "browser_select" -> tab(input).let { browser.select(it); ok(tabs()) }
         "browser_close" -> tab(input).let { browser.close(it); ok(tabs()) }
         "browser_read" -> read(tab(input), input.optInt("offset", 0))
-        "browser_click" -> act(tab(input), "click(${input.getInt("ref")})")
+        "browser_click" -> click(tab(input), input.getInt("ref"))
         "browser_type" -> act(tab(input), "type(${input.getInt("ref")}, ${JSONObject.quote(input.getString("text"))}, ${input.optBoolean("submit", false)})")
         "browser_scroll" -> act(tab(input), "scroll(${if (input.getString("direction") == "up") -1 else 1})", navigates = false)
         "browser_screenshot" -> screenshot()
@@ -133,6 +134,20 @@ internal class BrowserTools(private val browser: Browser, private val level: () 
         }
     }
 
+    /**
+     * Clicks an element the way a finger does, with a tap at its place on screen, so the page sees a real gesture (a
+     * link followed this way goes into the tab's history). A tab that isn't on screen can't be touched, so its page
+     * runs the element's own `click()`.
+     */
+    private suspend fun click(id: String, ref: Int): CallToolResult {
+        val answer = browser.evaluate(id, "$PAGE_SCRIPT; ren.point($ref)") ?: return CallToolResult.error("The tab is on Ren's home page; there is nothing to act on.")
+        val point = JSONObject(unquote(answer))
+        if (!point.optBoolean("ok")) return CallToolResult.error(point.optString("error", "The page didn't take that."))
+        // The page scrolled the element into view; the tap follows the frame that shows it there.
+        awaitFrame()
+        return if (browser.tap(id, point.getDouble("x").toFloat(), point.getDouble("y").toFloat())) settled(id) else act(id, "click($ref)")
+    }
+
     private fun screenshot(): CallToolResult {
         val id = browser.state.value.active ?: return CallToolResult.error("No tab is open.")
         val png = browser.capture(id) ?: return CallToolResult.error("The active tab has no page on screen. Open Ren's browser on a page first.")
@@ -170,7 +185,8 @@ internal class BrowserTools(private val browser: Browser, private val level: () 
 
         /**
          * What the tools run in the page: `ren.read` lists the visible interactive elements and keeps them as the
-         * page's refs; `ren.click`, `ren.type` and `ren.scroll` act on a ref and say whether they could.
+         * page's refs; `ren.point` says where a ref is on screen (as fractions of the viewport), and `ren.click`,
+         * `ren.type` and `ren.scroll` act on a ref and say whether they could.
          */
         internal val PAGE_SCRIPT = """
             window.ren = window.ren || {
@@ -188,6 +204,13 @@ internal class BrowserTools(private val browser: Browser, private val level: () 
                 });
               },
               target(ref) { const e = this.refs[ref - 1]; return e && e.isConnected && this.seen(e) ? e : null; },
+              point(ref) {
+                const e = this.target(ref);
+                if (!e) return JSON.stringify({ ok: false, error: 'No element ' + ref + ' on the page as it is now. Read the page again.' });
+                e.scrollIntoView({ block: 'center' });
+                const r = e.getClientRects()[0], v = window.visualViewport;
+                return JSON.stringify({ ok: true, x: (r.left + r.width / 2 - v.offsetLeft) / v.width, y: (r.top + r.height / 2 - v.offsetTop) / v.height });
+              },
               click(ref) {
                 const e = this.target(ref);
                 if (!e) return JSON.stringify({ ok: false, error: 'No element ' + ref + ' on the page as it is now. Read the page again.' });

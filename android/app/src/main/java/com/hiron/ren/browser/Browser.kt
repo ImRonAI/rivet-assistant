@@ -11,6 +11,8 @@ import android.graphics.Canvas
 import android.net.Uri
 import android.os.Environment
 import android.os.Message
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -209,6 +211,22 @@ class Browser(private val context: Context, private val store: BrowserStore, pri
         return suspendCancellableCoroutine { answer -> view.evaluateJavascript(script) { answer.resume(it) } }
     }
 
+    /**
+     * Taps the tab's page at a point of its viewport, [x] and [y] as fractions of its width and height. False when the
+     * tab isn't on screen, where nothing can be touched.
+     */
+    fun tap(id: String, x: Float, y: Float): Boolean {
+        val view = shown(id)?.takeIf { it.isAttachedToWindow && it.isShown && it.width > 0 && it.height > 0 } ?: return false
+        val at = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(at, at, MotionEvent.ACTION_DOWN, x * view.width, y * view.height, 0)
+        val up = MotionEvent.obtain(at, at + TAP_MS, MotionEvent.ACTION_UP, x * view.width, y * view.height, 0)
+        view.dispatchTouchEvent(down)
+        view.dispatchTouchEvent(up)
+        down.recycle()
+        up.recycle()
+        return true
+    }
+
     /** The tab's page as it is drawn now, as a PNG; null when the tab has no page or it isn't laid out on screen. */
     fun capture(id: String): ByteArray? {
         val view = shown(id)?.takeIf { it.width > 0 && it.height > 0 } ?: return null
@@ -377,6 +395,9 @@ class Browser(private val context: Context, private val store: BrowserStore, pri
 
     companion object {
         private const val ORIGIN_HOST = "appassets.androidplatform.net"
+
+        /** How long a tap's finger stays down. */
+        private const val TAP_MS = 60L
         private const val PAGES = "https://$ORIGIN_HOST/assets/ren/web"
 
         /** The bundled page behind one of Ren's `ren://` addresses; null for a web address. */
