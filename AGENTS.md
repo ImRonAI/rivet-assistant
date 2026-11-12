@@ -1,17 +1,89 @@
-# AGENTS.md — Emrys
+# AGENTS.md — ren mobile
 
 Guidance for any AI agent (or person) working in this repository. Read this first, then `android/README.md`.
 
-Emrys is an Android phone assistant built by Oubli AI (founder Tim Hunter, https://oubliai.com, tim@oubliai.com). It
-handles texts, email drafts, calls, apps, reminders and tasks on the phone through the owner's ElevenLabs agents. Its
-face is the Emrys robot (`android/robot/Emrys_the_Robot.html`).
+ren mobile (app name **Ren**, `com.hiron.ren`; Emrys until 2026-11-12, Rivet before that) is the phone side of ren, the
+browser built by Oubli AI (founder Tim Hunter, https://oubliai.com, tim@oubliai.com). It is a lightweight Android
+browser with ren's search and an AI agent panel, and it still does everything Emrys did: texts, email drafts, calls,
+apps, reminders and tasks on the phone through the owner's ElevenLabs agents. ren desktop is the Electron browser in
+`ImRonAI/TheBrowser` (the owner's checkout is `RonBrowserRebuild`). Its face is Cato, the robot of catolabs.com,
+recoloured to ren's volt (`android/web/src/robot/`).
+
+The ElevenLabs agents still call themselves Emrys: their prompts, the webhook tool `call_as_emrys` and the VM's wire
+names (`emrys-computer`, `EMRYS_*`, `/opt/emrys`) are unchanged, and the sections on them below say Emrys.
+
+## ren mobile, 2026-11-12
+
+What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) and, for ren desktop,
+`claude/ren-mcp-hub` in `ImRonAI/TheBrowser` (PR #3):
+
+- **Design: Ink & Volt**, as ren desktop's Electron code implements it (`tailwind.config.ts` and `src/index.css` there
+  are the truth; `docs/mobile-design.md` there describes an older palette and is not followed). Volt `#5543FF` in Light
+  and `#8D98FE` in Dark, ink `#0B0C17`, colourless dark surfaces, flat surfaces with no glows, 10 dp controls, 12 dp
+  cards. Bricolage Grotesque (display), Inter and JetBrains Mono, as variable fonts in `res/font/`. The logo is the
+  "ren." logotype (`docs/design/ren-logotype.json`, copied from ren desktop's `logotype.ts`); `tools/build_icon.py`
+  generates the launcher icon, the R notification icon and the wordmark from it. Light and Dark follow the phone;
+  Glass is not built.
+- **Robot: Cato**, unmodified in `android/web/src/cato/` (github.com/ImRonAI/cato-labs at `2a7a9b6`, hashes in
+  `SHA256SUMS`). `scripts/gen-ren-robot.mjs` generates ren's robot from it into `src/robot/`: the same geometry, rig,
+  moves and renderer, with Cato's blue changed to volt and an sRGB step added to the body shader (Cato's phone tier
+  skips it, so its white shell draws grey without the bloom pass). The app drives it through `window.ren.*`
+  (`src/robot/bridge.ts`, `ui/RobotView.kt`).
+- **Browser** (`browser/Browser.kt`, `browser/Addresses.kt`, `ui/BrowserScreen.kt`, `ui/BrowserHome.kt`): the app
+  opens on it. Tabs are real WebViews, made on a tab's first navigation; an address bar that loads addresses and
+  searches phrases (ported from ren desktop's `navigable-url.ts` and `UrlBar.tsx`); back, forward, reload, stop; a tabs
+  sheet; downloads, uploads and fullscreen video; new windows become tabs; page permissions are refused. Home is
+  `ren://home` with the logotype, a search box and the five search levels. **Ask Ren** slides the agent panel
+  (`HomeScreen.kt` under a header) over the browser.
+- **Search**: `ren://search?q=…&level=…` is ren desktop's own results page. `android/web/src/ren/` holds
+  `src/pages/SearchResultsPage.tsx` and everything it imports from ren desktop at `b112adf`, unmodified (hashes in
+  `SHA256SUMS`, `npm run check:ren`), with ren desktop's Tailwind config and `index.css`. `src/search/` mounts it:
+  the query and level come from the address, Dark follows the phone, a result opens in a new tab (`window.open`, which
+  the browser turns into a tab), and `host.ts` adds the workspace token to the page's requests. The page gets the
+  token from the `RenHost` web message listener, which answers only the app's bundled origin
+  (`https://appassets.androidplatform.net`). The backend is ren desktop's own search and Discover routers on the VM
+  (`deploy/vm/search`, image built from `ImRonAI/TheBrowser` at `b112adf`), at `https://rivet.ron-ai.dev/search/*` and
+  `/discover/*` behind the same token. "Add search to Ren context" and "Search deeper" need ren desktop's context
+  store and Electron, so the first fails on the phone and the second is not shown.
+- **Ren's hub** (`deploy/vm/hub/app.py`, FastMCP 3.4.0 and mcp 1.26.0, the versions ren desktop pins; the `hub`
+  container at `https://rivet.ron-ai.dev/hub/` behind `EMRYS_GEMINI_TOKEN`): the one place the phone, ren desktop and
+  the agents meet. A phone and a desktop are behind home routers, so each dials out
+  (`wss://…/hub/attach/phone`, `/attach/desktop`, WebSocket subprotocol `mcp`) and serves its own MCP server on that
+  socket; the hub is an MCP client there (`ProxyProvider` over the live session, `cache_ttl=0`) and an MCP server at
+  `/hub/mcp` (Streamable HTTP). The phone's tools keep their names, ren desktop's are under `desktop_`, and
+  `hub_peers` says which side is attached. `/hub/agents/mcp` is the same hub for the ElevenLabs agents, which already
+  run the phone's tools as client tools: only the phone's `browser_*` tools, `desktop_*` and `hub_peers`.
+  FastMCP 4.1.0 pulls mcp 2.3.0, which has no WebSocket transport, which is why the hub is on 3.4.0.
+- **The phone on the hub** (`mcp/HubLink.kt`, `mcp/HubService.kt`, `mcp/PhoneMcpServer.kt`, `mcp/BrowserTools.kt`;
+  Settings › Remote tools): a foreground service keeps the phone attached with the Kotlin MCP SDK 0.16.0
+  (`Server.createSession(WebSocketClientTransport)`), proves the link with a ping every 20 s and retries from 2 s to
+  60 s. It serves the 18 phone tools, `request_approval`, the seven searches and 13 browser tools (`browser_tabs`,
+  `browser_open`, `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`, `browser_select`,
+  `browser_close`, `browser_read`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot`) through the
+  same handlers as the client tools. `HubLink.tools()` and `call()` make the phone an MCP client of the hub too. The
+  old listener on the phone's Tailscale address is gone (the owner's Mac has no Tailscale, so nothing could reach it).
+  `browser_click` runs the page's `click()` without a user gesture, so Chromium may not add a history entry for it.
+- **ren desktop on the hub** (`agent/api/core/ren_mcp.py` in `ImRonAI/TheBrowser`): FastMCP server `ren-desktop` at
+  `/mcp/` with the browser under `browser_` (a proxy over the `electron-playwright-mcp` server its own agents drive)
+  and Ren's agent as `ask_ren`, `ren_threads`, `ren_thread` and `ren_cancel`. With `REN_HUB_URL` and `REN_HUB_TOKEN`
+  set the backend attaches to the hub, and the panel agent's tool catalog gains the server `phone` (the hub's tools,
+  prefixed `phone_`).
+- **The Strands agents on the hub** (`deploy/vm/gemini/app.py`): the server `ren-hub` (`http://hub:8300/mcp`,
+  unprefixed) replaces the phone's Tailscale address, so Gemini, NIM and Mistral reach the phone and ren desktop
+  whichever is attached.
+- **Live, 2026-11-12:** with the hub deployed, the emulator's app and ren desktop's backend (the branch above, run
+  from a clone on the owner's Mac) both attached. A client on `/hub/mcp` listed 76 tools (40 from the phone, 36 from
+  the desktop); `device_status` returned the emulator's real battery and network; the desktop's own Strands
+  `MCPClient` (`hub_client_factory`) opened https://example.com in the phone's browser and read it back; and
+  `/hub/agents/mcp` listed 50 tools. The search page rendered in the app. Not run: ren desktop's browser tools
+  through the hub (Electron wasn't running), anything on a physical phone.
 
 ## How it works
 
 The app connects straight to the owner's two ElevenLabs agents with the official ElevenLabs Android SDK (0.13.0) and
 answers their client tools on the phone. Nothing sits in between: no backend, no gateway, no wrapper around the agents.
 
-- **Session start** (`voice/EmrysAgent.kt`): `ConversationConfig(agentId, userId, dynamicVariables, textOnly, clientTools, …)`.
+- **Session start** (`voice/RenAgent.kt`): `ConversationConfig(agentId, userId, dynamicVariables, textOnly, clientTools, …)`.
   - Voice agent `agent_2901m620nzwrev2r7ekqpydcxe25`, text agent `agent_9601m623qa72ffs9cyy3ezc0p6tb` (public agents,
     so `agentId` alone starts a session; no API key on the phone).
   - `userId` is a UUID made once per install (`Settings.userId`) and also sent as the `user_id` dynamic variable.
@@ -19,7 +91,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     `perm_install_apps`, `perm_cloud_coding`, `perm_deploy`, `perm_create_music`), each `granted` or `prompt`, from
     Settings › Permissions (`core/Approvals.kt`, `core/Settings.kt`). How the agents use them is set in their prompts,
     which the owner manages.
-- **Client tools** (`AgentTools` in `voice/EmrysAgent.kt`, run by `device/DeviceTools.kt`), 18 phone tools with no gate
+- **Client tools** (`AgentTools` in `voice/RenAgent.kt`, run by `device/DeviceTools.kt`), 18 phone tools with no gate
   on the phone: `sms_send`, `sms_list`, `contacts_search`, `calls_recent`, `phone_call`, `calendar_list`,
   `calendar_create`, `notifications_list`, `notification_reply`, `reminder_create`, `reminders_list`,
   `reminder_cancel`, `email_draft`, `apps_list`, `app_open`, `device_status`, `screen_read`, `screen_act`.
@@ -125,12 +197,13 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   `stripAudioTags`), so markdown links stay.
 - **Strands providers: Gemini, NVIDIA NIM and Mistral** (Settings › Agents; ElevenLabs is the default): Emrys's agents
   in Strands on the workspace VM (`deploy/vm/gemini/app.py`, the `gemini` container at `wss://rivet.ron-ai.dev/gemini/`,
-  behind Caddy's bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `EmrysRuntime.agent` is
-  `EmrysAgent` or `StrandsAgent`, and the screens use only its six members. Settings › Agents picks the provider, the text
+  behind Caddy's bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `RenRuntime.agent` is
+  `RenAgent` or `StrandsAgent`, and the screens use only its six members. Settings › Agents picks the provider, the text
   model from the provider's live catalogue (`GET /gemini/models?provider=`, searchable; none chosen is the VM's default)
   and the model's reasoning level (`GET /gemini/efforts`, with Auto first); the session's WebSocket carries `provider`,
   `model` and `effort`.
-  - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`), copied into `providers.py`, `mistral_model.py`,
+  - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`; `b112adf`'s reordering of tool results is not copied,
+    because Strands 1.64.0's formatter already puts them first), copied into `providers.py`, `mistral_model.py`,
     `media_capabilities.py` and `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
     (default `z-ai/glm-5.3-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
     `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
@@ -146,14 +219,12 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     which Live refuses (1007 "Unknown name"); without both, a spoken "What is 2 + 2?" got "2 + 2 is 4." in
     24 kHz audio with both transcripts. The
     phone streams 16 kHz PCM and plays 24 kHz PCM (`voice/GeminiAudio.kt`), cleared on `bidi_barge_in`.
-  - Both reach the phone's MCP server (`${PHONE_MCP_URL}`, `${PHONE_MCP_TOKEN}`), emrys-computer and oubliai-telnyx
+  - Both reach Ren's hub (`http://hub:8300/mcp`: the phone and ren desktop), emrys-computer and oubliai-telnyx
     (`${TELNYX_MCP_AUTHORIZATION}`), unprefixed so the names match the prompt, and use the ElevenLabs text and voice
     agents' own prompts, read when a conversation opens and filled like ElevenLabs' dynamic variables. The chat is
     built from Strands' events (`voice/GeminiEvents.kt`). `start_background_task`, `call_as_emrys`, Google Calendar
     and the ElevenLabs webhook tools have no Gemini counterpart yet.
-- **Phone MCP server** (`mcp/`, Settings › Remote tools): a foreground service serves the 18 phone tools,
-  `request_approval` and the seven searches on the phone's Tailscale address (port 8765, `/mcp`, bearer token from
-  Copy token), through the same handlers as the client tools.
+- **Phone MCP server** (`mcp/`, Settings › Remote tools): served on Ren's hub; see "The phone on the hub" above.
 - **Release builds** keep the SDK's private fields (`android/app/proguard-rules.pro`). The SDK reads the voice
   conversation token into a private field with Gson, and its own keep rules cover only public members. Without the
   rule, R8 renames the field, the token comes back blank and voice fails with "Couldn't reach the ElevenLabs agent".
@@ -184,7 +255,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   2026-11-04). Don't add Claude or Anthropic models anywhere else in the product.
 - **No live side effects without the owner's approval:** sends, calls, purchases, Telnyx writes, DNS changes, real
   email. Deploying committed changes to the workspace VM doesn't need a separate OK (owner, 2026-10-31).
-- **Never commit secrets.** `android/emrys.local.properties` (the baked answering number) is gitignored; the VM's env
+- **Never commit secrets.** `android/ren.local.properties` (the baked answering number and the VM token) is gitignored; the VM's env
   files and `code-token` stay on the VM.
 - **No fakes, stubs or simulations in the product.** Test the real feature in the real app (emulator or phone) before
   calling it done.
@@ -198,37 +269,43 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 ## Repository map
 
 ```
-android/   Kotlin/Compose app (minSdk 29, targetSdk 36), robot WebView, ElevenLabs stage layer, widgets, assistant overlay
-  robot/     the robot page and its bridge (built into assets by tools/build_robot_asset.py)
-  stage-ui/  ElevenLabs UI matrix, orb and shimmering-text, bundled into assets/emrys/vendor/
-deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Gemini agents in Strands), laptop/ (OpenCode config, workspace AGENTS.md)
-docs/      design/ (Noir design system, Matrix light language, sigil)
-.github/   CI: android.yml (asset checks, tests, lint, release build)
+android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent panel, widgets, assistant overlay
+  web/       the app's bundled pages, built by Vite into assets/ren/web by Gradle (webInstall, webBuild; needs Node):
+             src/cato (Cato, unmodified), src/robot (ren's robot), src/ren (ren desktop's search page, unmodified),
+             src/search (the phone's mount of it)
+  stage-ui/  the chat page's build (ElevenLabs UI), bundled into assets/ren/chat
+deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Strands
+           agents), hub/ (Ren's hub), search/ (ren desktop's search routers), laptop/ (OpenCode config, workspace AGENTS.md)
+docs/      design/ (the ren. logotype; REN_DESIGN.md and REN_MATRIX.md still describe the Noir design they replaced)
+.github/   CI: android.yml (tests, lint, release build)
 ```
 
 Commands:
 ```bash
-cd android && python3 tools/build_robot_asset.py --check && python3 tools/build_icon.py --check
-JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease
+cd android && python3 tools/build_icon.py --check
+JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease   # builds android/web first (npm ci, npm run build)
+cd android/web && npm run build && npm test   # the pages alone: hash checks, tsc, Vite, then Playwright on the robot
 cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs files byte-identical to upstream
 uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
 uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with mistralai==2.10.1 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
+uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 mypy --config-file deploy/vm/hub/mypy.ini
+cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 --with pytest --with anyio pytest test_hub.py
 ```
 
 ## Everything Emrys can do today
 
-### Android app (`android/app/src/main/java/com/hiron/emrys/`)
-- **Runtime** (`core/EmrysRuntime.kt`): the state the screens render, the robot's command stream, the phone tools, the
+### Android app (`android/app/src/main/java/com/hiron/ren/`)
+- **Runtime** (`core/RenRuntime.kt`): the state the screens render, the robot's command stream, the phone tools, the
   agent, and the approvals the agents ask for. No foreground service; the session lives while the app runs.
-- **Interface (`ui/`)**: the Noir design system (`docs/design/EMRYS_DESIGN.md`): near-black paper, porcelain ink, one
-  periwinkle halo accent; Instrument Serif, Geist and Geist Mono. The kit is in `Theme.kt`, `Kit.kt`, `Keys.kt`,
-  `Surfaces.kt`, `Chrome.kt` and `Meters.kt`; the brand mark is the dot-matrix sigil.
+- **Interface (`ui/`)**: Ink & Volt (see "ren mobile" above). The kit is in `Theme.kt`, `Kit.kt`, `Keys.kt`,
+  `Surfaces.kt`, `Chrome.kt` and `Meters.kt`; the brand mark is the "ren." logotype. The app opens on the browser
+  (`BrowserScreen.kt`); the screens below are the agent panel and the pages its menu opens.
   - **Power-on screen** (`Onboarding.kt`): meet Emrys ("Set up" or "Not now"), the talk key, the default assistant,
     and phone access.
-  - **Home** (`HomeScreen.kt`): the masthead and status, the robot stage, a serif greeting, the transcript sheet, a
+  - **Agent panel** (`HomeScreen.kt`, opened by Ask Ren): the status, the robot stage, a greeting, the transcript sheet, a
     thinking row while the agent works, and the dock: quick keys (Catch me up, My day, Texts, Calls), the composer
     (text agent) and the voice disc (voice agent, asking for the microphone first). During a voice session
-    (`EmrysState.voice`) Emrys stays on its stage and the chat folds under it as a Transcript header that opens the
+    (`RenState.voice`) Emrys stays on its stage and the chat folds under it as a Transcript header that opens the
     same chat view as typing; checked on the emulator 2026-11-04.
   - **Approval sheet** (`ApprovalSheet.kt`): see `request_approval` above.
   - **Activity** (`ActivityScreen.kt`): pending reminders, then the activity log grouped by day.
@@ -236,14 +313,12 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,
     switch per `perm_*` action: "Always allowed" or "Asks you first", applied from the next conversation), 3 Call
     answering (number, mode, carrier codes), 4 What Emrys can use (phone permissions), 5 Remote tools (the phone's MCP
     server), 6 About.
-- **Robot** (`ui/RobotView.kt`, `android/robot/bridge.js`): the bundled page runs offline; moves follow what Emrys is
-  doing; the agent's speech moves the mouth (the SDK's audio alignment, `AgentTools.words`); the ElevenLabs Matrix,
-  Orb and ShimmeringText on the stage (`android/stage-ui`, installed verbatim from elevenlabs/ui@`3a28ebab`) follow
-  only real signals (states, the agent's turn and audio level as the SDK reports them). The big stage is on Home and a
-  short band on Activity and Settings; a page that fails says why with Retry. The emulator renders in software, so
-  the page drops to `lowFx` there (no Orb, floor or gauntlets).
-- **Launcher** (`res/`, `widget/EmrysWidgets.kt`): adaptive and themed sigil icon, splash and notification icon;
-  shortcuts Talk to Emrys, Ask Emrys, Catch me up, My day; a search-bar widget (4×1) that opens the composer and a
+- **Robot** (`ui/RobotView.kt`, `android/web/src/robot/`): the bundled page runs offline; Cato's moves follow what
+  Ren is doing (`core/RobotDirector.kt`); the agent's speech moves the mouth (the SDK's audio alignment,
+  `AgentTools.words`). The stage is in the agent panel; a page that fails says why with Retry. Run the emulator with
+  `-gpu host`: the robot is WebGL.
+- **Launcher** (`res/`, `widget/RenWidgets.kt`): adaptive and themed logotype icon, splash and notification icon;
+  shortcuts Talk to Ren, Ask Ren, Catch me up, My day; a search-bar widget (4×1) that opens the composer and a
   panel widget (4×2) with the last reply and how many approvals wait.
 - **Default assistant** (`voice/`): a `VoiceInteractionService` overlay over any app with speech-to-text and a keyboard
   fallback, sending to the text agent; locked out on a secured lock screen.
@@ -266,11 +341,20 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,
    then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
-7. **Gemini** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL, PR #11): built and checked by mypy, the JVM tests,
-   lint and the release build; not deployed or run live yet. It runs on the Gemini API (AI Studio, owner,
-   2026-11-06). It needs `gemini.env` on the VM (`GOOGLE_API_KEY`, `PHONE_MCP_URL`, `PHONE_MCP_TOKEN`,
-   `TELNYX_MCP_AUTHORIZATION`), `EMRYS_GEMINI_TOKEN` in `computer.env` and the app's `geminiToken`, and Tailscale
-   on the VM and the phone. Then the live checks in the plan, and the next phase: `start_background_task` and `call_as_emrys` for Gemini.
+7. **The Strands agents** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL): they run on the Gemini API (AI
+   Studio, owner, 2026-11-06), NIM and Mistral. The `gemini` and `search` images are built on the VM
+   (`emrys-gemini:1.64.0`, `ren-search:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`
+   (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
+   doesn't load there) and `search.env` (`BRAVE_SEARCH_API_KEY`, `BRAVE_ANSWERS_API_KEY`, `NVIDIA_NIM_API_KEY`).
+   `EMRYS_GEMINI_TOKEN` is in `computer.env`, and the app's `geminiToken` (in `android/ren.local.properties`) is the
+   same token. Not run live yet: a search from the app, and a chat with each Strands provider. Next:
+   `start_background_task` and `call_as_emrys` for them, and the hub's `/hub/agents/mcp` on the ElevenLabs text and
+   voice agents (the owner asked for both agents to be connected; it needs the token as a workspace secret).
+8. **ren mobile:** the agent panel's chat on ren desktop's components (it is still the ElevenLabs UI page from
+   `android/stage-ui`, with its Geist fonts in `assets/ren/fonts`); the Glass theme; the robot in ren desktop; an
+   "Open on desktop" action that uses `HubLink.call`; trusted touch events for `browser_click`; the design documents
+   in `docs/design/` rewritten for Ink & Volt; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
+   before changing who answers +17608769757).
 
 ## Before launch (checklist)
 1. **Release signing:** the APK is signed with the debug key (`android/app/build.gradle.kts`). Create a release
@@ -290,7 +374,10 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,
 - **ElevenLabs UI:** https://github.com/elevenlabs/ui
 - **Telnyx MCP server:** https://github.com/ImRonAI/OubliTelnyxMCP, live at https://oubli-catolabs.fastmcp.app/mcp
 - **Desktop Commander:** https://github.com/wonderwhy-er/DesktopCommanderMCP
-- **Design:** `docs/design/EMRYS_DESIGN.md`, `docs/design/EMRYS_MATRIX.md`
+- **Design:** ren desktop's `tailwind.config.ts`, `src/index.css` and `docs/brand.md` (`ImRonAI/TheBrowser`);
+  `docs/design/ren-logotype.json`
+- **FastMCP:** https://gofastmcp.com (proxy providers, mounting, transforms); MCP Kotlin SDK
+  github.com/modelcontextprotocol/kotlin-sdk (0.16.0)
 
 ## History
 - **0.5.0, 2026-10-29/30:** Rivet renamed **Emrys** (Welsh "immortal", Merlin's true name; not a legal trademark
@@ -299,3 +386,7 @@ uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,
 - **2026-10-31:** the brain (Strands harness, gateway, search proxy, email, live calls, approval rules), the gateway
   client and service, brain search, recommended settings and the model picker were deleted; the app talks to the
   agents directly (`9ffab7a`). The computer container was added to the VM (`2810aae`).
+- **2026-11-12:** Emrys became **ren mobile** (`com.hiron.ren`, with no compatibility layer): ren desktop's Ink & Volt
+  design, Cato as the robot, a browser with ren desktop's search page, and Ren's hub joining the phone, ren desktop
+  and the agents over MCP. The Matrix and Orb stage went with the old robot. Built web pages, `node_modules` and
+  Playwright results left the repository; Gradle builds the pages.

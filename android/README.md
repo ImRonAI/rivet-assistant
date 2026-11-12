@@ -1,8 +1,8 @@
-# Emrys for Android
+# ren mobile for Android
 
 ## Build
 
-Needs JDK 21 and the Android SDK (platform 36, build-tools 36).
+Needs JDK 21, the Android SDK (platform 36, build-tools 36) and Node 22 with npm (Gradle builds the app's web pages).
 
 ```bash
 cd android
@@ -11,55 +11,49 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 # app/build/outputs/apk/release/app-release.apk (minified, arm64-v8a only, signed with your local debug key)
 ```
 
-`emrys.local.properties` (gitignored, next to this file) bakes defaults into the build: `answeringNumber`,
-`braveSearchKey` and `braveAnswersKey`. Without it they start empty and stay editable in Settings.
+`ren.local.properties` (gitignored, next to this file) bakes defaults into the build: `answeringNumber`,
+`braveSearchKey`, `braveAnswersKey` and `geminiToken` (the workspace VM's bearer token, for Ren's hub, Ren's search and
+the Strands agents). Without it they start empty and stay editable in Settings.
 
-`app/src/main/assets/emrys/index.html` is generated from `robot/Emrys_the_Robot.html` and `robot/bridge.js`:
-`python3 tools/build_robot_asset.py` rebuilds it, and `--check` fails if it is stale or if `bridge.js` fails
-TypeScript's strict type check (`robot/tsconfig.json`, TypeScript 7.0.2 through `npx`, so it needs Node).
+### The bundled pages (`web/`)
 
-### The stage layer (ElevenLabs UI)
+The robot and the search page are a Vite + React project in `web/`. Gradle's `webInstall` (`npm ci`) and `webBuild`
+(`npm run build`) build them into `app/src/main/assets/ren/web/` before every build; that folder is not in git.
 
-The robot page carries a voice layer from `stage-ui/`, a small Vite + React + Tailwind v4 project set up for shadcn.
-The ElevenLabs UI components `orb`, `shimmering-text` and `matrix` are installed verbatim with the official CLI and
-never edited; `npm run verify:components` checks them byte for byte against upstream `elevenlabs/ui@3a28ebab`. Our own
-code composes them: the Orb as a soft backlight behind Emrys, a shimmering caption while Emrys works, and the Matrix
-light language in the robot's armor and floor slots and on the mini band (`src/matrix/`, `docs/design/EMRYS_MATRIX.md`).
-It reads `window.emrys.stageInfo()` and `speech()` from `robot/bridge.js`, which also takes the real voice signals the
-app sends (`emrys.voice` and `emrys.levels`, from `voice/EmrysAgent.kt`).
+- `src/cato/` is Cato, the robot of catolabs.com, byte for byte. `npm run gen:robot` generates ren's robot from it
+  into `src/robot/` (volt instead of Cato's blue), and `npm run check:robot` fails if either is stale or edited.
+- `src/ren/` is ren desktop's search results page and everything it imports, byte for byte, with its Tailwind config.
+  `npm run check:ren` verifies it against `SHA256SUMS`; `SOURCE.txt` says how the file list is made. `src/search/` is
+  the phone's page around it.
+- `npm test` runs Playwright on the real robot page.
 
-The layer is built into `app/src/main/assets/emrys/vendor/stage-ui.{js,css}` and checked in, so the asset builder
-needs no Node. After changing it:
+The agent panel's chat page is still built from `stage-ui/` (ElevenLabs UI) into `assets/ren/chat/`, which is in git.
 
-```bash
-cd stage-ui && npm ci && npm run build && npm test   # Playwright on the real page
-cd .. && python3 tools/build_robot_asset.py
-```
-
-The Orb's noise texture is bundled (`assets/emrys/vendor/perlin-noise.png`, provenance in `SOURCE.txt`) and
-`ui/RobotView.kt` answers its one URL from it; every other request outside the app's assets stays blocked.
+The launcher icon, notification icon and wordmark are generated from the "ren." logotype
+(`../docs/design/ren-logotype.json`) by `python3 tools/build_icon.py`; `--check` fails if they are stale.
 
 ## Install (sideload)
 
 1. Copy the APK to the phone and open it, allowing installs from that source; or `adb install app-release.apk`.
-2. Open Emrys and go through the power-on screen: the talk key, the default assistant and phone access. The app
+2. Open Ren and go through the power-on screen: the talk key, the default assistant and phone access. The app
    connects to the ElevenLabs agents by their ids, so there is nothing to sign in to.
-3. Grant what Emrys can use under Settings › What Emrys can use:
+3. Grant what Ren can use under Settings › What Ren can use:
    - Texts, Contacts, Calendar, Phone, Notifications: tap **Allow**.
    - **Android 13+ first**: App info › ⋮ › *Allow restricted settings* (sideloaded apps need this for the next two).
-   - Notification access: turn Emrys on (reading and replying to messages in any app).
-   - App operator: Accessibility › Emrys app operator › on.
+   - Notification access: turn Ren on (reading and replying to messages in any app).
+   - App operator: Accessibility › Ren app operator › on.
    - Call screening: accept the role prompt.
-   - Default assistant: Default apps › Digital assistant app › Emrys (long-press Home/Power opens Emrys's overlay over
+   - Default assistant: Default apps › Digital assistant app › Ren (long-press Home/Power opens Ren's overlay over
      the app you are in).
 4. Settings › Permissions sets each `perm_*` action to "Always allowed" or "Asks you first" from the next conversation.
 
 ## On-device checklist
 
-The cloud build environment has no emulator or phone, so these are checked on a real phone:
+These are checked on a real phone:
 
-- [ ] The robot renders on Home and as a band on Activity and Settings; the mouth moves while the agent speaks.
-- [ ] The stage layer: the Orb, the shimmering caption and the Matrix follow the agent's state and voice.
+- [ ] The browser: pages load, tabs open and close, a download saves, a search opens ren's results page.
+- [ ] Settings › Remote tools attaches to Ren's hub and shows whether ren desktop is attached.
+- [ ] The robot renders in the agent panel (Ask Ren); the mouth moves while the agent speaks.
 - [ ] A typed question reaches the text agent and the answer appears; the voice disc asks for the microphone and
       starts a voice session with the voice agent.
 - [ ] Each phone tool from a live agent: `sms_list`, `sms_send`, `contacts_search`, `calls_recent`, `phone_call`,
@@ -67,7 +61,7 @@ The cloud build environment has no emulator or phone, so these are checked on a 
       `reminders_list`, `reminder_cancel`, `email_draft`, `apps_list`, `app_open`, `device_status`, `screen_read`,
       `screen_act`.
 - [ ] `request_approval` (once the owner attaches it to an agent): the approval sheet, Approve behind biometrics,
-      Deny, "Always allow", and the notification while Emrys is in the background.
+      Deny, "Always allow", and the notification while Ren is in the background.
 - [ ] A reminder notification arrives and survives killing the app.
 - [ ] The default-assistant overlay listens over another app and sends to the text agent; it is locked out on a
       secured lock screen.
