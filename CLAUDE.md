@@ -11,9 +11,10 @@ anything. In short:
   - The ElevenLabs text agent is the default for typing and the ElevenLabs voice agent is the default for talking. Both use the
     phone through their client tools. Qwen (Groq) and Perplexity are only model options for Emrys's own brain, never a fallback
     or a workaround for the agents.
-  - Gemini is an optional provider (Settings › Agents), never a fallback. Its side is Strands only, written as the Strands
-    harness and bidi docs write it: `create_harness()` for text, `BidiAgent` on gemini-3.8-live for voice, every vended tool,
-    strict Strands types (`deploy/vm/gemini/`). The zero-harness rule is about ElevenLabs.
+  - Gemini, NVIDIA NIM and Mistral are optional providers (Settings › Agents), never a fallback. Their side is Strands only,
+    written as the Strands harness and bidi docs write it: `create_harness()` for text, `BidiAgent` on gemini-3.8-live for
+    voice, every vended tool, strict Strands types (`deploy/vm/gemini/`). NIM and Mistral are copied from ren
+    (`ImRonAI/TheBrowser`). The zero-harness rule is about ElevenLabs.
   - Use what ElevenLabs offers natively. Don't invent layers, prompts, timeouts or numbers around the agents, and don't change
     the agents' prompts or tools in ElevenLabs unless the owner asks.
   - No simulations, demo content or canned text in the app.
