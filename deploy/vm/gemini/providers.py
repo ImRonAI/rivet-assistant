@@ -10,9 +10,10 @@ The copies differ from ren in two ways. For Emrys's strict mypy: imports point a
 model's `params` is passed by name, two variables are renamed, and `mistral_model.py` hands the vended formatter the
 image as the content block it types. For Strands 1.64.0, whose vended Mistral formatter already replays reasoning in
 place (without its signature) and puts tool replies before the assistant message: `_replay_reasoning` follows that order
-and only adds the signatures back, so thinking is not sent twice. Ren's own `test_mistral_tool_stream.py` and
-`test_mistral_model.py` pass against these copies on 1.64.0. The service pins ren's `mistralai` 2.10.1 and `openai`
-2.50.0 (`Dockerfile`).
+and only adds the signatures back, so thinking is not sent twice. Ren's `_tool_results_before_user_messages` (`b112adf`)
+is not copied for the same reason: 1.64.0's formatter already sends a message's tool replies before its user text. Ren's
+own `test_mistral_tool_stream.py` and `test_mistral_model.py` (at `b112adf`) pass against these copies on 1.64.0. The
+service pins ren's `mistralai` 2.10.1 and `openai` 2.50.0 (`Dockerfile`).
 """
 
 from __future__ import annotations
