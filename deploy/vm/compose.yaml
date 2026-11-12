@@ -84,6 +84,21 @@ services:
     volumes:
       - laptop_home:/config
 
+  # Ren's hub: one MCP server joining the phone and ren desktop, at https://rivet.ron-ai.dev/hub/.
+  hub:
+    build: ./hub
+    image: ren-hub:3.4.0
+    restart: unless-stopped
+    mem_limit: 1g
+
+  # Ren's search and Discover (ren desktop's own backend code) for the phone, at https://rivet.ron-ai.dev/ren/.
+  search:
+    build: ./search
+    image: ren-search:b112adf
+    restart: unless-stopped
+    env_file: search.env
+    mem_limit: 2g
+
 volumes:
   caddy_data:
   caddy_config:

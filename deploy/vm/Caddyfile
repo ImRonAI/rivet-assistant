@@ -15,6 +15,35 @@ rivet.ron-ai.dev {
 		}
 		respond 401
 	}
+	# Ren's hub: the phone and ren desktop attach to it (WebSocket) and call each other through it (MCP over HTTP).
+	@hub path /hub/*
+	handle @hub {
+		uri strip_prefix /hub
+		@token header Authorization "Bearer {$EMRYS_GEMINI_TOKEN}"
+		handle @token {
+			reverse_proxy hub:8300 {
+				flush_interval -1
+			}
+		}
+		respond 401
+	}
+	# Ren's search for the phone. The bundled search page calls it from another origin, so the browser's preflight,
+	# which carries no token, goes straight to the app, which answers it for that origin only.
+	@ren path /ren/*
+	handle @ren {
+		uri strip_prefix /ren
+		@preflight method OPTIONS
+		handle @preflight {
+			reverse_proxy search:8200
+		}
+		@token header Authorization "Bearer {$EMRYS_GEMINI_TOKEN}"
+		handle @token {
+			reverse_proxy search:8200 {
+				flush_interval -1
+			}
+		}
+		respond 401
+	}
 	respond 404
 }
 
