@@ -22,12 +22,11 @@ The robot and the search page are a Vite + React project in `web/`. Gradle's `we
 
 - `src/cato/` is Cato, the robot of catolabs.com, byte for byte. `npm run gen:robot` generates ren's robot from it
   into `src/robot/` (volt instead of Cato's blue), and `npm run check:robot` fails if either is stale or edited.
-- `src/ren/` is ren desktop's search results page and everything it imports, byte for byte, with its Tailwind config.
-  `npm run check:ren` verifies it against `SHA256SUMS`; `SOURCE.txt` says how the file list is made. `src/search/` is
-  the phone's page around it.
+- `src/ren/` is ren desktop's search results page and its agent panel's components, with everything they import, byte
+  for byte, with its Tailwind config. `npm run check:ren` verifies it against `SHA256SUMS`; `SOURCE.txt` says how the
+  file list is made. `src/search/` is the phone's page around the search page, and `src/panel/` the agent panel's
+  chat on those components.
 - `npm test` runs Playwright on the real robot page.
-
-The agent panel's chat page is still built from `stage-ui/` (ElevenLabs UI) into `assets/ren/chat/`, which is in git.
 
 The launcher icon, notification icon and wordmark are generated from the "ren." logotype
 (`../docs/design/ren-logotype.json`) by `python3 tools/build_icon.py`; `--check` fails if they are stale.

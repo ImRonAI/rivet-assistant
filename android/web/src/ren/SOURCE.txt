@@ -1,14 +1,19 @@
-Ren's search results page from ren desktop, unmodified: github.com/ImRonAI/TheBrowser at b112adf.
+Ren's search results page and its agent panel's components from ren desktop, unmodified: github.com/ImRonAI/TheBrowser
+at b112adf.
 
   pages/SearchResultsPage.tsx and everything it imports     src/ (the same paths, without the src/ prefix)
+  the agent panel's components (below) and their imports    src/
   index.css, vite-env.d.ts, pages/types/electron.ts         src/
   tailwind.config.ts                                        the repository root
 
 These files are never edited here (SHA256SUMS holds their hashes; `npm run check:ren` verifies them). The file list is
-the import closure of src/pages/SearchResultsPage.tsx:
+the import closure of src/pages/SearchResultsPage.tsx and of the components ren desktop's agent panel
+(src/components/agent-panel/AgentPanel.tsx) draws a conversation with: ai-elements/conversation, message, response,
+chain-of-thought, tool and shimmer:
 
   esbuild src/pages/SearchResultsPage.tsx --bundle --packages=external --metafile=meta.json --outfile=/dev/null
 
 plus the files those import for their types only (found by `tsc -b`), which are checked but never bundled.
 
-The phone's page (src/search/) mounts SearchResultsPage as it is and supplies what Electron supplies on the desktop.
+The phone's search page (src/search/) mounts SearchResultsPage as it is and supplies what Electron supplies on the
+desktop. Its agent panel's chat (src/panel/) draws the conversation with those components the way AgentPanel.tsx does.

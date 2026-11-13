@@ -108,7 +108,7 @@ class RenRuntime(private val app: Context) {
     val agent: Assistant
         get() = when (settings.provider) {
             Provider.ElevenLabs -> elevenLabs
-            Provider.Gemini, Provider.Nim, Provider.Mistral, Provider.Telnyx -> strands
+            Provider.Gemini, Provider.Nim, Provider.Mistral, Provider.Telnyx, Provider.Xai -> strands
         }
 
     /** Switches provider; the running conversation ends, and the next one starts with [provider]. */

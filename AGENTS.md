@@ -105,7 +105,8 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
     question to Gemini text got no answer once the Brave tools were added. A billed key lifts it.
   - **NIM's default `z-ai/glm-5.3-flash`** (ren's default, listed in NVIDIA's catalogue) returns nothing, from this
     VM and from ren desktop's own NIM code and venv on the owner's Mac; other NIM models on the same key answer in
-    under a second, and Settings › Agents picks one.
+    under a second, and Settings › Agents picks one. The VM's NIM default is `minimaxai/minimax-m3.1-flash` (owner,
+    2026-11-13), set with ren's own `NIM_MODEL` in `compose.yaml`.
   - The phone's seven search tools (`web_search` and the rest, on the hub and as client tools) search Brave with the
     keys in Settings, baked from `braveSearchKey` and `braveAnswersKey` in `android/ren.local.properties`. Without them
     they answer "Search isn't set up yet: add the Brave key in Settings.", which Gemini Live got when it chose
@@ -228,7 +229,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
-- **Strands providers: Gemini, NVIDIA NIM, Mistral and Telnyx** (Settings › Agents; ElevenLabs is the default): Emrys's agents
+- **Strands providers: Gemini, NVIDIA NIM, Mistral, Telnyx and xAI** (Settings › Agents; ElevenLabs is the default): Emrys's agents
   in Strands on the workspace VM (`deploy/vm/gemini/app.py`, the `gemini` container at `wss://rivet.ron-ai.dev/gemini/`,
   behind Caddy's bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `RenRuntime.agent` is
   `RenAgent` or `StrandsAgent`, and the screens use only its six members. Settings › Agents picks the provider, the text
@@ -238,7 +239,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`; `b112adf`'s reordering of tool results is not copied,
     because Strands 1.64.0's formatter already puts them first), copied into `providers.py`, `mistral_model.py`,
     `media_capabilities.py` and `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
-    (default `z-ai/glm-5.3-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
+    (ren's default `z-ai/glm-5.3-flash`; the VM's `NIM_MODEL` is `minimaxai/minimax-m3.1-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
     `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
     change for mypy and for Strands 1.64.0. Keys: `NVIDIA_NIM_API_KEY` and `MISTRAL_API_KEY` in `gemini.env`.
   - Telnyx (2026-11-13) is built the way ren builds NIM, since ren has no Telnyx provider: Telnyx Inference serves its
@@ -250,6 +251,14 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     Telnyx's catalogue marks Recommended (https://developers.telnyx.com/docs/inference/models.md). Telnyx takes
     `reasoning_effort` (none to max) but documents no values per model and answers an unsupported one with a 400, so
     its models offer Auto only, and `reasoning_content` streams as Strands' reasoning.
+  - xAI (2026-11-13) is ren's, copied from `ImRonAI/TheBrowser` at `5a23a3d`: ren's `RonXAIModel` and `XAIStatePruner`
+    (`agent/api/core/xai_model.py`, in the image's copy of ren at `/opt/ren`) on strands-xai 0.6.1 and xai-sdk 1.19.0,
+    built as ren builds it in `providers.py`: xAI's server-side `web_search`, `x_search` and `code_execution` (and
+    `collections_search` when `XAI_COLLECTION_IDS` is set), its citations included, and ren's per-model reasoning table.
+    The default is ren's `grok-4.5` (`XAI_MODEL`), the catalogue is xai-sdk's `models.list_language_models()`, and the
+    key is `XAI_API_KEY` in `gemini.env`. Every Strands provider, xAI and Gemini included, has ren's seven `brave_*`
+    tools, as ren desktop gives them to all its providers (`build_core_tools`). Not run live (owner, 2026-11-13: the
+    owner tests it).
   - Text (`/gemini/text`): the Strands harness, `create_harness(model="google/<text model>", effort=…)` for Gemini, with
     every built-in on (shell, read, write, edit, web_fetch, Google Search, programmatic_tool_caller, subagent, todos,
     memory, sessions) plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and
@@ -313,9 +322,8 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 ```
 android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent panel, widgets, assistant overlay
   web/       the app's bundled pages, built by Vite into assets/ren/web by Gradle (webInstall, webBuild; needs Node):
-             src/cato (Cato, unmodified), src/robot (ren's robot), src/ren (ren desktop's search page, unmodified),
-             src/search (the phone's mount of it)
-  stage-ui/  the chat page's build (ElevenLabs UI on Ink & Volt tokens), bundled into assets/ren/chat (in git)
+             src/cato (Cato, unmodified), src/robot (ren's robot), src/ren (ren desktop's search page and agent panel
+             components, unmodified), src/search (the phone's mount of the page), src/panel (the agent panel's chat)
 deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Strands
            agents), hub/ (Ren's hub), search/ (ren desktop's search routers), laptop/ (OpenCode config, workspace AGENTS.md)
 docs/      design/ (REN_DESIGN.md: Ink & Volt on the phone; ren-logotype.json)
@@ -327,7 +335,6 @@ Commands:
 cd android && python3 tools/build_icon.py --check
 JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease   # builds android/web first (npm ci, npm run build)
 cd android/web && npm run build && npm test   # the pages alone: hash checks, tsc, Vite, then Playwright on the robot
-cd android/stage-ui && npm ci && npm run verify:components   # the ElevenLabs files byte-identical to upstream
 uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
 uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with mistralai==2.10.1 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
 uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 mypy --config-file deploy/vm/hub/mypy.ini
@@ -344,11 +351,16 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
   (`BrowserScreen.kt`); the screens below are the agent panel and the pages its menu opens.
   - **Power-on screen** (`Onboarding.kt`): meet Emrys ("Set up" or "Not now"), the talk key, the default assistant,
     and phone access.
-  - **Agent panel** (`HomeScreen.kt`, opened by Ask Ren): the status, the robot stage, a greeting, the transcript sheet, a
-    thinking row while the agent works, and the dock: quick keys (Catch me up, My day, Texts, Calls), the composer
-    (text agent) and the voice disc (voice agent, asking for the microphone first). During a voice session
-    (`RenState.voice`) Emrys stays on its stage and the chat folds under it as a Transcript header that opens the
-    same chat view as typing; checked on the emulator 2026-11-04.
+  - **Agent panel** (`HomeScreen.kt`, opened by Ask Ren over the whole screen): the status, the robot stage, a
+    greeting, and the dock: quick keys (Catch me up, My day, Texts, Calls), the composer (text agent) and the voice
+    disc (voice agent, asking for the microphone first). A conversation, typed or spoken, takes the whole panel: the
+    chat fills it under a Conversation bar that opens Ren's stage over it like an accordion (owner, 2026-11-13).
+  - **The chat** (`ChatView.kt`, `android/web/src/panel/`): the conversation the way ren desktop's agent panel
+    (`AgentPanel.tsx`) draws it, on ren desktop's own components in `android/web/src/ren` (Conversation, Message,
+    MessageResponse, Chain of Thought, Tool): the user's messages in a contained bubble, Ren's flat, its reasoning as a
+    chain of thought split at its bold labels, a search as ren's web search card (what it searched for, its sources,
+    its pictures) and any other tool as ren's tool card. The app sends the chat as JSON (`ChatPage.payload`,
+    `src/panel/model.ts`).
   - **Approval sheet** (`ApprovalSheet.kt`): see `request_approval` above.
   - **Activity** (`ActivityScreen.kt`): pending reminders, then the activity log grouped by day.
   - **Settings** (`SettingsScreen.kt`): 1 Agents (provider, the Gemini text model, the talk key), 2 Permissions (a
@@ -384,17 +396,17 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 7. **The Strands agents** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL): they run on the Gemini API (AI
-   Studio, owner, 2026-11-06), NIM, Mistral and Telnyx. The `gemini` and `search` images are built on the VM
+   Studio, owner, 2026-11-06), NIM, Mistral, Telnyx and xAI. The `gemini` and `search` images are built on the VM
    (`emrys-gemini:1.64.0`, `ren-search:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`
-   (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`, `TELNYX_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
+   (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`, `TELNYX_API_KEY`, `XAI_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
    doesn't load there) and `search.env` (`BRAVE_SEARCH_API_KEY`, `BRAVE_ANSWERS_API_KEY`, `NVIDIA_NIM_API_KEY`).
    `EMRYS_GEMINI_TOKEN` is in `computer.env`, and the app's `geminiToken` (in `android/ren.local.properties`) is the
    same token. Live results are under "The Strands agents live" above; Gemini needs a billed key and NIM another
    model than its default. Next:
    `start_background_task` and `call_as_emrys` for them, and the hub's `/hub/agents/mcp` on the ElevenLabs text and
    voice agents (the owner asked for both agents to be connected; it needs the token as a workspace secret).
-8. **ren mobile:** the agent panel's chat on ren desktop's components (it is the ElevenLabs UI page from
-   `android/stage-ui`, on Ink & Volt tokens); the Glass theme; the robot in ren desktop; an
+8. **ren mobile:** the agent panel's chat with a real conversation on a phone (built on ren desktop's components
+   2026-11-13; with no agent calls allowed, only its page loading was checked); the Glass theme; the robot in ren desktop; an
    "Open on desktop" action that uses `HubLink.call`; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
    before changing who answers +17608769757).
 9. **Telnyx** (PR #13): checked by mypy and offline (the model, its window from the catalogue, the catalogue's filter);

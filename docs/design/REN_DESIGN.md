@@ -4,7 +4,7 @@ ren mobile follows ren desktop's design system as its Electron code implements i
 `tailwind.config.ts`, `src/index.css` and `docs/brand.md` (`ImRonAI/TheBrowser`); this page records how the phone
 carries it. The Compose tokens are in `android/app/src/main/java/com/hiron/ren/ui/Theme.kt`; the bundled pages use ren
 desktop's own Tailwind config (`android/web/src/ren/tailwind.config.ts`) or the same values as CSS variables
-(`android/stage-ui/src/chat/chat.css`, `android/app/src/main/assets/map/index.html`).
+(`android/app/src/main/assets/map/index.html`).
 
 ## Colour
 

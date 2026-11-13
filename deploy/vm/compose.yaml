@@ -82,6 +82,9 @@ services:
       - gemini.env
       # The Brave keys, for ren's Brave tools.
       - search.env
+    environment:
+      # NIM's default text model (ren's `NIM_MODEL`; owner, 2026-11-13).
+      NIM_MODEL: minimaxai/minimax-m3.1-flash
     mem_limit: 4g
     volumes:
       - laptop_home:/config
