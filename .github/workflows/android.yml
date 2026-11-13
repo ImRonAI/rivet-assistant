@@ -25,11 +25,12 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: android-actions/setup-android@v3
-      - name: Robot asset is up to date
-        run: python3 tools/build_robot_asset.py --check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Unit tests, lint, release build
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: emrys-apk
+          name: ren-apk
           path: android/app/build/outputs/apk/release/app-release.apk

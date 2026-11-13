@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark: black and charcoal with no hue; volt 400 is the only colour. -->
+<resources>
+    <color name="ren_bg">#FF0C0C0C</color>
+    <color name="ren_card">#FF141414</color>
+    <color name="ren_field">#FF141414</color>
+    <color name="ren_tile">#FF1E1E1E</color>
+    <color name="ren_edge">#FF1E1E1E</color>
+    <color name="ren_ink">#FFF5F5F5</color>
+    <color name="ren_ink2">#FFBDBDBD</color>
+    <color name="ren_muted">#FF919191</color>
+    <color name="ren_accent">#FF8D98FE</color>
+    <color name="ren_accent_ink">#FF0B0C17</color>
+</resources>

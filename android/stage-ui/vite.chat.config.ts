@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
-// The chat page is its own app: the app's WebView loads assets/emrys/chat/index.html through WebViewAssetLoader, and
+// The chat page is its own app: the app's WebView loads assets/ren/chat/index.html through WebViewAssetLoader, and
 // the page loads its chunks (the Streamdown plugins' code highlighting, math and diagrams load on demand) beside it.
 // https://vite.dev/config/
 export default defineConfig({
@@ -17,7 +17,7 @@ export default defineConfig({
   },
   publicDir: false,
   build: {
-    outDir: path.resolve(__dirname, "../app/src/main/assets/emrys/chat"),
+    outDir: path.resolve(__dirname, "../app/src/main/assets/ren/chat"),
     emptyOutDir: true,
     target: "es2022",
     sourcemap: false,

@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Emrys is dark first; the window matches the app's noir background so launch never flashes white. -->
-    <style name="Theme.Emrys" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/emrys_bg</item>
+    <!-- The window matches the app's paper (white, or black in Dark) so launch never flashes the other. -->
+    <style name="Theme.Ren" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ren_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
-    <color name="emrys_bg">#0A0A0C</color>
 </resources>

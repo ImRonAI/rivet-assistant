@@ -47,9 +47,9 @@ export type Intent = { type: "ready" } | { type: "image"; step: string; n: numbe
 
 declare global {
   interface Window {
-    emrysChat?: { show: (model: ChatModel) => void }
+    renChat?: { show: (model: ChatModel) => void }
     /** The app's web message listener (WebViewCompat.addWebMessageListener). */
-    EmrysChat?: { postMessage: (message: string) => void }
+    RenChat?: { postMessage: (message: string) => void }
   }
 }
 
@@ -57,7 +57,7 @@ const EMPTY: ChatModel = { messages: [], working: false, error: null }
 let current = EMPTY
 const listeners = new Set<() => void>()
 
-window.emrysChat = {
+window.renChat = {
   show(model) {
     current = model
     listeners.forEach((changed) => changed())
@@ -75,5 +75,5 @@ export function useChat(): ChatModel {
 }
 
 export function tell(intent: Intent) {
-  window.EmrysChat?.postMessage(JSON.stringify(intent))
+  window.RenChat?.postMessage(JSON.stringify(intent))
 }

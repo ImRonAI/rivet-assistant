@@ -10,9 +10,6 @@ import { readFileSync } from "node:fs"
 
 const COMMIT = "3a28ebab197f8cfa599934f52db12ad1396e54f4"
 const ELEVENLABS = {
-  "ui/orb.tsx": "16fdb804e37c495806091d34712e689f89c02b4638bb173ab5bef5e5eac52b91",
-  "ui/shimmering-text.tsx": "c746b3a1d29d9c666bd01681d512b88aeb4a3ff6f589e4055870580ced4eea5b",
-  "ui/matrix.tsx": "f074f26d5d9060b53c794893993c2ab8b7c13d6de0c1a4135cad069d0ecf0141",
   "ui/conversation.tsx": "2912150fa0cf25dd1533276f4fb44cfc1158da8847ebaf9c2dac076297b57bc2",
   "ui/message.tsx": "9b8c155dea2a034dae80a804a0648427e5f9e0344cd0dab5c13d61ee452a1fc1",
   "ui/response.tsx": "129a7e7acd1344af1ee0406e555d378c3c2c85b626ac52b350dad0fb3698a09b",

@@ -80,11 +80,31 @@ services:
     env_file:
       - elevenlabs.env
       - gemini.env
+      # The Brave keys, for ren's Brave tools.
+      - search.env
     mem_limit: 4g
     volumes:
       - laptop_home:/config
 
+  # Ren's hub: one MCP server joining the phone and ren desktop, at https://rivet.ron-ai.dev/hub/.
+  hub:
+    build: ./hub
+    image: ren-hub:3.4.0
+    restart: unless-stopped
+    mem_limit: 1g
+
+  # Ren's search and Discover (ren desktop's own backend code) for the phone, at https://rivet.ron-ai.dev/search/ and /discover/.
+  search:
+    build: ./search
+    image: ren-search:b112adf
+    restart: unless-stopped
+    env_file: search.env
+    mem_limit: 2g
+    volumes:
+      - search_sessions:/home/ren/sessions
+
 volumes:
+  search_sessions:
   caddy_data:
   caddy_config:
   laptop_home:
