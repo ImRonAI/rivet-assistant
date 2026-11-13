@@ -1,8 +1,9 @@
 """Emrys's Strands agents for the phone: the harness for text and a BidiAgent for voice, behind FastAPI WebSockets.
 
-The text agent runs on Gemini, NVIDIA NIM, Mistral or Telnyx, the phone's choice in Settings › Agents (`provider`,
+The text agent runs on Gemini, NVIDIA NIM, Mistral, Telnyx or xAI, the phone's choice in Settings › Agents (`provider`,
 `model`, the provider's default when left out, and `effort`, the reasoning level or `auto`). NIM and Mistral models are
-built the way ren builds them, and Telnyx's the way ren builds NIM's, on Telnyx's OpenAI-compatible API (`providers.py`);
+built the way ren builds them, as is xAI's on ren's own `RonXAIModel`, and Telnyx's the way ren builds NIM's, on Telnyx's
+OpenAI-compatible API (`providers.py`);
 `GET /gemini/models` and `GET /gemini/efforts` list each provider's live models and each model's reasoning levels.
 Voice is always Gemini Live; its helpers run on the chosen text model.
 
@@ -64,6 +65,7 @@ from strands_harness.models import EFFORT_LEVELS
 from strands_harness.tools.programmatic_tool_caller import programmatic_tool_caller
 
 from agent.api.core.brave_tools import brave_tools
+from agent.api.core.xai_model import XAIStatePruner
 
 from live_model import RenGeminiLiveModel
 from providers import ProviderName, build_model, list_provider_models, provider_default_model, reasoning_efforts
@@ -153,7 +155,7 @@ class Phone(OutputStream):
 
 
 def text_model(provider: ProviderName, model: str, effort: str) -> Model:
-    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral and Telnyx as `providers.py` does."""
+    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral, Telnyx and xAI as `providers.py` does."""
     if provider == "gemini":
         return GeminiModel(model_id=model)
     return build_model(provider, model, None if effort == "auto" else effort)
@@ -230,6 +232,10 @@ async def text(
         session={"id": conversation, "dir": f"{HOME}/sessions"},
         memory={"dir": f"{HOME}/memory"},
     )
+    if provider == "xai":
+        # As ren adds it: strands_xai appends the whole encrypted protobuf history to every assistant turn and
+        # only ever reads the newest copy; keep one so history/snapshots/token estimates stay linear.
+        agent.hooks.add_hook(XAIStatePruner())
     pending: list[Interrupt] = []
     try:
         async with agent:

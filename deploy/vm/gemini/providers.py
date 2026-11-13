@@ -1,4 +1,4 @@
-"""The text agent's model providers besides ElevenLabs: NVIDIA NIM, Mistral, Gemini and Telnyx.
+"""The text agent's model providers besides ElevenLabs: NVIDIA NIM, Mistral, Gemini, Telnyx and xAI.
 
 Copied from ren (github.com/ImRonAI/TheBrowser, `agent/api/core/panel_agent.py` and `config.py` at `0c973a6`): the
 provider keys and defaults, the per-model reasoning-effort tables, `build_model` for NIM and Mistral, and the live model
@@ -20,6 +20,11 @@ OpenAI-compatible API (https://developers.telnyx.com/docs/inference/getting-star
 `https://api.telnyx.com/v2/ai/openai`, a Telnyx API key as the bearer), so the model is Strands' `OpenAIModel` on that
 base URL, the catalogue is the OpenAI client's `models.list()` on it (`GET /v2/ai/openai/models`, each entry a
 `ModelMetadata` with `task` and `context_length`), and `reasoning_content` streams as Strands' reasoning.
+
+xAI is ren's (`panel_agent.py` and `config.py` at `5a23a3d`): `XAI_REASONING_EFFORTS_BY_MODEL`, `build_model`'s xAI branch
+with xAI's server-side tools, and the catalogue from `xai_sdk`. The model is ren's own `RonXAIModel` from ren's source in
+the image (`agent/api/core/xai_model.py`, unmodified and the same at `b112adf`), on ren's `strands-xai` 0.6.1 and
+`xai-sdk` 1.19.0.
 """
 
 from __future__ import annotations
@@ -29,8 +34,8 @@ from typing import Literal
 
 from strands.models import Model
 
-ProviderName = Literal["nim", "mistral", "gemini", "telnyx"]
-PROVIDERS: tuple[ProviderName, ...] = ("nim", "mistral", "gemini", "telnyx")
+ProviderName = Literal["nim", "mistral", "gemini", "telnyx", "xai"]
+PROVIDERS: tuple[ProviderName, ...] = ("nim", "mistral", "gemini", "telnyx", "xai")
 
 # NVIDIA NIM hosted endpoint (OpenAI-compatible chat completions): https://docs.api.nvidia.com/nim/reference/
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
@@ -44,6 +49,41 @@ TELNYX_DEFAULT_MODEL = os.getenv("TELNYX_MODEL") or "zai-org/GLM-5.3-Flash"
 #: The catalogue's chat models; the same list carries embedding (``feature-extraction``) and audio models, and an
 #: entry without ``task`` is text generation (``ModelMetadata.task`` defaults to it).
 TELNYX_CHAT_TASK = "text-generation"
+
+# xAI native provider (strands-xai). Distinct from Perplexity catalogue ids
+# such as "xai/grok-4.5", which still route through the Agent API.
+XAI_MODEL = os.getenv("XAI_MODEL", "grok-4.5")
+XAI_DEFAULT_MODEL = XAI_MODEL
+XAI_NATIVE_TOOLS_ENABLED = os.getenv("XAI_NATIVE_TOOLS_ENABLED", "true").lower() == "true"
+
+# Comma-separated collection ids for collections_search.
+XAI_COLLECTION_IDS = [
+    c.strip() for c in os.getenv("XAI_COLLECTION_IDS", "").split(",") if c.strip()
+]
+
+# xai_sdk binds its tracer at import time and emits a duplicate chat.stream span,
+# so this must be set before xai_sdk is first imported.
+os.environ.setdefault("XAI_SDK_DISABLE_TRACING", "1")
+
+#: Per-model ``reasoning_effort`` support, from two agreeing sources:
+#: https://docs.x.ai/docs/guides/reasoning (summary table) and the installed
+#: strands_xai 0.6.1 ``xAIConfig.reasoning_effort`` docstring. Ordered lowest to
+#: highest. ``xhigh`` needs xai-sdk >= 1.18 (pinned 1.19.0). On grok-4.5 xAI
+#: treats ``xhigh`` as ``high``, so it is not offered there. grok-4.20-multi-agent
+#: repurposes effort as agent count, and grok-build / grok-4.20-0309 snapshots
+#: reject the parameter outright, so those return no efforts. Longest prefix wins.
+XAI_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    # grok-4.7: docs "grok-4.7, grok-4.6 and grok-4.5 support reasoning_effort ...
+    # xhigh is available on grok-4.6 and later"; live 2026-10-09: none -> "This model
+    # does not support reasoning_effort value none", low/medium/high/xhigh accepted.
+    "grok-4.7": ("low", "medium", "high", "xhigh"),
+    "grok-4.6": ("low", "medium", "high", "xhigh"),
+    "grok-4.5": ("low", "medium", "high"),
+    "grok-4.3": ("none", "low", "medium", "high"),
+    "grok-4.20-multi-agent": (),
+    "grok-4.20": (),
+    "grok-build": (),
+}
 
 #: ``reasoning_effort`` values of the NIM chat-completions reference for each model
 #: (https://docs.api.nvidia.com/nim/reference/z-ai-glm-5-3-flash-infer); unlisted ids take none.
@@ -153,6 +193,7 @@ def provider_api_key(provider: str) -> str | None:
         "mistral": "MISTRAL_API_KEY",
         "gemini": "GOOGLE_API_KEY",
         "telnyx": "TELNYX_API_KEY",
+        "xai": "XAI_API_KEY",
     }.get(provider)
     return os.getenv(name) if name else None
 
@@ -163,11 +204,21 @@ def provider_default_model(provider: ProviderName) -> str:
         "mistral": MISTRAL_DEFAULT_MODEL,
         "gemini": GEMINI_DEFAULT_MODEL,
         "telnyx": TELNYX_DEFAULT_MODEL,
+        "xai": XAI_DEFAULT_MODEL,
     }[provider]
 
 
 def configured_providers() -> list[ProviderName]:
     return [name for name in PROVIDERS if provider_api_key(name)]
+
+
+def xai_reasoning_efforts(model_id: str) -> tuple[str, ...]:
+    """Documented ``reasoning_effort`` values for a Grok model id; empty if unsupported."""
+    lowered = model_id.lower()
+    for family in sorted(XAI_REASONING_EFFORTS_BY_MODEL, key=len, reverse=True):
+        if lowered == family or lowered.startswith(family + "-"):
+            return XAI_REASONING_EFFORTS_BY_MODEL[family]
+    return ()
 
 
 def _efforts_by_family(table: dict[str, tuple[str, ...]], model_id: str) -> tuple[str, ...]:
@@ -210,12 +261,14 @@ def reasoning_efforts(provider: ProviderName, model_id: str) -> tuple[str, ...]:
         return ()
     if provider == "nim":
         return NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ())
+    if provider == "xai":
+        return xai_reasoning_efforts(model_id)
     if provider == "mistral":
         return mistral_reasoning_efforts(model_id)
     return gemini_thinking_levels(model_id)
 
 
-def build_model(provider: Literal["nim", "mistral", "telnyx"], model_id: str, reasoning_effort: str | None = None) -> Model:
+def build_model(provider: Literal["nim", "mistral", "telnyx", "xai"], model_id: str, reasoning_effort: str | None = None) -> Model:
     """Construct the SDK model instance for ``provider``.
 
     ``context_window_limit`` is the model's real window from its provider's own metadata (``context_windows``)
@@ -230,7 +283,7 @@ def build_model(provider: Literal["nim", "mistral", "telnyx"], model_id: str, re
     return model
 
 
-def _provider_model(provider: Literal["nim", "mistral", "telnyx"], model_id: str, reasoning_effort: str | None) -> Model:
+def _provider_model(provider: Literal["nim", "mistral", "telnyx", "xai"], model_id: str, reasoning_effort: str | None) -> Model:
     if provider == "telnyx":
         if not provider_api_key("telnyx"):
             raise ValueError("TELNYX_API_KEY is not configured.")
@@ -240,6 +293,39 @@ def _provider_model(provider: Literal["nim", "mistral", "telnyx"], model_id: str
 
         # The SDK's OpenAI chat-completions model against Telnyx Inference's OpenAI-compatible endpoint.
         return OpenAIModel(client_args={"api_key": provider_api_key("telnyx"), "base_url": TELNYX_BASE_URL}, model_id=model_id)
+
+    if provider == "xai":
+        if not provider_api_key("xai"):
+            raise ValueError("XAI_API_KEY is not configured.")
+        from agent.api.core.xai_model import RonXAIModel
+
+        kwargs = {
+            "client_args": {"api_key": provider_api_key("xai")},
+            "model_id": model_id,
+        }
+        if XAI_NATIVE_TOOLS_ENABLED:
+            from xai_sdk.tools import code_execution, collections_search, web_search, x_search
+
+            xai_tools = [
+                web_search(enable_image_understanding=True, enable_image_search=True),
+                x_search(enable_image_understanding=True, enable_video_understanding=True),
+                code_execution(),
+            ]
+            if XAI_COLLECTION_IDS:
+                xai_tools.append(collections_search(collection_ids=XAI_COLLECTION_IDS))
+            kwargs["xai_tools"] = xai_tools
+            # https://docs.x.ai/developers/tools/citations ; strands_xai 0.6.1 `include` (L173/L402).
+            kwargs["include"] = ["inline_citations", "web_search_call_output", "x_search_call_output"]
+        if reasoning_effort:
+            supported = xai_reasoning_efforts(model_id)
+            if reasoning_effort not in supported:
+                raise ValueError(
+                    f"{model_id} does not accept reasoning_effort={reasoning_effort!r}; "
+                    + (f"supported: {', '.join(supported)}" if supported else "this model rejects the parameter")
+                )
+            kwargs["reasoning_effort"] = reasoning_effort
+        grok: Model = RonXAIModel(**kwargs)
+        return grok
 
     if provider == "nim":
         if not provider_api_key("nim"):
@@ -289,6 +375,19 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
         with OpenAI(api_key=provider_api_key("nim"), base_url=NVIDIA_NIM_BASE_URL) as client:
             return [{"id": item.id, "owned_by": getattr(item, "owned_by", None) or "nvidia", "provider": "nim"}
                     for item in client.models.list()]
+
+    if provider == "xai":
+        if not provider_api_key("xai"):
+            return []
+        from xai_sdk import Client
+
+        client = Client(api_key=provider_api_key("xai"))
+        models = []
+        for item in client.models.list_language_models():
+            model_id = _strip_model_prefix(getattr(item, "name", "") or "")
+            if model_id:
+                models.append({"id": model_id, "owned_by": "xai", "provider": "xai"})
+        return models
 
     if provider == "telnyx":
         if not provider_api_key("telnyx"):

@@ -32,4 +32,5 @@ enum class Provider(val label: String, val strands: String?) {
     Nim("NVIDIA NIM", "nim"),
     Mistral("Mistral", "mistral"),
     Telnyx("Telnyx", "telnyx"),
+    Xai("xAI", "xai"),
 }
