@@ -249,10 +249,9 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   model from the provider's live catalogue (`GET /gemini/models?provider=`, searchable; none chosen is the VM's default)
   and the model's reasoning level (`GET /gemini/efforts`, with Auto first); the session's WebSocket carries `provider`,
   `model` and `effort`.
-  - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`; `b112adf`'s reordering of tool results is not copied,
-    because Strands 1.64.0's formatter already puts them first), copied into `providers.py`, `mistral_model.py`,
-    `media_capabilities.py` and `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
-    (ren's default `z-ai/glm-5.3-flash`; the VM's `NIM_MODEL` is `minimaxai/minimax-m3.1-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
+  - NIM's provider code is ren's (`ImRonAI/TheBrowser` at `0c973a6`), copied into `providers.py` and
+    `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
+    (ren's default `z-ai/glm-5.3-flash`; the VM's `NIM_MODEL` is `minimaxai/minimax-m3.1-flash`), Mistral is Strands' own `MistralModel` (owner, 2026-11-13: the SDK's native integration, not ren's subclass; no `reasoning_effort` there, so Auto only; default `mistral-large-latest`), each passed to
     `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
     change for mypy and for Strands 1.64.0. Keys: `NVIDIA_NIM_API_KEY` and `MISTRAL_API_KEY` in `gemini.env`.
   - Telnyx (2026-11-13) is built the way ren builds NIM, since ren has no Telnyx provider: Telnyx Inference serves its
@@ -349,7 +348,7 @@ cd android && python3 tools/build_icon.py --check
 JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease   # builds android/web first (npm ci, npm run build)
 cd android/web && npm run build && npm test   # the pages alone: hash checks, tsc, Vite, then Playwright on the robot
 uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
-uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with mistralai==2.10.1 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
+uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.4.0 --with mistralai==3.7.0 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
 uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 mypy --config-file deploy/vm/hub/mypy.ini
 cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 --with pytest --with anyio pytest test_hub.py
 ```

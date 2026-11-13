@@ -155,10 +155,13 @@ class Phone(OutputStream):
 
 
 def text_model(provider: ProviderName, model: str, effort: str) -> Model:
-    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral, Telnyx and xAI as `providers.py` does."""
+    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral, Telnyx and xAI as `providers.py` does.
+
+    A level the model doesn't list (one the phone kept from an earlier model) runs on Auto.
+    """
     if provider == "gemini":
         return GeminiModel(model_id=model)
-    return build_model(provider, model, None if effort == "auto" else effort)
+    return build_model(provider, model, effort if effort in reasoning_efforts(provider, model) else None)
 
 
 def harness_effort(effort: str) -> Effort:

@@ -1,19 +1,14 @@
 """The text agent's model providers besides ElevenLabs: NVIDIA NIM, Mistral, Gemini, Telnyx and xAI.
 
 Copied from ren (github.com/ImRonAI/TheBrowser, `agent/api/core/panel_agent.py` and `config.py` at `0c973a6`): the
-provider keys and defaults, the per-model reasoning-effort tables, `build_model` for NIM and Mistral, and the live model
-catalogues. Only the three providers Emrys offers are kept; `mistral_model.py`, `media_capabilities.py` and
-`context_windows.py` are ren's files beside this one. Gemini's model itself is the harness's own (`google/<id>` with
-`effort`), so `build_model` builds NIM and Mistral only.
+provider keys and defaults, the per-model reasoning-effort tables, `build_model` for NIM, and the live model catalogues.
+`context_windows.py` is ren's file beside this one. Gemini's model itself is the harness's own (`google/<id>` with
+`effort`). The copies differ from ren only for Emrys's strict mypy: imports point at the files beside this one, the NIM
+model's `params` is passed by name, and two variables are renamed.
 
-The copies differ from ren in two ways. For Emrys's strict mypy: imports point at the files beside this one, the NIM
-model's `params` is passed by name, two variables are renamed, and `mistral_model.py` hands the vended formatter the
-image as the content block it types. For Strands 1.64.0, whose vended Mistral formatter already replays reasoning in
-place (without its signature) and puts tool replies before the assistant message: `_replay_reasoning` follows that order
-and only adds the signatures back, so thinking is not sent twice. Ren's `_tool_results_before_user_messages` (`b112adf`)
-is not copied for the same reason: 1.64.0's formatter already sends a message's tool replies before its user text. Ren's
-own `test_mistral_tool_stream.py` and `test_mistral_model.py` (at `b112adf`) pass against these copies on 1.64.0. The
-service pins ren's `mistralai` 2.10.1 and `openai` 2.50.0 (`Dockerfile`).
+Mistral is Strands' own `MistralModel` (`strands.models.mistral`, the SDK's native integration, owner 2026-11-13), not
+ren's subclass of it. Its config has no `reasoning_effort`, so Mistral models run on Auto (the model's own default);
+reasoning models still stream their thinking, which the SDK turns into reasoning content.
 
 Telnyx is not in ren; it is built the way ren builds NIM. Telnyx Inference serves its open-weight models on an
 OpenAI-compatible API (https://developers.telnyx.com/docs/inference/getting-started.md: base URL
@@ -88,42 +83,6 @@ XAI_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
 #: ``reasoning_effort`` values of the NIM chat-completions reference for each model
 #: (https://docs.api.nvidia.com/nim/reference/z-ai-glm-5-3-flash-infer); unlisted ids take none.
 NIM_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {"z-ai/glm-5.3-flash": ("low", "high", "max")}
-
-#: Per-model Mistral ``reasoning_effort`` values on ``POST /v1/chat/completions``.
-#: Sources, which agree: https://docs.mistral.ai/studio/conversations/reasoning
-#: (``mistral-small-latest`` / ``mistral-medium-3-5`` take ``none``/``high``;
-#: ``mistral-large-4-0`` takes ``low``/``medium``/``high``; ``zai-glm-5-3`` takes ``low``/``high``/``max``, never ``none``),
-#: the installed ``mistralai`` 2.10.1 ``ReasoningEffort`` literal, and a live probe
-#: of every id ``client.models.list()`` returned on 2026-10-09: every other
-#: generation model answers ``400 "reasoning_effort is not enabled for this
-#: model"`` (code 3051). Ordered lowest to highest. ``zai-glm-5-2`` (deprecated
-#: 2026-09-29) accepts the whole enum live but Mistral documents no effort for it,
-#: so it is left out and reports no efforts. ``max`` is not in the pinned SDK
-#: literal, so ``MistralModel`` sends it through ``_MistralReasoningEffortHook``
-#: (the SDK marshaller drops ``UnrecognizedStr`` values). Longest prefix wins.
-MISTRAL_REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
-    # Live 2026-11-10: none/minimal/xhigh/max -> 400 "supported values: high, low, medium"; the docs say the same
-    # ("Mistral Large 4 does not accept none, minimal, xhigh, or max").
-    "mistral-large-4": ("low", "medium", "high"),
-    "mistral-medium": ("none", "high"),
-    "mistral-small": ("none", "high"),
-    "mistral-vibe-cli": ("none", "high"),
-    "magistral-medium": ("none", "high"),
-    "magistral-small": ("none", "high"),
-    "zai-glm-5-3": ("low", "high", "max"),
-    "zai-glm-5": ("low", "high", "max"),
-    "zai-glm-latest": ("low", "high", "max"),
-}
-
-#: Mistral ids that match a family prefix above but reject the parameter live
-#: (``mistral-large-latest`` -> ``mistral-large-2512`` = Mistral Large 3).
-MISTRAL_REASONING_EFFORTS_EXCLUDED: tuple[str, ...] = (
-    "mistral-large-2512",
-    "mistral-large-latest",
-    "mistral-large-3",
-    "zai-glm-5-2",
-    "glm-5-2",
-)
 
 #: Per-model Gemini ``thinking_config.thinking_level`` values on ``generateContent``.
 #: Source: the "Controlling thinking" table at
@@ -230,18 +189,6 @@ def _efforts_by_family(table: dict[str, tuple[str, ...]], model_id: str) -> tupl
     return ()
 
 
-def mistral_reasoning_efforts(model_id: str) -> tuple[str, ...]:
-    """Documented ``reasoning_effort`` values for a Mistral model id; empty if the model rejects it."""
-    lowered = model_id.lower()
-    if lowered.startswith("ft:"):
-        # Fine-tuned ids embed their base model: ft:<base>:<org>:<date>:<hash>.
-        parts = lowered.split(":")
-        lowered = parts[1] if len(parts) > 1 else lowered
-    if lowered in MISTRAL_REASONING_EFFORTS_EXCLUDED:
-        return ()
-    return _efforts_by_family(MISTRAL_REASONING_EFFORTS_BY_MODEL, lowered)
-
-
 def gemini_thinking_levels(model_id: str) -> tuple[str, ...]:
     """Documented ``thinking_level`` values for a Gemini model id; empty if the model has no thinking control."""
     lowered = model_id.lower().removeprefix("models/")
@@ -254,17 +201,15 @@ def reasoning_efforts(provider: ProviderName, model_id: str) -> tuple[str, ...]:
     """The model's reasoning levels, lowest first, as ren's ``GET /models/{id}/efforts`` answers them.
 
     Telnyx takes ``reasoning_effort`` on every chat completion but documents no values per model ("Not all models
-    support all values; unsupported values are rejected with a 400 error", ``ChatCompletionRequest``), so its models
-    offer Auto only: the model's own default effort.
+    support all values; unsupported values are rejected with a 400 error", ``ChatCompletionRequest``), and Strands'
+    ``MistralModel`` takes none, so their models offer Auto only: the model's own default effort.
     """
-    if provider == "telnyx":
+    if provider in ("telnyx", "mistral"):
         return ()
     if provider == "nim":
         return NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ())
     if provider == "xai":
         return xai_reasoning_efforts(model_id)
-    if provider == "mistral":
-        return mistral_reasoning_efforts(model_id)
     return gemini_thinking_levels(model_id)
 
 
@@ -345,20 +290,12 @@ def _provider_model(provider: Literal["nim", "mistral", "telnyx", "xai"], model_
 
     if not provider_api_key("mistral"):
         raise ValueError("MISTRAL_API_KEY is not configured.")
-    from mistral_model import RonMistralModel
-
     if reasoning_effort:
-        supported = mistral_reasoning_efforts(model_id)
-        if reasoning_effort not in supported:
-            raise ValueError(
-                f"{model_id} does not accept reasoning_effort={reasoning_effort!r}; "
-                + (f"supported: {', '.join(supported)}" if supported else "this model rejects the parameter")
-            )
-    return RonMistralModel(
-        api_key=provider_api_key("mistral"),
-        model_id=model_id,
-        reasoning_effort=reasoning_effort or None,
-    )
+        raise ValueError(f"{model_id}: Strands' MistralModel takes no reasoning_effort; Mistral models run on Auto")
+    from strands.models.mistral import MistralModel
+
+    # Strands' own Mistral integration, as the SDK ships it.
+    return MistralModel(api_key=provider_api_key("mistral"), model_id=model_id)
 
 
 def _strip_model_prefix(name: str) -> str:
