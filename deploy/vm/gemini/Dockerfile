@@ -11,7 +11,8 @@ RUN git clone --filter=blob:none --no-checkout https://github.com/ImRonAI/TheBro
     && git -C /opt/ren sparse-checkout set agent \
     && git -C /opt/ren checkout --detach "$REN_COMMIT" \
     && uv pip install --python /opt/gemini/bin/python python-dotenv==1.2.1
-ENV PYTHONPATH=/opt/ren
+# ren's config makes its session folder when it is imported; it goes in the agents' home on the shared volume.
+ENV PYTHONPATH=/opt/ren SESSION_STORAGE_DIR=/config/emrys-gemini/ren
 COPY app.py providers.py live_model.py mistral_model.py media_capabilities.py context_windows.py /opt/gemini/
 USER 1000:1000
 WORKDIR /config/workspace
