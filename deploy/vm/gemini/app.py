@@ -62,6 +62,8 @@ from strands_harness import BuiltinToolsConfig, Effort, create_harness
 from strands_harness.models import EFFORT_LEVELS
 from strands_harness.tools.programmatic_tool_caller import programmatic_tool_caller
 
+from agent.api.core.brave_tools import brave_tools
+
 from live_model import RenGeminiLiveModel
 from providers import ProviderName, build_model, list_provider_models, provider_default_model, reasoning_efforts
 
@@ -81,6 +83,8 @@ PERMISSIONS = (
     "perm_create_music",
 )
 HOME = "/config/emrys-gemini"
+# Every agent here searches the web with ren desktop's Brave tools (`brave_tools()`: brave_answer, brave_web_search,
+# brave_news_search, brave_image_search, brave_video_search, brave_local_search, brave_rich_answer), whatever its model.
 # The harness's built-ins for Gemini. Its native web search is Google Search grounding, which a Gemini API key on the
 # free tier is refused (429 on every request that carries it); `GEMINI_WEB_SEARCH=0` leaves it out for such a key.
 GEMINI_BUILTINS: BuiltinToolsConfig = {"web_search": os.getenv("GEMINI_WEB_SEARCH", "1") != "0"}
@@ -199,6 +203,7 @@ async def voice(
             # which the Live API refuses with 1007.
             make_subagent(model=Fixed(helper)),
             make_mcp_router(servers=SERVERS),
+            *brave_tools(),
             end_conversation,
         ],
     )
@@ -218,7 +223,7 @@ async def text(
         model=f"google/{chosen}" if provider == "gemini" else text_model(provider, chosen, effort),
         effort=harness_effort(effort) if provider == "gemini" else "auto",
         instructions=await instructions(TEXT_AGENT, variables(websocket, text_only=True)),
-        tools=[python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph, make_mcp_router(servers=SERVERS)],
+        tools=[python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph, make_mcp_router(servers=SERVERS), *brave_tools()],
         builtin_tools=GEMINI_BUILTINS if provider == "gemini" else None,
         mcp_servers=SERVERS,
         session={"id": conversation, "dir": f"{HOME}/sessions"},

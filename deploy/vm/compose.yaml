@@ -80,6 +80,8 @@ services:
     env_file:
       - elevenlabs.env
       - gemini.env
+      # The Brave keys, for ren's Brave tools.
+      - search.env
     mem_limit: 4g
     volumes:
       - laptop_home:/config
