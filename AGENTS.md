@@ -228,7 +228,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 - **Transcript:** agent replies are shown without their expressive audio tags (`[warmly]`, `[surprised]`), which the
   voice still performs. `AgentTools.withoutAudioTags` uses the pattern from ElevenLabs' own widget (convai-widget-core
   `stripAudioTags`), so markdown links stay.
-- **Strands providers: Gemini, NVIDIA NIM and Mistral** (Settings › Agents; ElevenLabs is the default): Emrys's agents
+- **Strands providers: Gemini, NVIDIA NIM, Mistral and Telnyx** (Settings › Agents; ElevenLabs is the default): Emrys's agents
   in Strands on the workspace VM (`deploy/vm/gemini/app.py`, the `gemini` container at `wss://rivet.ron-ai.dev/gemini/`,
   behind Caddy's bearer `EMRYS_GEMINI_TOKEN`). The app's `voice/Assistant.kt` is the seam: `RenRuntime.agent` is
   `RenAgent` or `StrandsAgent`, and the screens use only its six members. Settings › Agents picks the provider, the text
@@ -241,6 +241,15 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     (default `z-ai/glm-5.3-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
     `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
     change for mypy and for Strands 1.64.0. Keys: `NVIDIA_NIM_API_KEY` and `MISTRAL_API_KEY` in `gemini.env`.
+  - Telnyx (2026-11-13) is built the way ren builds NIM, since ren has no Telnyx provider: Telnyx Inference serves its
+    open-weight models on an OpenAI-compatible API (https://developers.telnyx.com/docs/inference/getting-started.md),
+    so the model is Strands' `OpenAIModel` on `https://api.telnyx.com/v2/ai/openai` with `TELNYX_API_KEY` (in
+    `gemini.env`) as the bearer, passed to `create_harness(model=<Model>)`. The catalogue is `client.models.list()` there
+    (`GET /v2/ai/openai/models`), kept to `task` `text-generation` (the same list holds embedding and audio models);
+    its `context_length` is the harness's `context_window_limit`. The default is `zai-org/GLM-5.3-Flash`, the model
+    Telnyx's catalogue marks Recommended (https://developers.telnyx.com/docs/inference/models.md). Telnyx takes
+    `reasoning_effort` (none to max) but documents no values per model and answers an unsupported one with a 400, so
+    its models offer Auto only, and `reasoning_content` streams as Strands' reasoning.
   - Text (`/gemini/text`): the Strands harness, `create_harness(model="google/<text model>", effort=…)` for Gemini, with
     every built-in on (shell, read, write, edit, web_fetch, Google Search, programmatic_tool_caller, subagent, todos,
     memory, sessions) plus python_repl, http_request, notebook, sleep, stop, handoff_to_user, swarm, graph and
@@ -257,19 +266,6 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
     agents' own prompts, read when a conversation opens and filled like ElevenLabs' dynamic variables. The chat is
     built from Strands' events (`voice/GeminiEvents.kt`). `start_background_task`, `call_as_emrys`, Google Calendar
     and the ElevenLabs webhook tools have no Gemini counterpart yet.
-- **Telnyx, another provider** (Settings › Agents, 2026-11-07): Telnyx AI Assistants on Telnyx's models, through
-  Telnyx's own client `@telnyx/ai-agent-lib` 0.7.0 in a WebView (`voice/TelnyxAgent.kt`, page
-  `android/stage-ui/src/telnyx`, built into `assets/ren/telnyx`, 292 KB). Telnyx offers client-side tools only in
-  that JS library over WebRTC (https://developers.telnyx.com/docs/inference/ai-assistants/client-side-tools.md); its
-  Android SDK (`telnyx_rtc`, source at `8ea2625`, 2026-11-06) has anonymous sessions, transcripts and text messages but
-  no client tools, and would add a second 12.2 MB WebRTC library. The app starts a conversation with the assistant id
-  (the assistant needs "Supports unauthenticated web calls"), `user_id` and the eight `perm_*` as `X-` headers (Telnyx
-  maps `X-Perm-Use-Apps` to `{{perm_use_apps}}`), and the 18 phone tools, `request_approval` and the searches as
-  client-side tools answered by the same handlers. Typing is the library's `chatMode`: no microphone and the voice
-  isn't played, but a call is still placed and billed as Voice AI ($0.05/min, https://telnyx.com/pricing.md). The
-  assistant ids come from `telnyxVoiceAssistant` and `telnyxTextAssistant` in `ren.local.properties`. Assistant
-  models: `zai-org/GLM-5.3-Flash` (Telnyx's default), voice-verified `moonshotai/Kimi-K2.6`, `Kimi-K2.5` and
-  `zai-org/GLM-5.2` (https://developers.telnyx.com/docs/voice/conversational-ai/quickstart.md).
 - **Phone MCP server** (`mcp/`, Settings › Remote tools): served on Ren's hub; see "The phone on the hub" above.
 - **Release builds** keep the SDK's private fields (`android/app/proguard-rules.pro`). The SDK reads the voice
   conversation token into a private field with Gson, and its own keep rules cover only public members. Without the
@@ -388,9 +384,9 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
    simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
 7. **The Strands agents** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL): they run on the Gemini API (AI
-   Studio, owner, 2026-11-06), NIM and Mistral. The `gemini` and `search` images are built on the VM
+   Studio, owner, 2026-11-06), NIM, Mistral and Telnyx. The `gemini` and `search` images are built on the VM
    (`emrys-gemini:1.64.0`, `ren-search:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`
-   (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
+   (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`, `TELNYX_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
    doesn't load there) and `search.env` (`BRAVE_SEARCH_API_KEY`, `BRAVE_ANSWERS_API_KEY`, `NVIDIA_NIM_API_KEY`).
    `EMRYS_GEMINI_TOKEN` is in `computer.env`, and the app's `geminiToken` (in `android/ren.local.properties`) is the
    same token. Live results are under "The Strands agents live" above; Gemini needs a billed key and NIM another
@@ -401,12 +397,9 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
    `android/stage-ui`, on Ink & Volt tokens); the Glass theme; the robot in ren desktop; an
    "Open on desktop" action that uses `HubLink.call`; Gemini Live as a Telnyx assistant (Call Control media streaming; ask
    before changing who answers +17608769757).
-9. **Telnyx** (PR on `claude/project-thread-jngfsl`): built and checked by the JVM tests, lint and the release build;
-   not run live. It needs the owner's two assistants (or the ElevenLabs agents imported into Telnyx, which carries
-   the prompt, greeting, variables, webhook tools and MCP servers but not client tools), each with the client-side
-   tools added and unauthenticated web calls on, and their ids in `ren.local.properties`. Then on a phone: a voice
-   and a typed conversation, a tool call, `request_approval` (its Portal timeout must outlast the user), whether a
-   typed turn ends on `listening` in `chatMode`, and the WebView's microphone and audio with no window.
+9. **Telnyx** (PR #13): checked by mypy and offline (the model, its window from the catalogue, the catalogue's filter);
+   not run live. It needs `TELNYX_API_KEY` in the VM's `gemini.env` and the `gemini` image rebuilt, then one typed
+   conversation from Settings › Agents › Telnyx with a tool call.
 
 ## Before launch (checklist)
 1. **Release signing:** the APK is signed with the debug key (`android/app/build.gradle.kts`). Create a release

@@ -47,14 +47,14 @@ object GeminiEvents {
     }
 
     /** What the user said in a voice session. */
-    internal fun heard(state: RenState, text: String): RenState {
+    private fun heard(state: RenState, text: String): RenState {
         if (text.isBlank()) return state
         val message = ChatMessage("agent:" + UUID.randomUUID().toString().take(12), true, text)
         return state.copy(messages = state.messages + message, activity = Activity.Thinking, lastError = null)
     }
 
     /** Ren's whole spoken reply replaces what streamed. */
-    internal fun spoken(state: RenState, text: String): RenState = RenStore.turn(state.copy(activity = Activity.Done)) { m ->
+    private fun spoken(state: RenState, text: String): RenState = RenStore.turn(state.copy(activity = Activity.Done)) { m ->
         val last = m.parts.lastOrNull()
         when {
             last is Reply && last.streaming -> m.copy(parts = m.parts.dropLast(1) + ChatEvents.reply(last.id, text.ifBlank { last.raw }, streaming = false))
@@ -64,7 +64,7 @@ object GeminiEvents {
     }
 
     /** Text adds to the reply that is streaming, or starts one. */
-    internal fun streamed(state: RenState, text: String): RenState = if (text.isEmpty()) state else RenStore.turn(state) { m ->
+    private fun streamed(state: RenState, text: String): RenState = if (text.isEmpty()) state else RenStore.turn(state) { m ->
         val last = m.parts.lastOrNull()
         if (last is Reply && last.streaming) {
             m.copy(parts = m.parts.dropLast(1) + ChatEvents.reply(last.id, last.raw + text, streaming = true))

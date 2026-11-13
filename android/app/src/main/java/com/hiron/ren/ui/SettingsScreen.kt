@@ -191,7 +191,6 @@ private fun Agents(runtime: RenRuntime, refresh: Int) {
     if (provider.strands != null) {
         InfoStrip("${provider.label} runs Ren's text agent in Strands, talks on Gemini 3.8 Live, and reaches the phone's tools through Remote tools, below.")
     }
-    if (provider == Provider.Telnyx) InfoStrip("Telnyx's assistants run on Telnyx's models and use the phone's tools from inside the app.")
 }
 
 /**

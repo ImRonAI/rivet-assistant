@@ -23,7 +23,6 @@ import com.hiron.ren.voice.RenAgent
 import com.hiron.ren.voice.Provider
 import com.hiron.ren.voice.StrandsAgent
 import com.hiron.ren.voice.SearchTools
-import com.hiron.ren.voice.TelnyxAgent
 import com.hiron.ren.widget.RenWidgets
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -55,7 +54,7 @@ class RenApp : Application() {
 val Context.ren: RenRuntime get() = (applicationContext as RenApp).runtime
 
 /**
- * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs, Strands or Telnyx) and the
+ * The rendered [state], the robot's command stream, the phone tools, the agents ([agent], ElevenLabs or Strands) and the
  * approvals they ask for with `request_approval`.
  */
 class RenRuntime(private val app: Context) {
@@ -102,16 +101,14 @@ class RenRuntime(private val app: Context) {
     val images = ImageLoader(http)
 
     private val elevenLabs = RenAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
-    /** Gemini, NVIDIA NIM and Mistral in Strands on the workspace VM. */
+    /** Gemini, NVIDIA NIM, Mistral and Telnyx in Strands on the workspace VM. */
     val strands = StrandsAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
-    private val telnyx = TelnyxAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
 
     /** The agents for the provider chosen in Settings. */
     val agent: Assistant
         get() = when (settings.provider) {
             Provider.ElevenLabs -> elevenLabs
-            Provider.Gemini, Provider.Nim, Provider.Mistral -> strands
-            Provider.Telnyx -> telnyx
+            Provider.Gemini, Provider.Nim, Provider.Mistral, Provider.Telnyx -> strands
         }
 
     /** Switches provider; the running conversation ends, and the next one starts with [provider]. */

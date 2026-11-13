@@ -5,7 +5,6 @@ import com.hiron.ren.browser.SearchLevel
 import com.hiron.ren.BuildConfig
 import com.hiron.ren.device.CarrierStyle
 import com.hiron.ren.device.ForwardMode
-import com.hiron.ren.voice.AgentMode
 import com.hiron.ren.voice.Provider
 import java.util.UUID
 
@@ -66,7 +65,10 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
 
-    /** Who runs Ren's agents: the ElevenLabs agents (the default), Gemini, NVIDIA NIM or Mistral on the workspace VM, or Telnyx's assistants. */
+    /**
+     * Who runs Ren's agents: the ElevenLabs agents (the default), or Gemini, NVIDIA NIM, Mistral or Telnyx on the
+     * workspace VM.
+     */
     var provider: Provider
         get() = runCatching { Provider.valueOf(prefs.getString("provider", null).orEmpty()) }.getOrDefault(Provider.ElevenLabs)
         set(value) = prefs.edit().putString("provider", value.name).apply()
@@ -87,12 +89,6 @@ class Settings(context: Context) {
     var geminiToken: String
         get() = prefs.getString("gemini_token", null) ?: BuildConfig.DEFAULT_GEMINI_TOKEN
         set(value) = prefs.edit().putString("gemini_token", value.trim()).apply()
-
-    /** The Telnyx AI Assistant for [mode], from ren.local.properties; empty when there is none. */
-    fun telnyxAssistant(mode: AgentMode): String = when (mode) {
-        AgentMode.Voice -> BuildConfig.DEFAULT_TELNYX_VOICE_ASSISTANT
-        AgentMode.Text -> BuildConfig.DEFAULT_TELNYX_TEXT_ASSISTANT
-    }
 
     /** Whether the phone stays attached to Ren's hub (Settings › Remote tools). */
     var hubEnabled: Boolean

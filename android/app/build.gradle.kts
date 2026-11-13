@@ -27,8 +27,6 @@ android {
         buildConfigField("String", "DEFAULT_BRAVE_SEARCH_KEY", baked("braveSearchKey"))
         buildConfigField("String", "DEFAULT_BRAVE_ANSWERS_KEY", baked("braveAnswersKey"))
         buildConfigField("String", "DEFAULT_GEMINI_TOKEN", baked("geminiToken"))
-        buildConfigField("String", "DEFAULT_TELNYX_VOICE_ASSISTANT", baked("telnyxVoiceAssistant"))
-        buildConfigField("String", "DEFAULT_TELNYX_TEXT_ASSISTANT", baked("telnyxTextAssistant"))
     }
 
     buildTypes {

@@ -23,14 +23,13 @@ interface Assistant {
 }
 
 /**
- * Who runs Ren's agents; the screens, tools and approvals are the same either way. Gemini, NVIDIA NIM and Mistral are
- * text models under the Strands agents on the workspace VM ([StrandsAgent]), named there by [strands]; Telnyx is Telnyx's
- * own AI Assistants ([TelnyxAgent]).
+ * Who runs Ren's agents; the screens, tools and approvals are the same either way. Every provider but ElevenLabs is a
+ * text model under the Strands agents on the workspace VM ([StrandsAgent]), named there by [strands].
  */
 enum class Provider(val label: String, val strands: String?) {
     ElevenLabs("ElevenLabs", null),
     Gemini("Gemini", "gemini"),
     Nim("NVIDIA NIM", "nim"),
     Mistral("Mistral", "mistral"),
-    Telnyx("Telnyx", null),
+    Telnyx("Telnyx", "telnyx"),
 }

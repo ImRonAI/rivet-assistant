@@ -1,4 +1,4 @@
-# The Strands agents (Gemini, NVIDIA NIM, Mistral) run on the computer image, so the harness's shell, files and tools are the computer's, in its home.
+# The Strands agents (Gemini, NVIDIA NIM, Mistral, Telnyx) run on the computer image, so the harness's shell, files and tools are the computer's, in its home.
 FROM emrys-computer:0.3.1
 USER root
 RUN UV_PYTHON_INSTALL_DIR=/opt/python uv venv /opt/gemini --python 3.12 \

@@ -1,4 +1,4 @@
-"""The text agent's model providers besides ElevenLabs: NVIDIA NIM, Mistral and Gemini.
+"""The text agent's model providers besides ElevenLabs: NVIDIA NIM, Mistral, Gemini and Telnyx.
 
 Copied from ren (github.com/ImRonAI/TheBrowser, `agent/api/core/panel_agent.py` and `config.py` at `0c973a6`): the
 provider keys and defaults, the per-model reasoning-effort tables, `build_model` for NIM and Mistral, and the live model
@@ -14,6 +14,12 @@ and only adds the signatures back, so thinking is not sent twice. Ren's `_tool_r
 is not copied for the same reason: 1.64.0's formatter already sends a message's tool replies before its user text. Ren's
 own `test_mistral_tool_stream.py` and `test_mistral_model.py` (at `b112adf`) pass against these copies on 1.64.0. The
 service pins ren's `mistralai` 2.10.1 and `openai` 2.50.0 (`Dockerfile`).
+
+Telnyx is not in ren; it is built the way ren builds NIM. Telnyx Inference serves its open-weight models on an
+OpenAI-compatible API (https://developers.telnyx.com/docs/inference/getting-started.md: base URL
+`https://api.telnyx.com/v2/ai/openai`, a Telnyx API key as the bearer), so the model is Strands' `OpenAIModel` on that
+base URL, the catalogue is the OpenAI client's `models.list()` on it (`GET /v2/ai/openai/models`, each entry a
+`ModelMetadata` with `task` and `context_length`), and `reasoning_content` streams as Strands' reasoning.
 """
 
 from __future__ import annotations
@@ -23,14 +29,21 @@ from typing import Literal
 
 from strands.models import Model
 
-ProviderName = Literal["nim", "mistral", "gemini"]
-PROVIDERS: tuple[ProviderName, ...] = ("nim", "mistral", "gemini")
+ProviderName = Literal["nim", "mistral", "gemini", "telnyx"]
+PROVIDERS: tuple[ProviderName, ...] = ("nim", "mistral", "gemini", "telnyx")
 
 # NVIDIA NIM hosted endpoint (OpenAI-compatible chat completions): https://docs.api.nvidia.com/nim/reference/
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL") or "https://integrate.api.nvidia.com/v1"
 NIM_DEFAULT_MODEL = os.getenv("NIM_MODEL") or "z-ai/glm-5.3-flash"
 MISTRAL_DEFAULT_MODEL = os.getenv("MISTRAL_MODEL") or "mistral-large-latest"
 GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or "gemini-4-argon"
+# Telnyx Inference's OpenAI-compatible endpoint, and the model its catalogue marks "(Recommended)"
+# (https://developers.telnyx.com/docs/inference/models.md).
+TELNYX_BASE_URL = os.getenv("TELNYX_BASE_URL") or "https://api.telnyx.com/v2/ai/openai"
+TELNYX_DEFAULT_MODEL = os.getenv("TELNYX_MODEL") or "zai-org/GLM-5.3-Flash"
+#: The catalogue's chat models; the same list carries embedding (``feature-extraction``) and audio models, and an
+#: entry without ``task`` is text generation (``ModelMetadata.task`` defaults to it).
+TELNYX_CHAT_TASK = "text-generation"
 
 #: ``reasoning_effort`` values of the NIM chat-completions reference for each model
 #: (https://docs.api.nvidia.com/nim/reference/z-ai-glm-5-3-flash-infer); unlisted ids take none.
@@ -135,7 +148,12 @@ MISTRAL_FALLBACK_MODELS = ("mistral-large-latest",)
 
 def provider_api_key(provider: str) -> str | None:
     """The provider's key from the service's environment; Gemini's is the harness's `GOOGLE_API_KEY`."""
-    name = {"nim": "NVIDIA_NIM_API_KEY", "mistral": "MISTRAL_API_KEY", "gemini": "GOOGLE_API_KEY"}.get(provider)
+    name = {
+        "nim": "NVIDIA_NIM_API_KEY",
+        "mistral": "MISTRAL_API_KEY",
+        "gemini": "GOOGLE_API_KEY",
+        "telnyx": "TELNYX_API_KEY",
+    }.get(provider)
     return os.getenv(name) if name else None
 
 
@@ -144,6 +162,7 @@ def provider_default_model(provider: ProviderName) -> str:
         "nim": NIM_DEFAULT_MODEL,
         "mistral": MISTRAL_DEFAULT_MODEL,
         "gemini": GEMINI_DEFAULT_MODEL,
+        "telnyx": TELNYX_DEFAULT_MODEL,
     }[provider]
 
 
@@ -181,7 +200,14 @@ def gemini_thinking_levels(model_id: str) -> tuple[str, ...]:
 
 
 def reasoning_efforts(provider: ProviderName, model_id: str) -> tuple[str, ...]:
-    """The model's reasoning levels, lowest first, as ren's ``GET /models/{id}/efforts`` answers them."""
+    """The model's reasoning levels, lowest first, as ren's ``GET /models/{id}/efforts`` answers them.
+
+    Telnyx takes ``reasoning_effort`` on every chat completion but documents no values per model ("Not all models
+    support all values; unsupported values are rejected with a 400 error", ``ChatCompletionRequest``), so its models
+    offer Auto only: the model's own default effort.
+    """
+    if provider == "telnyx":
+        return ()
     if provider == "nim":
         return NIM_REASONING_EFFORTS_BY_MODEL.get(model_id, ())
     if provider == "mistral":
@@ -189,7 +215,7 @@ def reasoning_efforts(provider: ProviderName, model_id: str) -> tuple[str, ...]:
     return gemini_thinking_levels(model_id)
 
 
-def build_model(provider: Literal["nim", "mistral"], model_id: str, reasoning_effort: str | None = None) -> Model:
+def build_model(provider: Literal["nim", "mistral", "telnyx"], model_id: str, reasoning_effort: str | None = None) -> Model:
     """Construct the SDK model instance for ``provider``.
 
     ``context_window_limit`` is the model's real window from its provider's own metadata (``context_windows``)
@@ -204,7 +230,17 @@ def build_model(provider: Literal["nim", "mistral"], model_id: str, reasoning_ef
     return model
 
 
-def _provider_model(provider: Literal["nim", "mistral"], model_id: str, reasoning_effort: str | None) -> Model:
+def _provider_model(provider: Literal["nim", "mistral", "telnyx"], model_id: str, reasoning_effort: str | None) -> Model:
+    if provider == "telnyx":
+        if not provider_api_key("telnyx"):
+            raise ValueError("TELNYX_API_KEY is not configured.")
+        if reasoning_effort:
+            raise ValueError(f"{model_id} has no documented reasoning_effort values; Telnyx models run on Auto")
+        from strands.models.openai import OpenAIModel
+
+        # The SDK's OpenAI chat-completions model against Telnyx Inference's OpenAI-compatible endpoint.
+        return OpenAIModel(client_args={"api_key": provider_api_key("telnyx"), "base_url": TELNYX_BASE_URL}, model_id=model_id)
+
     if provider == "nim":
         if not provider_api_key("nim"):
             raise ValueError("NVIDIA_NIM_API_KEY is not configured.")
@@ -253,6 +289,16 @@ def list_provider_models(provider: ProviderName) -> list[dict[str, str]]:
         with OpenAI(api_key=provider_api_key("nim"), base_url=NVIDIA_NIM_BASE_URL) as client:
             return [{"id": item.id, "owned_by": getattr(item, "owned_by", None) or "nvidia", "provider": "nim"}
                     for item in client.models.list()]
+
+    if provider == "telnyx":
+        if not provider_api_key("telnyx"):
+            return []
+        from openai import OpenAI
+
+        with OpenAI(api_key=provider_api_key("telnyx"), base_url=TELNYX_BASE_URL) as client:
+            return [{"id": item.id, "owned_by": item.owned_by, "provider": "telnyx"}
+                    for item in client.models.list()
+                    if (getattr(item, "task", None) or TELNYX_CHAT_TASK) == TELNYX_CHAT_TASK]
 
     if provider == "gemini":
         if not provider_api_key("gemini"):
