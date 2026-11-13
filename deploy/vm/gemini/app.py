@@ -30,7 +30,6 @@ from pydantic_core import to_jsonable_python
 from strands import tool
 from strands.bidi import BidiAgent
 from strands.bidi.types.io import InputStream, OutputStream
-from strands.bidi.models.google import GoogleGeminiLiveModel
 from strands.bidi.types.agent import BidiAgentInput
 from strands.bidi.types.events import BidiOutputEvent
 from strands.bidi.types.media import AudioDelta
@@ -63,6 +62,7 @@ from strands_harness import BuiltinToolsConfig, Effort, create_harness
 from strands_harness.models import EFFORT_LEVELS
 from strands_harness.tools.programmatic_tool_caller import programmatic_tool_caller
 
+from live_model import RenGeminiLiveModel
 from providers import ProviderName, build_model, list_provider_models, provider_default_model, reasoning_efforts
 
 VOICE_AGENT = "agent_2901m620nzwrev2r7ekqpydcxe25"
@@ -181,7 +181,7 @@ async def voice(
     await websocket.accept()
     helper = text_model(provider, model or provider_default_model(provider), effort)
     agent = BidiAgent(
-        model=GoogleGeminiLiveModel(model_id=VOICE_MODEL, voice=VOICE),
+        model=RenGeminiLiveModel(model_id=VOICE_MODEL, voice=VOICE),
         system_prompt=await instructions(VOICE_AGENT, variables(websocket, text_only=False)),
         tools=[
             *MCPClient.load_servers(SERVERS, continue_on_error=True),
