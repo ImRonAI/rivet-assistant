@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Emrys's Noir palette for the home-screen widgets, which draw with RemoteViews and can't use the Compose theme. -->
+<!-- Ren's Ink & Volt tokens for the window, the notifications and the home-screen widgets, which draw with RemoteViews
+     and can't use the Compose theme (ui/Theme.kt holds the same values). values-night holds the dark ones. -->
 <resources>
-    <!-- emrys_bg lives in themes.xml with the window background. -->
-    <color name="emrys_ink">#FFF3F2EE</color>
-    <color name="emrys_ink2">#FF9E9DA4</color>
-    <color name="emrys_accent">#FFB7C2FF</color>
-    <color name="emrys_accent_ink">#FF0A0A0C</color>
-    <color name="emrys_ok">#FF97D4A6</color>
-    <color name="emrys_amber">#FFE8C07C</color>
-    <!-- Glass: the search bar's fill and its hairline. -->
-    <color name="emrys_glass">#E6141417</color>
-    <color name="emrys_edge">#17FFFFFF</color>
+    <color name="ren_bg">#FFFFFFFF</color>
+    <color name="ren_card">#FFFFFFFF</color>
+    <color name="ren_field">#FFF9FAFC</color>
+    <color name="ren_tile">#FFF3F3F7</color>
+    <color name="ren_edge">#FFE6E7ED</color>
+    <color name="ren_ink">#FF0B0C17</color>
+    <color name="ren_ink2">#FF4A4C58</color>
+    <color name="ren_muted">#FF72747E</color>
+    <color name="ren_accent">#FF5543FF</color>
+    <color name="ren_accent_ink">#FFFFFFFF</color>
+    <color name="ren_ok">#FF01B568</color>
+    <color name="ren_amber">#FFE6C103</color>
+    <!-- The ink stage the launch opens on, whatever the theme. -->
+    <color name="ren_stage">#FF0B0C17</color>
 </resources>

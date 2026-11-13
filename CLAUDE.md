@@ -2,18 +2,21 @@
 
 @AGENTS.md
 
-`AGENTS.md` is the source of truth for Emrys's status, what it can do, the rules, and the remaining work. Read it before changing
+`AGENTS.md` is the source of truth for ren mobile's status (the app was Emrys until 2026-11-12), what it can do, the rules, and the remaining work. Read it before changing
 anything. In short:
 
-- **Version:** app 0.5.0 (versionCode 13) on `main`. The app talks to the ElevenLabs agents directly; the owner's workspace VM
-  is at https://rivet.ron-ai.dev (Docker and Caddy; files in `deploy/vm/`). The Fly app `rivet-assistant` is stopped.
+- **Version:** app 0.5.0 (versionCode 13) on `main`; the ren mobile overhaul is PR #14. The app is a browser with ren's
+  search and an agent panel. It talks to the ElevenLabs agents directly; the owner's workspace VM is at
+  https://rivet.ron-ai.dev (Docker and Caddy; files in `deploy/vm/`) and runs Ren's hub, ren's search and the Strands
+  agents. The Fly app `rivet-assistant` is stopped.
 - **The owner's rules for this project:**
   - The ElevenLabs text agent is the default for typing and the ElevenLabs voice agent is the default for talking. Both use the
     phone through their client tools. Qwen (Groq) and Perplexity are only model options for Emrys's own brain, never a fallback
     or a workaround for the agents.
-  - Gemini is an optional provider (Settings › Agents), never a fallback. Its side is Strands only, written as the Strands
-    harness and bidi docs write it: `create_harness()` for text, `BidiAgent` on gemini-3.8-live for voice, every vended tool,
-    strict Strands types (`deploy/vm/gemini/`). The zero-harness rule is about ElevenLabs.
+  - Gemini, NVIDIA NIM and Mistral are optional providers (Settings › Agents), never a fallback. Their side is Strands only,
+    written as the Strands harness and bidi docs write it: `create_harness()` for text, `BidiAgent` on gemini-3.8-live for
+    voice, every vended tool, strict Strands types (`deploy/vm/gemini/`). NIM and Mistral are copied from ren
+    (`ImRonAI/TheBrowser`). The zero-harness rule is about ElevenLabs.
   - Use what ElevenLabs offers natively. Don't invent layers, prompts, timeouts or numbers around the agents, and don't change
     the agents' prompts or tools in ElevenLabs unless the owner asks.
   - No simulations, demo content or canned text in the app.
@@ -26,7 +29,7 @@ anything. In short:
 - **Never:**
   - add Claude or Anthropic models to the product beyond the agents' models, which are the owner's choice (the text and
     Task agents run `claude-opus-5-5`, 2026-11-03);
-  - commit secrets (`android/emrys.local.properties` and the VM's env files stay out of git);
+  - commit secrets (`android/ren.local.properties` and the VM's env files stay out of git);
   - send, call, buy, write to Telnyx, deploy, or touch real email without the owner's explicit approval.
 - **Before handing over an APK:** run the tests, lint and release build, review `android/build/screens/`, verify the APK, and run
   the live test.
@@ -36,3 +39,11 @@ Emrys 0.5.0 merges upstream 0.4.5 (every behaviour change kept), renames Rivet t
 `com.hiron.emrys`, `EMRYS_*` settings, the bridge `window.emrys`) with no compatibility layer, and redesigns the app:
 the Noir design system (`docs/design/EMRYS_DESIGN.md`), a new robot, and ElevenLabs UI's Matrix, Orb and
 ShimmeringText on the stage (`docs/design/EMRYS_MATRIX.md`). It is all on `main`; branch from there.
+
+## Addendum, 2026-11-12: ren mobile
+Emrys is now **ren mobile** (app name Ren, app ID `com.hiron.ren`, the bridge `window.ren`), again with no
+compatibility layer. It follows ren desktop's Ink & Volt design as its Electron code implements it, its robot is Cato
+recoloured to volt, and it opens on a browser whose search page is ren desktop's own. The phone and ren desktop
+(`ImRonAI/TheBrowser`) each serve an MCP server through Ren's hub on the VM (FastMCP) and call each other through it;
+the Strands agents use the hub too. Code copied from ren desktop or Cato stays byte for byte under `android/web/src/ren`
+and `android/web/src/cato` (hash-checked); adapt around it, never edit it. See "ren mobile" in `AGENTS.md`.

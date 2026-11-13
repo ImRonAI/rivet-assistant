@@ -1,0 +1,22 @@
+{
+  /* Cato's renderer as generated for ren (src/robot/RenBody.tsx) and its quality tiers, checked the way CatoWeb checks
+     them (strict). The app's own code is checked harder in tsconfig.app.json and sees these through their types. */
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "./node_modules/.tmp/cato",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.cato.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "strict": true
+  },
+  "include": ["src/robot/RenBody.tsx", "src/robot/ren-core.d.ts", "src/cato/quality.ts"]
+}

@@ -1,0 +1,25 @@
+/* ren's type on the phone: the three families ren desktop names, from the app's own font files (res/font). */
+@font-face {
+  font-family: "Inter Variable";
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/res/font/inter.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Bricolage Grotesque Variable";
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  src: url("/res/font/bricolage_grotesque.ttf") format("truetype");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/res/font/jetbrains_mono.ttf") format("truetype");
+}
+html,
+body,
+#root {
+  height: 100%;
+}

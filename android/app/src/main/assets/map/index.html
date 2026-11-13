@@ -1,13 +1,17 @@
 <!doctype html>
-<!-- Emrys's place map: MapLibre GL JS over OpenFreeMap's dark style, numbered Noir pins from window.emrysMap.show(). -->
+<!-- Ren's place map: MapLibre GL JS over OpenFreeMap's light or dark style, numbered pins from window.renMap.show(). -->
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <link rel="stylesheet" href="maplibre-gl.css">
 <style>
-  /* Noir: a noir glass disc with a porcelain hairline and a Geist figure; the chosen pin turns porcelain in a halo light. */
-  @font-face { font-family: "Geist"; font-weight: 500; src: url("../emrys/fonts/geist_medium.ttf") format("truetype"); }
+  /* Ink & Volt: a paper disc with a hairline and an ink figure; the chosen pin is volt. Dark has no colour but volt. */
+  @font-face { font-family: "Inter Variable"; font-weight: 100 900; src: url("/res/font/inter.ttf") format("truetype"); }
+  :root { --disc: #FFFFFF; --line: #D3D4DC; --ink: #0B0C17; --muted: #72747E; --link: #4A4C58; --volt: #5543FF; --on-volt: #FFFFFF; }
+  @media (prefers-color-scheme: dark) {
+    :root { --disc: #141414; --line: #2C2C2C; --ink: #F5F5F5; --muted: #919191; --link: #BDBDBD; --volt: #8D98FE; --on-volt: #0C0C0C; }
+  }
   html, body, #map { margin: 0; height: 100%; background: transparent; }
   /* MapLibre positions the marker element with an inline transform, so the pin's look lives on its span. */
   .pin {
@@ -17,39 +21,40 @@
   .pin span {
     width: 28px; height: 28px; box-sizing: border-box; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(10, 10, 12, .85); border: 1px solid rgba(243, 242, 238, .55); color: #F3F2EE;
-    font: 500 12px/1 Geist, system-ui, sans-serif; font-variant-numeric: tabular-nums;
-    box-shadow: 0 1px 10px rgba(0, 0, 0, .5);
-    transition: background-color 260ms cubic-bezier(.2, 0, 0, 1), color 260ms cubic-bezier(.2, 0, 0, 1),
-      box-shadow 260ms cubic-bezier(.2, 0, 0, 1), transform 260ms cubic-bezier(.2, 0, 0, 1);
+    background: var(--disc); border: 1px solid var(--line); color: var(--ink);
+    font: 600 12px/1 "Inter Variable", system-ui, sans-serif; font-variant-numeric: tabular-nums;
+    transition: background-color 220ms cubic-bezier(.2, 0, 0, 1), color 220ms cubic-bezier(.2, 0, 0, 1),
+      transform 220ms cubic-bezier(.2, 0, 0, 1);
   }
-  .pin.on span {
-    background: #F3F2EE; border-color: #F3F2EE; color: #0A0A0C; transform: scale(1.12);
-    box-shadow: 0 0 0 3px rgba(10, 10, 12, .85), 0 0 0 4px rgba(183, 194, 255, .55), 0 0 22px rgba(183, 194, 255, .45);
-  }
+  .pin.on span { background: var(--volt); border-color: var(--volt); color: var(--on-volt); transform: scale(1.12); }
   @media (prefers-reduced-motion: reduce) { .pin span { transition: none; } }
-  /* OpenStreetMap and OpenFreeMap's attribution stays, set on noir glass with legible grey links. */
+  /* OpenStreetMap and OpenFreeMap's attribution stays, set on the pin's paper with legible links. */
   .maplibregl-ctrl.maplibregl-ctrl-attrib,
   .maplibregl-ctrl-attrib.maplibregl-compact {
-    background-color: rgba(10, 10, 12, .8); color: #9E9DA4; box-shadow: inset 0 0 0 1px rgba(243, 242, 238, .07);
-    font: 400 10px/1.5 Geist, system-ui, sans-serif;
+    background-color: var(--disc); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line);
+    font: 400 10px/1.5 "Inter Variable", system-ui, sans-serif;
   }
-  .maplibregl-ctrl-attrib a { color: #C9C8CE; }
+  .maplibregl-ctrl-attrib a { color: var(--link); }
   .maplibregl-ctrl-attrib-button,
-  .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button { background-color: transparent; filter: invert(.9); }
+  .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button { background-color: transparent; }
+  @media (prefers-color-scheme: dark) {
+    .maplibregl-ctrl-attrib-button,
+    .maplibregl-ctrl-attrib.maplibregl-compact-show .maplibregl-ctrl-attrib-button { filter: invert(.9); }
+  }
 </style>
 <script src="maplibre-gl.js"></script>
 </head>
 <body>
 <div id="map"></div>
 <script>
-  const STYLE = "https://tiles.openfreemap.org/styles/dark";
+  // OpenFreeMap's light and dark styles, by the phone's theme.
+  const STYLE = "https://tiles.openfreemap.org/styles/" + (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "positron");
   let map = null;
   let interactive = null;
   let pins = [];
 
   function post(message) {
-    if (window.EmrysMap) EmrysMap.postMessage(JSON.stringify(message));
+    if (window.RenMap) RenMap.postMessage(JSON.stringify(message));
   }
 
   function pin(place) {
@@ -67,7 +72,7 @@
     return { n: place.n, marker: new maplibregl.Marker({ element }).setLngLat([place.lng, place.lat]).addTo(map) };
   }
 
-  window.emrysMap = {
+  window.renMap = {
     show(data) {
       if (map === null || interactive !== data.interactive) {
         if (map !== null) map.remove();
@@ -81,7 +86,7 @@
         data.places.forEach((p) => bounds.extend([p.lng, p.lat]));
         map.fitBounds(bounds, { padding: 48, maxZoom: 15, animate: false });
       }
-      window.emrysMap.select(data.selected);
+      window.renMap.select(data.selected);
     },
     select(n) {
       pins.forEach((p) => p.marker.getElement().classList.toggle("on", p.n === n));

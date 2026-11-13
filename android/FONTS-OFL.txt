@@ -1,4 +1,19 @@
-Fonts bundled with the app (app/src/main/res/font and app/src/main/assets/emrys/fonts):
+Fonts bundled with the app.
+
+In app/src/main/res/font, the faces of ren's design system, as variable fonts, unmodified, from
+https://github.com/google/fonts (main, fetched 2026-11-12):
+
+- Bricolage Grotesque: Copyright 2022 The Bricolage Grotesque Project Authors (https://github.com/ateliertriay/bricolage)
+  ofl/bricolagegrotesque/BricolageGrotesque[opsz,wdth,wght].ttf   408496 bytes
+  sha256 413e7357809ddd12fd80a96a8a396de0e401638d4acd3cb3e37532f0472ac682
+- Inter: Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+  ofl/inter/Inter[opsz,wght].ttf   876576 bytes
+  sha256 29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031
+- JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  ofl/jetbrainsmono/JetBrainsMono[wght].ttf   187208 bytes
+  sha256 48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda
+
+In app/src/main/assets/ren/fonts, for the robot and map pages:
 
 - Instrument Serif: Copyright 2022 The Instrument Serif Project Authors (https://github.com/Instrument/instrument-serif)
 - Geist and Geist Mono: Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)

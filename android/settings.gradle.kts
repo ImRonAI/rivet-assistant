@@ -17,5 +17,5 @@ dependencyResolutionManagement {
         }
     }
 }
-rootProject.name = "emrys"
+rootProject.name = "ren"
 include(":app")

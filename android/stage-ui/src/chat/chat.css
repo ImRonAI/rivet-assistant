@@ -1,23 +1,18 @@
 /* The chat page's styles: Tailwind with Preflight, scanning src (the page and the components it uses) and Streamdown, whose
    class names live in its dist files. The tokens the ElevenLabs and AI Elements components read
-   carry Noir's values (ui/Theme.kt `DarkPalette`); the app is dark only. */
+   carry ren's Ink & Volt values (ui/Theme.kt `LightPalette` and `DarkPalette`), following the phone's theme. */
 @import "tailwindcss" source("..");
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @source "../../node_modules/streamdown/dist/*.js";
 
-@custom-variant dark (&:is(.dark *));
-
-@font-face { font-family: "Geist"; font-weight: 400; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_regular.ttf") format("truetype"); }
-@font-face { font-family: "Geist"; font-weight: 500; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_medium.ttf") format("truetype"); }
-@font-face { font-family: "Geist"; font-weight: 600; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_semibold.ttf") format("truetype"); }
-@font-face { font-family: "Geist Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_mono_regular.ttf") format("truetype"); }
-@font-face { font-family: "Geist Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("/assets/emrys/fonts/geist_mono_medium.ttf") format("truetype"); }
+@font-face { font-family: "Inter Variable"; font-weight: 100 900; font-style: normal; font-display: swap; src: url("/res/font/inter.ttf") format("truetype"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 100 800; font-style: normal; font-display: swap; src: url("/res/font/jetbrains_mono.ttf") format("truetype"); }
 
 @theme inline {
-  --font-sans: "Geist", system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -42,28 +37,52 @@
   --color-ring: var(--ring);
 }
 
-/* bg, ink, ink2, raised, tile, high, card, lineHi, accent and rec. */
+/* Light: surface 0, ink, surface 50 and 100, ink muted, surface 200, volt 600, danger. */
 :root {
-  color-scheme: dark;
-  --radius: 0.75rem;
-  --background: #0a0a0c;
-  --foreground: #f3f2ee;
-  --card: #111114;
-  --card-foreground: #f3f2ee;
-  --popover: #141417;
-  --popover-foreground: #f3f2ee;
-  --primary: #f3f2ee;
-  --primary-foreground: #0a0a0c;
-  --secondary: #242429;
-  --secondary-foreground: #f3f2ee;
-  --muted: #1a1a1e;
-  --muted-foreground: #9e9da4;
-  --accent: #242429;
-  --accent-foreground: #f3f2ee;
-  --destructive: #f07b6c;
-  --border: rgb(243 242 238 / 0.14);
-  --input: rgb(243 242 238 / 0.14);
-  --ring: #b7c2ff;
+  color-scheme: light;
+  --radius: 0.625rem;
+  --background: #ffffff;
+  --foreground: #0b0c17;
+  --card: #f9fafc;
+  --card-foreground: #0b0c17;
+  --popover: #ffffff;
+  --popover-foreground: #0b0c17;
+  --primary: #5543ff;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f7;
+  --secondary-foreground: #0b0c17;
+  --muted: #f3f3f7;
+  --muted-foreground: #72747e;
+  --accent: #f3f3f7;
+  --accent-foreground: #0b0c17;
+  --destructive: #ef2d4a;
+  --border: #e6e7ed;
+  --input: #e6e7ed;
+  --ring: #5543ff;
+}
+
+/* Dark, which has no colour but volt: surface 900, 850 and 800, ink inverse, surface 700, volt 400. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #0c0c0c;
+    --foreground: #f5f5f5;
+    --card: #141414;
+    --card-foreground: #f5f5f5;
+    --popover: #1e1e1e;
+    --popover-foreground: #f5f5f5;
+    --primary: #8d98fe;
+    --primary-foreground: #0c0c0c;
+    --secondary: #1e1e1e;
+    --secondary-foreground: #f5f5f5;
+    --muted: #1e1e1e;
+    --muted-foreground: #919191;
+    --accent: #1e1e1e;
+    --accent-foreground: #f5f5f5;
+    --border: #2c2c2c;
+    --input: #2c2c2c;
+    --ring: #8d98fe;
+  }
 }
 
 @layer base {

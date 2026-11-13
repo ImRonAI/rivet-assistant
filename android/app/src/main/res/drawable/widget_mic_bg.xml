@@ -1,20 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The voice key: a porcelain disc inside a thin aurora ring (halo-hi, halo, halo-deep, glacier), as in the app. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="48dp" android:height="48dp"
-    android:viewportWidth="48" android:viewportHeight="48">
-    <path android:pathData="M1,24a23,23 0 1 0 46,0a23,23 0 1 0 -46,0z" android:strokeWidth="1">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:type="sweep" android:centerX="24" android:centerY="24">
-                <item android:offset="0" android:color="#CCCDD5FF" />
-                <item android:offset="0.2" android:color="#CCB7C2FF" />
-                <item android:offset="0.4" android:color="#CC7F8EF0" />
-                <item android:offset="0.6" android:color="#B38FDBE8" />
-                <item android:offset="0.8" android:color="#CCB7C2FF" />
-                <item android:offset="1" android:color="#CCCDD5FF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path android:fillColor="@color/emrys_ink" android:pathData="M4.5,24a19.5,19.5 0 1 0 39,0a19.5,19.5 0 1 0 -39,0z" />
-</vector>
+<!-- The voice key: a volt disc, as in the app. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/ren_accent" />
+</shape>

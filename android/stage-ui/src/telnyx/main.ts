@@ -1,8 +1,14 @@
-import { TelnyxAIAgent, type AgentState, type ClientSideToolContext, type ClientSideToolMap } from "@telnyx/ai-agent-lib"
+import {
+  TelnyxAIAgent,
+  type AgentState,
+  type ClientSideToolContext,
+  type ClientSideToolErrorReason,
+  type ClientSideToolMap,
+} from "@telnyx/ai-agent-lib"
 import type { INotification } from "@telnyx/webrtc"
 
 /**
- * Emrys's Telnyx AI Assistants, through Telnyx's own client (`@telnyx/ai-agent-lib`) in the app's WebView: the app
+ * Ren's Telnyx AI Assistants, through Telnyx's own client (`@telnyx/ai-agent-lib`) in the app's WebView: the app
  * starts a voice or typed conversation with an assistant id, the `perm_*` grants as `X-` headers (Telnyx makes them
  * dynamic variables) and the names of the phone's tools, which the assistant calls as client-side tools. Each call
  * goes to the app, and the app's answer goes back to the assistant.
@@ -10,6 +16,8 @@ import type { INotification } from "@telnyx/webrtc"
 
 /** What the app starts a conversation with. */
 type Start = {
+  /** The app's number for this conversation; every event the page sends for it carries it. */
+  session: number
   agentId: string
   /** Typed: no microphone, and the assistant's voice isn't played. */
   chat: boolean
@@ -25,19 +33,21 @@ type Event =
   | { type: "reply"; text: string }
   | { type: "state"; state: AgentState }
   | { type: "tool"; id: string; name: string; arguments: string }
+  /** The client answered the call [id] itself (a timeout, or the call ending), so the app's answer would go nowhere. */
+  | { type: "dropped"; id: string; reason: ClientSideToolErrorReason }
   | { type: "ended" }
   | { type: "error"; message: string }
 
 declare global {
   interface Window {
-    emrysTelnyx?: {
+    renTelnyx?: {
       start: (options: Start) => void
       send: (text: string) => void
       result: (id: string, output: string) => void
       stop: () => void
     }
     /** The app's web message listener (WebViewCompat.addWebMessageListener). */
-    EmrysTelnyx?: { postMessage: (message: string) => void }
+    RenTelnyx?: { postMessage: (message: string) => void }
   }
 }
 
@@ -49,20 +59,21 @@ let active = false
 let queued: string[] = []
 const waiting = new Map<string, (output: string) => void>()
 
-function tell(event: Event) {
-  window.EmrysTelnyx?.postMessage(JSON.stringify(event))
+/** Tells the app [event], for the conversation [session] (null for none). */
+function tell(event: Event, session: number | null) {
+  window.RenTelnyx?.postMessage(JSON.stringify({ ...event, session }))
 }
 
-function failed(e: unknown) {
-  tell({ type: "error", message: e instanceof Error ? e.message : String(e) })
+function error(e: unknown): Event {
+  return { type: "error", message: e instanceof Error ? e.message : String(e) }
 }
 
 /** Each tool waits for the app's answer to its call. */
-function tools(names: string[]): ClientSideToolMap {
+function tools(names: string[], say: (event: Event) => void): ClientSideToolMap {
   const handler = (_: unknown, context: ClientSideToolContext) =>
     new Promise<string>((answer) => {
       waiting.set(context.callId, answer)
-      tell({ type: "tool", id: context.callId, name: context.toolName, arguments: context.rawArguments })
+      say({ type: "tool", id: context.callId, name: context.toolName, arguments: context.rawArguments })
     })
   return Object.fromEntries(names.map((name) => [name, handler]))
 }
@@ -81,7 +92,9 @@ function stop() {
 
 function start(options: Start) {
   stop()
-  const live = new TelnyxAIAgent({ agentId: options.agentId, chatMode: options.chat, clientTools: tools(options.tools) })
+  const say = (event: Event) => tell(event, options.session)
+  const failed = (e: unknown) => say(error(e))
+  const live = new TelnyxAIAgent({ agentId: options.agentId, chatMode: options.chat, clientTools: tools(options.tools, say) })
   agent = live
   queued = options.first === null ? [] : [options.first]
   const mine = () => agent === live
@@ -99,14 +112,18 @@ function start(options: Start) {
     }
     if (ENDED.has(call.state)) {
       stop()
-      tell({ type: "ended" })
+      say({ type: "ended" })
     }
   })
   live.on("transcript.item", (item) => {
-    if (mine()) tell(item.role === "user" ? { type: "user", text: item.content } : { type: "reply", text: item.content })
+    if (mine()) say(item.role === "user" ? { type: "user", text: item.content } : { type: "reply", text: item.content })
   })
   live.on("conversation.agent.state", ({ state }) => {
-    if (mine()) tell({ type: "state", state })
+    if (mine()) say({ type: "state", state })
+  })
+  live.on("client.tool.error", ({ callId, reason }) => {
+    if (!mine() || !waiting.delete(callId)) return
+    say({ type: "dropped", id: callId, reason })
   })
   live.on("agent.error", (e) => {
     if (mine()) failed(e)
@@ -114,14 +131,14 @@ function start(options: Start) {
   live.on("agent.disconnected", () => {
     if (!mine()) return
     stop()
-    tell({ type: "ended" })
+    say({ type: "ended" })
   })
   live.connect().catch((e: unknown) => {
     if (mine()) failed(e)
   })
 }
 
-window.emrysTelnyx = {
+window.renTelnyx = {
   start,
   send(text) {
     if (agent && active) agent.sendConversationMessage(text)
@@ -134,4 +151,4 @@ window.emrysTelnyx = {
   stop,
 }
 
-tell({ type: "ready" })
+tell({ type: "ready" }, null)

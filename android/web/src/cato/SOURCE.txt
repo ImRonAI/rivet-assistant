@@ -1,0 +1,8 @@
+Cato, the robot of catolabs.com, unmodified: github.com/ImRonAI/cato-labs at 2a7a9b6.
+
+  timmy-core.js, timmy-core.d.ts, CatoBody.tsx, cato.css   components/webgl/kit/cato/
+  quality.ts                                               components/webgl/lib/quality.ts
+
+These files are never edited here (SHA256SUMS holds their hashes; `npm run check:robot` verifies them). Ren's robot is
+generated from them by scripts/gen-ren-robot.mjs into src/robot/: the same geometry, rig, moves, props and renderer,
+recoloured from Cato's blue to ren's volt.
