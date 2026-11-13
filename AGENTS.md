@@ -105,7 +105,8 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
     question to Gemini text got no answer once the Brave tools were added. A billed key lifts it.
   - **NIM's default `z-ai/glm-5.3-flash`** (ren's default, listed in NVIDIA's catalogue) returns nothing, from this
     VM and from ren desktop's own NIM code and venv on the owner's Mac; other NIM models on the same key answer in
-    under a second, and Settings › Agents picks one.
+    under a second, and Settings › Agents picks one. The VM's NIM default is `minimaxai/minimax-m3.1-flash` (owner,
+    2026-11-13), set with ren's own `NIM_MODEL` in `compose.yaml`.
   - The phone's seven search tools (`web_search` and the rest, on the hub and as client tools) search Brave with the
     keys in Settings, baked from `braveSearchKey` and `braveAnswersKey` in `android/ren.local.properties`. Without them
     they answer "Search isn't set up yet: add the Brave key in Settings.", which Gemini Live got when it chose
@@ -238,7 +239,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`; `b112adf`'s reordering of tool results is not copied,
     because Strands 1.64.0's formatter already puts them first), copied into `providers.py`, `mistral_model.py`,
     `media_capabilities.py` and `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
-    (default `z-ai/glm-5.3-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
+    (ren's default `z-ai/glm-5.3-flash`; the VM's `NIM_MODEL` is `minimaxai/minimax-m3.1-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
     `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
     change for mypy and for Strands 1.64.0. Keys: `NVIDIA_NIM_API_KEY` and `MISTRAL_API_KEY` in `gemini.env`.
   - Text (`/gemini/text`): the Strands harness, `create_harness(model="google/<text model>", effort=…)` for Gemini, with
