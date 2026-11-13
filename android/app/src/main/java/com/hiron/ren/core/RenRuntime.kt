@@ -101,14 +101,14 @@ class RenRuntime(private val app: Context) {
     val images = ImageLoader(http)
 
     private val elevenLabs = RenAgent(app, settings, tools::run, ::approve, ::update, { _robot.tryEmit(it) }, scope, search::search)
-    /** Gemini, NVIDIA NIM and Mistral in Strands on the workspace VM. */
+    /** Gemini, NVIDIA NIM, Mistral and Telnyx in Strands on the workspace VM. */
     val strands = StrandsAgent(app, settings, http, ::update, { _robot.tryEmit(it) }, scope)
 
     /** The agents for the provider chosen in Settings. */
     val agent: Assistant
         get() = when (settings.provider) {
             Provider.ElevenLabs -> elevenLabs
-            Provider.Gemini, Provider.Nim, Provider.Mistral -> strands
+            Provider.Gemini, Provider.Nim, Provider.Mistral, Provider.Telnyx -> strands
         }
 
     /** Switches provider; the running conversation ends, and the next one starts with [provider]. */

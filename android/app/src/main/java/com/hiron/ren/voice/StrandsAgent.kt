@@ -37,8 +37,8 @@ data class TextModel(val id: String, val ownedBy: String)
 data class Catalogue(val models: List<TextModel>, val default: String)
 
 /**
- * Ren's Strands agents on the workspace VM (`deploy/vm/gemini/app.py`), with the text model on Gemini, NVIDIA NIM or
- * Mistral: a text session is the Strands harness, a voice session a BidiAgent on Gemini Live with this phone's
+ * Ren's Strands agents on the workspace VM (`deploy/vm/gemini/app.py`), with the text model on Gemini, NVIDIA NIM,
+ * Mistral or Telnyx: a text session is the Strands harness, a voice session a BidiAgent on Gemini Live with this phone's
  * microphone and speaker ([GeminiAudio]). Each opens a WebSocket with the user's id, their `perm_*` grants, the
  * provider, text model and reasoning level, and the agents reach the phone tools, `request_approval` and the searches
  * through the phone's MCP server. The chat is built from Strands' events ([GeminiEvents]).

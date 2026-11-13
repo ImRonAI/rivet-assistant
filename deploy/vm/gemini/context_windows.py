@@ -12,6 +12,9 @@ value from these sources instead (an explicit ``context_window_limit`` always wi
   ``id`` and ``aliases`` (``zai-glm-5-3`` 1048576, ``codestral-latest`` 256000).
 - **gemini**: ``GET https://generativelanguage.googleapis.com/v1beta/models/<id>`` ``inputTokenLimit``
   (``gemini-3.5-flash`` 1048576).
+- **telnyx**: ``GET https://api.telnyx.com/v2/ai/openai/models`` ``data[].context_length``, matched on ``id``
+  (``ModelMetadata``, https://developers.telnyx.com/api-reference/openai-chat/get-available-models-openai-compatible.md;
+  ``zai-org/GLM-5.3-Flash`` 1M in https://developers.telnyx.com/docs/inference/models.md).
 - **perplexity**: the Agent API's ``/v1/models`` lists ids only, so a ``<vendor>/<model>`` id resolves
   through that vendor's own metadata above (``xai/``, ``mistral/``, ``google/``). NOT VERIFIED: whether
   Perplexity's proxy enforces a smaller window than the upstream model; an overflow is still recovered.
@@ -38,6 +41,7 @@ logger = logging.getLogger(__name__)
 XAI_MODELS_URL = "https://api.x.ai/v1/models"
 MISTRAL_MODELS_URL = "https://api.mistral.ai/v1/models"
 GEMINI_MODEL_URL = "https://generativelanguage.googleapis.com/v1beta/models/"
+TELNYX_MODELS_URL = "https://api.telnyx.com/v2/ai/openai/models"
 
 #: NIM publishes no window in its model list; these come from each model's card on build.nvidia.com.
 NIM_CONTEXT_WINDOWS = {"z-ai/glm-5.3-flash": 1_048_576}
@@ -93,13 +97,15 @@ def provider_context_window(provider: str, model_id: str) -> int | None:
         return provider_context_window(upstream, bare) if upstream and bare else None
     if provider == "nim":
         return NIM_CONTEXT_WINDOWS.get(model_id)
-    if provider not in ("xai", "mistral", "gemini") or not _key(provider):
+    if provider not in ("xai", "mistral", "gemini", "telnyx") or not _key(provider):
         return None
     try:
         if provider == "xai":
             return _catalogue("xai", "context_length", XAI_MODELS_URL).get(model_id.removeprefix("xai/"))
         if provider == "mistral":
             return _catalogue("mistral", "max_context_length", MISTRAL_MODELS_URL).get(model_id)
+        if provider == "telnyx":
+            return _catalogue("telnyx", "context_length", TELNYX_MODELS_URL).get(model_id)
         key = f"gemini:{model_id}"
         with _lock:
             if key in _catalogues:
