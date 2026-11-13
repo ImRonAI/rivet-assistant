@@ -33,7 +33,7 @@ import org.json.JSONTokener
  */
 internal class BrowserTools(private val browser: Browser, private val level: () -> SearchLevel) {
     val tools: List<Tool> = listOf(
-        tool("browser_tabs", "The browser's open tabs: id, address, title, and which is active.", readOnly = true),
+        tool("browser_tabs", "The tabs of the browser in the Ren app on the user's phone, the one they are looking at: id, address, title, and which is active. Use the browser_ tools for anything on the web, as the user would.", readOnly = true),
         tool("browser_open", "Open a new tab on an address or a search and make it active. Returns the tab.", false, listOf("url"),
             "url" to str("An address (example.com, https://…) or words to search for")),
         tool("browser_navigate", "Take a tab to an address or a search.", false, listOf("url"),

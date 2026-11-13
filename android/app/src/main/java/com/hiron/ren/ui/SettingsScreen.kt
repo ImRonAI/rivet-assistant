@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneInTalk
@@ -419,13 +420,17 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
         }
         val listener = remember(refresh) { notificationAccess(context) || RenNotificationListener.connected }
         PermissionRow(Access(Icons.Outlined.NotificationsActive, "Notification access", "Read and reply to messages in any app"), listener) {
-            context.startActivity(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            context.openNotificationAccess()
         }
         val operator = remember(refresh) { ScreenOperator.connected }
         PermissionRow(Access(Icons.Outlined.TouchApp, "App operator", "Let Ren tap and type in other apps (accessibility)"), operator) {
             context.startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         val roles = context.getSystemService(RoleManager::class.java)
+        val browser = remember(refresh) { context.holdsBrowserRole() }
+        PermissionRow(Access(Icons.Outlined.Language, "Default browser", "Open links from every app in Ren"), browser) {
+            context.browserRoleIntent()?.let { role.launch(it) }
+        }
         val screening = remember(refresh) { roles?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) == true }
         PermissionRow(Access(Icons.Outlined.PhoneInTalk, "Call screening", "See who's calling"), screening) {
             roles?.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)?.let { role.launch(it) }

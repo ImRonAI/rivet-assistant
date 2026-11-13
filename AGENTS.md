@@ -35,6 +35,19 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   sheet; downloads, uploads and fullscreen video; new windows become tabs; page permissions are refused. Home is
   `ren://home` with the logotype, a search box and the five search levels. **Ask Ren** slides the agent panel
   (`HomeScreen.kt` under a header) over the browser.
+- **Default browser** (2026-11-13): `MainActivity` takes `VIEW` `http`/`https` links (BROWSABLE, DEFAULT) and
+  `APP_BROWSER`, so Android offers Ren for the browser role; a link from another app opens in a new tab in front.
+  Onboarding's step 4 and Settings › What Ren can use › Default browser ask for the role
+  (`RoleManager.createRequestRoleIntent(ROLE_BROWSER)`); on the emulator Ren took the role and a link opened in it.
+- **Ren drives the browser in view**: while a turn uses a `browser_*` tool, the agent panel takes the lower half of
+  the screen, so the page Ren works on stays visible above it, as ren desktop's panel sits beside its browser.
+- **Reasoning**: the VM's `/gemini/text` sends Strands' `reasoningText` stream events as `{"reasoning": …}`, and
+  asks Gemini for its thoughts (`include_thoughts`), which the harness doesn't; the panel adds them to the turn's
+  chain of thought (`GeminiEvents`), as it does the ElevenLabs text agent's `agent_reasoning_response_part`.
+- **One phone on the hub**: two devices can attach as `phone` (the owner's phone and a test emulator). The newest
+  is used, and when it goes the hub falls back to the one still open. On 2026-11-13 the emulator's link made the
+  agents read the emulator's 21 apps instead of the owner's phone; keep Remote tools off on test devices while the
+  owner is using his phone.
 - **Search**: `ren://search?q=…&level=…` is ren desktop's own results page. `android/web/src/ren/` holds
   `src/pages/SearchResultsPage.tsx` and everything it imports from ren desktop at `b112adf`, unmodified (hashes in
   `SHA256SUMS`, `npm run check:ren`), with ren desktop's Tailwind config and `index.css`. `src/search/` mounts it:

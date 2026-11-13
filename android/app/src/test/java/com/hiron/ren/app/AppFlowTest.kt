@@ -117,6 +117,10 @@ class AppFlowTest {
         compose.onNodeWithText("Save & continue").assertIsDisplayed()
         compose.onNodeWithText("Save & continue").performClick()
         compose.onNodeWithText("Skip for now").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Default browser.").assertIsDisplayed()
+        // Skip where Android offers the browser role, Continue where it doesn't.
+        compose.onNodeWithText(if (compose.onAllNodesWithTextCount("Skip for now") > 0) "Skip for now" else "Continue").performClick()
         compose.onNodeWithText("Customize later in Settings").performClick()
         compose.waitForIdle()
         assertTrue(compose.activity.ren.settings.onboarded)
