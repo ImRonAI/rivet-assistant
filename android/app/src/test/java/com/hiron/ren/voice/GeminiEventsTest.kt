@@ -40,6 +40,30 @@ class GeminiEventsTest {
     }
 
     @Test
+    fun reasoningStreamsIntoTheTurnsChainOfThoughtAndEndsWhenTheModelActs() {
+        val events = listOf(
+            """{"reasoning": "**Checking** the battery. "}""" to 1_000L,
+            """{"reasoning": "I'll call device_status."}""" to 1_500L,
+            """{"message": {"role": "assistant", "content": [{"reasoningContent": {"reasoningText": {"text": "**Checking** the battery. I'll call device_status."}}}, {"toolUse": {"toolUseId": "t1", "name": "device_status", "input": {}}}]}}""" to 3_000L,
+            """{"message": {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "status": "success", "content": [{"text": "{}"}]}}]}}""" to 3_200L,
+            """{"reasoning": "It says 80%."}""" to 3_400L,
+            """{"data": "It's at 80%."}""" to 4_400L,
+            """{"stop_reason": "end_turn", "interrupts": []}""" to 4_500L,
+        )
+        var state = RenState()
+        val seen = mutableListOf<Boolean>()
+        for ((event, at) in events) {
+            state = GeminiEvents.apply(state, JSONObject(event), at)
+            seen += state.messages.single().reasoning?.streaming == true
+        }
+        assertEquals(listOf(true, true, false, false, true, false, false), seen)
+        val reasoning = state.messages.single().reasoning!!
+        assertEquals("**Checking** the battery. I'll call device_status.\n\nIt says 80%.", reasoning.text)
+        assertEquals(3, reasoning.seconds)
+        assertEquals("It's at 80%.", state.messages.single().text)
+    }
+
+    @Test
     fun aTurnTheProviderFailsShowsItsReason() {
         val state = replay("""{"error": "ModelThrottledException: You exceeded your current quota"}""")
         assertEquals(Activity.Failed, state.activity)
