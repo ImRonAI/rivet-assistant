@@ -53,10 +53,10 @@ import kotlin.math.roundToInt
 
 const val CHAT_TAG = "chat"
 
-/** The chat page in `assets/ren/chat/` (android/stage-ui/src/chat) and what it is sent (its `model.ts`). */
+/** The agent panel's chat page in `assets/ren/web/panel/` (android/web/src/panel) and what it is sent (its `model.ts`). */
 object ChatPage {
     const val ORIGIN = "https://appassets.androidplatform.net"
-    const val PAGE = "$ORIGIN/assets/ren/chat/index.html"
+    const val PAGE = "$ORIGIN/assets/ren/web/panel/index.html"
 
     /** The image and video results a step shows: two rows of the page's grid. */
     private const val PICTURES = 6
@@ -172,8 +172,8 @@ object ChatPage {
 }
 
 /**
- * The conversation as ElevenLabs UI's Conversation, Message and Response, with AI Elements' Reasoning and Chain of
- * Thought for what Ren thought and the tools it used, on the chat page. Its text follows the system font size.
+ * The conversation as ren desktop's agent panel draws it, on its Conversation, Message, Response, Chain of Thought
+ * and Tool, on the chat page. Its text follows the system font size.
  * Links open outside Ren; an image result opens full size here.
  */
 @Composable

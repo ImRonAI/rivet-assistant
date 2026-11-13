@@ -13,6 +13,7 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -100,21 +101,23 @@ class HomeScreenTest {
         compose.onNodeWithText("New chat").assertExists()
         compose.onNodeWithText(Quick.CatchUp.label).assertDoesNotExist()
         compose.onNodeWithTag(COMPOSER_TAG).assertExists()
+        // Ren's stage opens over the conversation like an accordion.
+        compose.onNodeWithContentDescription(SHOW_REN).performClick()
+        compose.onNodeWithTag(STAGE_TAG).assertExists()
+        compose.onNodeWithTag(CHAT_TAG).assertExists()
     }
 
     @Test
-    fun aVoiceConversationKeepsRenOnStageWithItsTranscriptFolded() {
+    fun aVoiceConversationTakesTheWholeScreenToo() {
         home(
             mutableStateOf(
                 RenState(voice = true, activity = RenActivity.Listening, messages = listOf(ChatMessage("m1", true, "What's on my calendar tomorrow?"))),
             ),
         )
-        compose.onNodeWithTag(STAGE_TAG).assertExists()
-        compose.onNodeWithTag(CHAT_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(STAGE_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(CHAT_TAG).assertExists()
+        compose.onNodeWithText("New chat").assertDoesNotExist()
         compose.onNodeWithText(Quick.CatchUp.label).assertDoesNotExist()
         shot("g2-home-voice")
-        compose.onNodeWithText(TRANSCRIPT).performClick()
-        compose.onNodeWithTag(STAGE_TAG).assertExists()
-        compose.onNodeWithTag(CHAT_TAG).assertExists()
     }
 }

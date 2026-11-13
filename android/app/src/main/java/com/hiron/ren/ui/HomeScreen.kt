@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,7 +49,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -130,9 +131,9 @@ private fun gutter(): Dp {
 }
 
 /**
- * Home: Ren on its stage with a greeting and the quick keys until there is a conversation, then the chat on its own
- * full screen with New chat over it. A voice conversation keeps Ren on its stage, with the same chat folded under it
- * as its transcript. The composer stays at the bottom of all three.
+ * Home: Ren on its stage with a greeting and the quick keys until there is a conversation. A conversation, typed or
+ * spoken, takes the whole panel, with Ren's stage folded into a bar over it that opens like an accordion. The
+ * composer stays at the bottom of both.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -145,21 +146,19 @@ fun HomeScreen(
 ) {
     val p = LocalPalette.current
     val keyboard = WindowInsets.isImeVisible
-    val heard = state.voice && state.messages.isNotEmpty()
-    val talking = state.messages.isNotEmpty() && !state.voice
+    val chatting = state.messages.isNotEmpty()
     val voice = runtime.settings.voiceModel
+    var stage by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(p.bg)) {
-        if (talking) {
-            Row(
-                Modifier.fillMaxWidth().height(48.dp).padding(start = gutter(), end = gutter() - 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Eyebrow("Conversation", dot = false)
-                Spacer(Modifier.weight(1f))
-                Keycap("New chat", runtime::newChat)
+        if (chatting) {
+            ChatBar(stage, onStage = { stage = !stage }, onNewChat = if (state.voice) null else runtime::newChat)
+            AnimatedVisibility(stage) {
+                StageFrame(Modifier.fillMaxWidth().height(STAGE_FOLD), framed = false) {
+                    RobotView(runtime, Modifier.fillMaxSize(), focus = RobotFocus.Stage)
+                }
             }
         } else {
-            val idle = !keyboard && !heard
+            val idle = !keyboard
             val fade by animateDpAsState(if (idle) 260.dp else 96.dp, tween(Motion.SLOW, easing = Motion.Emphasized), label = "fade")
             StageFrame(Modifier.weight(1f).fillMaxWidth(), framed = false, hint = if (idle) STAGE_HINT else null) {
                 // While the greeting shows, Ren stands in the upper part of the stage with the words under its feet.
@@ -175,14 +174,13 @@ fun HomeScreen(
         AnimatedVisibility(state.approvals.isNotEmpty()) {
             ApprovalBanner(state.approvals.size, onReviewApprovals)
         }
-        if (talking) {
+        if (chatting) {
             ChatView(state, Modifier.weight(1f).fillMaxWidth())
         } else {
-            if (heard) Transcript(state)
             state.lastError?.let { ErrorNote(it, Modifier.padding(horizontal = gutter(), vertical = 8.dp)) }
         }
         Dock(
-            quick = !talking && !heard && !keyboard,
+            quick = !chatting && !keyboard,
             voice = voice,
             listening = state.activity == Activity.Listening,
             focusRequests = focusRequests,
@@ -192,24 +190,26 @@ fun HomeScreen(
     }
 }
 
-const val TRANSCRIPT = "Transcript"
+/** How tall Ren's stage opens over a conversation. */
+private val STAGE_FOLD = 240.dp
 
-/** A voice conversation's transcript: a quiet header under the stage that opens the chat, as typing shows it. */
+const val SHOW_REN = "Show Ren"
+
+/** The bar over a conversation: it opens and folds Ren's stage, and starts a new chat when [onNewChat] is set. */
 @Composable
-private fun Transcript(state: RenState) {
+private fun ChatBar(stage: Boolean, onStage: () -> Unit, onNewChat: (() -> Unit)?) {
     val p = LocalPalette.current
-    var open by rememberSaveable { mutableStateOf(false) }
-    val turn by animateFloatAsState(if (open) 180f else 0f, tween(Motion.QUICK), label = "turn")
-    Column(Modifier.fillMaxWidth()) {
+    val turn by animateFloatAsState(if (stage) 180f else 0f, tween(Motion.QUICK), label = "turn")
+    Row(Modifier.fillMaxWidth().height(48.dp).padding(end = gutter() - 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(
-            Modifier.fillMaxWidth().height(48.dp).clickable(role = Role.Button) { open = !open }.padding(horizontal = gutter()),
+            Modifier.weight(1f).fillMaxHeight().clickable(role = Role.Button, onClick = onStage).padding(start = gutter()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Eyebrow(TRANSCRIPT, dot = false)
-            Spacer(Modifier.weight(1f))
-            Icon(Icons.Outlined.KeyboardArrowUp, if (open) "Hide the transcript" else "Show the transcript", Modifier.rotate(turn), tint = p.ink2)
+            Eyebrow("Conversation", dot = false)
+            Spacer(Modifier.width(6.dp))
+            Icon(Icons.Outlined.KeyboardArrowDown, if (stage) "Hide Ren" else SHOW_REN, Modifier.size(18.dp).rotate(turn), tint = p.ink2)
         }
-        AnimatedVisibility(open) { ChatView(state, Modifier.fillMaxWidth().height(320.dp)) }
+        if (onNewChat != null) Keycap("New chat", onNewChat)
     }
 }
 

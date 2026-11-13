@@ -3,7 +3,7 @@
  * and the level, as it does on the desktop.
  */
 import "./host"
-import "./search.css"
+import "../page.css"
 import "@/index.css"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"

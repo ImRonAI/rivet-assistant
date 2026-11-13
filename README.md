@@ -15,8 +15,7 @@ on that VM and call each other through it.
 
 ```
 android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent panel, widgets, assistant overlay
-  web/       the app's bundled pages (Vite): Cato and ren's robot, ren desktop's search page
-  stage-ui/  the chat page's build (ElevenLabs UI)
+  web/       the app's bundled pages (Vite): Cato and ren's robot, ren desktop's search page, the agent panel's chat
 deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP, background-task hooks),
            gemini/ (the Strands agents), hub/ (Ren's hub), search/ (ren's search), laptop/ (OpenCode config),
            toolbox/ (pinned developer tools)
