@@ -89,6 +89,27 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   the shopping agent on NIM was still reasoning when the 120 s the request was given ran out. Not run: a search from
   the app against the VM, ren desktop's browser tools through the hub (Electron wasn't running), anything on a
   physical phone.
+- **The Strands agents live, 2026-11-12 and 13** (the VM, the emulator's app on Settings › Agents):
+  - From the app's panel, Mistral read the phone's battery through the hub and, with ren's Brave tools, answered a web
+    question in 24 s with its source; Gemini (`gemini-4-hydrogen`) opened example.com in the phone's browser and read
+    its heading back; Gemini 3.8 Live answered a spoken question about the battery aloud with the real level.
+  - 2026-11-13 05:5x UTC, with the token from a client on the Mac: `/hub/mcp` listed 40 tools, `hub_peers` said
+    `{"phone":true,"desktop":false}` and `device_status` returned the emulator's battery; `/hub/agents/mcp` listed 14.
+    "What is 2 + 2?" got "4" from Gemini in 2.4 s and from Mistral in 3.9 s, and nothing from NIM in 75 s. Spoken to
+    `/gemini/voice` (macOS `say`, 16 kHz PCM), the same question got "That's four." with 24 kHz audio.
+  - **The Gemini key is on the free tier**, which allows 20 `generateContent` requests a day per model
+    (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, 429 with a `retryDelay`) and refuses `gemini-4-argon` and
+    Google Search grounding, so `gemini.env` sets `gemini-4-hydrogen` and `GEMINI_WEB_SEARCH=0`. A harness turn makes
+    several requests (the memory extraction is one), so the day's quota goes in a few web questions; the next ones
+    ended in Google's 503 "high demand" after 38 s and in the 429 after 126 s. That is why a web
+    question to Gemini text got no answer once the Brave tools were added. A billed key lifts it.
+  - **NIM's default `z-ai/glm-5.3-flash`** (ren's default, listed in NVIDIA's catalogue) returns nothing, from this
+    VM and from ren desktop's own NIM code and venv on the owner's Mac; other NIM models on the same key answer in
+    under a second, and Settings › Agents picks one.
+  - The phone's seven search tools (`web_search` and the rest, on the hub and as client tools) search Brave with the
+    keys in Settings, baked from `braveSearchKey` and `braveAnswersKey` in `android/ren.local.properties`. Without them
+    they answer "Search isn't set up yet: add the Brave key in Settings.", which Gemini Live got when it chose
+    `web_search` for a spoken web question. The Strands agents also have ren's own `brave_*` tools on the VM's keys.
 
 ## How it works
 
@@ -359,7 +380,8 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
    (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
    doesn't load there) and `search.env` (`BRAVE_SEARCH_API_KEY`, `BRAVE_ANSWERS_API_KEY`, `NVIDIA_NIM_API_KEY`).
    `EMRYS_GEMINI_TOKEN` is in `computer.env`, and the app's `geminiToken` (in `android/ren.local.properties`) is the
-   same token. Not run live yet: a search from the app, and a chat with each Strands provider. Next:
+   same token. Live results are under "The Strands agents live" above; Gemini needs a billed key and NIM another
+   model than its default. Next:
    `start_background_task` and `call_as_emrys` for them, and the hub's `/hub/agents/mcp` on the ElevenLabs text and
    voice agents (the owner asked for both agents to be connected; it needs the token as a workspace secret).
 8. **ren mobile:** the agent panel's chat on ren desktop's components (it is the ElevenLabs UI page from
