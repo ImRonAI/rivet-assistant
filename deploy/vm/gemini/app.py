@@ -1,7 +1,8 @@
 """Emrys's Strands agents for the phone: the harness for text and a BidiAgent for voice, behind FastAPI WebSockets.
 
-The text agent runs on Gemini, NVIDIA NIM or Mistral, the phone's choice in Settings › Agents (`provider`, `model`, the
-provider's default when left out, and `effort`, the reasoning level or `auto`). NIM and Mistral models are built the way ren builds them (`providers.py`);
+The text agent runs on Gemini, NVIDIA NIM, Mistral or Telnyx, the phone's choice in Settings › Agents (`provider`,
+`model`, the provider's default when left out, and `effort`, the reasoning level or `auto`). NIM and Mistral models are
+built the way ren builds them, and Telnyx's the way ren builds NIM's, on Telnyx's OpenAI-compatible API (`providers.py`);
 `GET /gemini/models` and `GET /gemini/efforts` list each provider's live models and each model's reasoning levels.
 Voice is always Gemini Live; its helpers run on the chosen text model.
 
@@ -152,7 +153,7 @@ class Phone(OutputStream):
 
 
 def text_model(provider: ProviderName, model: str, effort: str) -> Model:
-    """The text model the phone chose: Gemini as Strands builds it, NIM and Mistral as ren builds them."""
+    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral and Telnyx as `providers.py` does."""
     if provider == "gemini":
         return GeminiModel(model_id=model)
     return build_model(provider, model, None if effort == "auto" else effort)

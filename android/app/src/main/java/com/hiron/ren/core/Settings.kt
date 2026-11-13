@@ -65,7 +65,10 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("voice_model", true)
         set(value) = prefs.edit().putBoolean("voice_model", value).apply()
 
-    /** Who runs Ren's agents: the ElevenLabs agents (the default), or Gemini, NVIDIA NIM or Mistral on the workspace VM. */
+    /**
+     * Who runs Ren's agents: the ElevenLabs agents (the default), or Gemini, NVIDIA NIM, Mistral or Telnyx on the
+     * workspace VM.
+     */
     var provider: Provider
         get() = runCatching { Provider.valueOf(prefs.getString("provider", null).orEmpty()) }.getOrDefault(Provider.ElevenLabs)
         set(value) = prefs.edit().putString("provider", value.name).apply()
