@@ -109,7 +109,7 @@ class RenNotificationListener : NotificationListenerService() {
         }
 
         private fun notConnected() = ToolResult.error(
-            "Ren can't see notifications yet. Ask the user to open Ren › Settings › Permissions › Notification access " +
+            "Ren can't see notifications yet. Ask the user to open Ren › Settings › What Ren can use › Notification access " +
                 "and turn Ren on.",
         )
     }

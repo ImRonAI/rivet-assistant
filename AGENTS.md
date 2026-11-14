@@ -82,6 +82,12 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   and Ren's agent as `ask_ren`, `ren_threads`, `ren_thread` and `ren_cancel`. With `REN_HUB_URL` and `REN_HUB_TOKEN`
   set the backend attaches to the hub, and the panel agent's tool catalog gains the server `phone` (the hub's tools,
   prefixed `phone_`).
+- **The agents on the laptop's desktop** (2026-11-13): the laptop's X server (Xvfb `:1`, run with `-ac` and MIT-SHM)
+  is shared with the `computer` and `gemini` containers through the `x11` volume at `/tmp/.X11-unix`, the laptop's IPC
+  namespace and its process namespace, with `DISPLAY=:1`. The computer image has the desktop tools the workspace's
+  `AGENTS.md` names (`xdotool`, `xfce4-screenshooter`, `x11-utils`, Chromium and linuxserver's `wrapped-chromium`), so
+  the Strands agents' shell and Desktop Commander drive the owner's desktop: from the `gemini` container,
+  `wrapped-chromium https://example.com` opened on the laptop's screen and `xfce4-screenshooter` captured it.
 - **The Strands agents on the hub** (`deploy/vm/gemini/app.py`): the server `ren-hub` (`http://hub:8300/mcp`,
   unprefixed) replaces the phone's Tailscale address, so Gemini, NIM and Mistral reach the phone and ren desktop
   whichever is attached.
@@ -407,7 +413,7 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
 5. **A stated result no tool returned:** on a phone call the voice agent called a phone tool that can't run there and
    then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
-   simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
+   simplified Settings), CloudFS, and triggers and webhooks.
 7. **The Strands agents** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL): they run on the Gemini API (AI
    Studio, owner, 2026-11-06), NIM, Mistral, Telnyx and xAI. The `gemini` and `search` images are built on the VM
    (`emrys-gemini:1.64.0`, `ren-search:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`

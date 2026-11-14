@@ -21,6 +21,9 @@ services:
     image: emrys-laptop:ls219
     restart: unless-stopped
     shm_size: "1gb"
+    # The desktop's X server (Xvfb :1, started with -ac and MIT-SHM) is shared with the agents' containers: its socket
+    # through the x11 volume and its shared memory through this IPC namespace.
+    ipc: shareable
     env_file: laptop.env
     environment:
       PUID: "1000"
@@ -28,6 +31,7 @@ services:
       SELKIES_ALLOWED_ORIGINS: "https://desktop.rivet.ron-ai.dev"
     volumes:
       - laptop_home:/config
+      - x11:/tmp/.X11-unix
 
   code:
     image: gitpod/openvscode-server:1.105.1
@@ -56,9 +60,15 @@ services:
     image: emrys-computer:0.3.1
     restart: unless-stopped
     env_file: laptop.env
+    # The laptop's desktop, display :1, with its processes (so `pgrep chromium` sees the desktop's browser).
+    ipc: service:laptop
+    pid: service:laptop
+    environment:
+      DISPLAY: ":1"
     mem_limit: 4g
     volumes:
       - laptop_home:/config
+      - x11:/tmp/.X11-unix
 
   # The agents' webhooks at https://hooks.oubliai.com: Task agent jobs that outlive the conversation, then a callback.
   hooks:
@@ -85,9 +95,14 @@ services:
     environment:
       # NIM's default text model (ren's `NIM_MODEL`; owner, 2026-11-13).
       NIM_MODEL: minimaxai/minimax-m3.1-flash
+      # The laptop's desktop, display :1.
+      DISPLAY: ":1"
+    ipc: service:laptop
+    pid: service:laptop
     mem_limit: 4g
     volumes:
       - laptop_home:/config
+      - x11:/tmp/.X11-unix
 
   # Ren's hub: one MCP server joining the phone and ren desktop, at https://rivet.ron-ai.dev/hub/.
   hub:
@@ -111,3 +126,4 @@ volumes:
   caddy_data:
   caddy_config:
   laptop_home:
+  x11:

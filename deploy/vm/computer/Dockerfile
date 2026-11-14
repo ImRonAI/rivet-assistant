@@ -11,6 +11,11 @@ RUN UV_PYTHON_INSTALL_DIR=/opt/python uv venv /opt/bridge --python 3.12 \
     && npm exec --yes --package=@playwright/mcp@0.0.83 -- node -e "" \
     && npx --yes playwright@1.64.0-alpha-1790635538000 install-deps chromium \
     && chown -R 1000:1000 /opt/npm-cache
+# The laptop's desktop tools, which the workspace's AGENTS.md tells agents to use on display :1 (compose.yaml shares it).
+RUN apt-get update && apt-get install -y --no-install-recommends xdotool xfce4-screenshooter x11-utils chromium \
+    && rm -rf /var/lib/apt/lists/*
+# linuxserver's wrapped-chromium, as the laptop (webtop) has it at /usr/local/bin.
+COPY wrapped-chromium /usr/local/bin/wrapped-chromium
 COPY bridge.py hooks.py /opt/bridge/
 # The laptop's user and home, where OpenCode, the workspace and Rust (rustup's ~/.cargo) live.
 USER 1000:1000
