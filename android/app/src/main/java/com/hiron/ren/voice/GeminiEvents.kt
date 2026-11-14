@@ -49,14 +49,6 @@ object GeminiEvents {
     }
 
     /** Reasoning adds to the turn's one reasoning block; a segment after a reply or a tool call starts a paragraph. */
-@claude 
-In `android/app/src/main/java/com/hiron/ren/voice/GeminiEvents.kt` at line 52:
-
-**Working indicator disappears**
-
-When a text turn emits reasoning before it emits a reply, `thought` creates an assistant message as soon as reasoning streams, so `ChatPage.working` no longer sees the user's message as the latest one and hides the “Ren is working” indicator while the turn is still in progress.
-
-Keep the turn marked working while its reasoning is streaming, even after an assistant message has been created.
     private fun thought(state: RenState, text: String, now: Long): RenState = if (text.isEmpty()) state else RenStore.turn(state.copy(activity = Activity.Thinking)) { m ->
         val r = m.reasoning ?: Reasoning("")
         val gap = if (r.streaming || r.text.isBlank() || r.text.endsWith("\n\n")) "" else "\n\n"
