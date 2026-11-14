@@ -109,10 +109,10 @@ class RenRuntime(private val app: Context) {
             Provider.Gemini, Provider.Nim, Provider.Mistral, Provider.Telnyx, Provider.Xai -> strands
         }
 
-    /** Switches provider; the running conversation ends, and the next one starts with [provider]. */
+    /** Switches provider; the conversation ends, and the next one starts with [provider]. */
     fun choose(provider: Provider) {
         if (provider == settings.provider) return
-        agent.stop()
+        newChat()
         settings.provider = provider
     }
 
@@ -184,6 +184,7 @@ class RenRuntime(private val app: Context) {
     /** Ends the conversation: its session stops and the chat clears, back to Ren on its stage. */
     fun newChat() {
         agent.stop()
+        strands.newConversation()
         update { it.copy(messages = emptyList(), activity = Activity.Idle, lastError = null) }
     }
 

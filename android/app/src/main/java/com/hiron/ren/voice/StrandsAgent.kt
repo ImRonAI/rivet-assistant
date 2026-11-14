@@ -56,6 +56,10 @@ class StrandsAgent(
     private var socket: WebSocket? = null
     private val audio = GeminiAudio(scope)
 
+    // The harness session the VM keeps this chat in. Every text session opens it by this id, so one that starts
+    // again (the socket dropped, the app came back) resumes the chat from the VM's snapshot, as the harness documents.
+    private var conversation = UUID.randomUUID().toString()
+
     @Volatile
     override var mode: AgentMode? = null
         private set
@@ -97,6 +101,11 @@ class StrandsAgent(
         update { it.copy(activity = if (it.activity == Activity.Listening) Activity.Idle else it.activity, voice = false) }
     }
 
+    /** The next session starts a new chat on the VM instead of resuming this one. */
+    fun newConversation() {
+        conversation = UUID.randomUUID().toString()
+    }
+
     override fun hasMicrophone() =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
@@ -130,7 +139,7 @@ class StrandsAgent(
         val provider = settings.provider
         return SERVICE.toHttpUrl().newBuilder()
             .addPathSegment(if (mode == AgentMode.Voice) "voice" else "text")
-            .addQueryParameter("conversation", UUID.randomUUID().toString())
+            .addQueryParameter("conversation", conversation)
             .addQueryParameter("provider", provider.strands)
             .apply { settings.textModel(provider)?.let { addQueryParameter("model", it) } }
             .addQueryParameter("effort", settings.effort(provider))
