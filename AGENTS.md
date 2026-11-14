@@ -33,7 +33,7 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   opens on it. Tabs are real WebViews, made on a tab's first navigation; an address bar that loads addresses and
   searches phrases (ported from ren desktop's `navigable-url.ts` and `UrlBar.tsx`); back, forward, reload, stop; a tabs
   sheet; downloads, uploads and fullscreen video; new windows become tabs; page permissions are refused. Home is
-  `ren://home`: a Search/Discover switcher, the logotype, a search box ("Ask me anything. I dare you.", sized to fit
+  `ren://home`: a switcher to ren desktop's destinations, the logotype, a search box ("Ask me anything. I dare you.", sized to fit
   the width), the five search levels and the favorite links. **Ask Ren** slides the agent panel (`HomeScreen.kt` under
   a header) over the browser.
 - **Favorites** (2026-11-13, `browser/Favorites.kt`): one list, kept by the app (`Settings.favorites`), starting with
@@ -41,14 +41,19 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   the search box (long-press removes, Add opens a dialog); Discover shows the same list through ren's own store, which
   the page reads from and writes back to the app over `RenHost` (`{"type":"favorites"}`). An addition on either side
   shows on the other.
-- **Discover** (2026-11-13, `ren://discover`): ren desktop's `HomePage.tsx` on its Discover tab, with `OnboardingPage`
-  for Personalize, unmodified in `src/ren` (and its bundled stories in `src/data`); `src/discover/` mounts it with a
-  Search/Discover switcher. Its feed is the VM's `/discover/*` (ren's own router), with the workspace token. A story
-  opens in the same tab (the mount follows ren's tab store, where Electron would open `ron://read`), and Back returns
-  to Discover. ren desktop's other environments (Execute, Documents, Calendar, Vibe, Build) are in the same page but
-  not reachable on the phone: they need ren's Projects and chat backend (`agent/api/core/projects.py`), which signs
-  in with Supabase, and the VM serves only search and Discover. ren desktop's own `tsc` has nine errors at `b112adf`
-  (`scripts/ren-tsc-known.txt`; `scripts/tsc.mjs` passes only on exactly those).
+- **ren desktop's destinations** (2026-11-14, `ren://discover`, `ren://execute`, `ren://documents`,
+  `ren://calendar`, `ren://vibe`, `ren://build`): ren desktop's `HomePage.tsx` on the tab the address names, with
+  `OnboardingPage` for Personalize, `SignInPage` behind `#signin`, and the Projects and Documents pages App.tsx's
+  `MainContent` draws for the addresses its tab store opens (`ron://projects`, `ron://project/<key>`,
+  `ron://documents`), all unmodified in `src/ren`. `src/destinations/` mounts them under a switcher (Search and the six
+  destinations, as ren desktop's sidebar lists them); Home's switcher scrolls to the same six. A story opens in the
+  same tab (the mount follows ren's tab store, where Electron would open `ron://read`), and Back returns. Projects work
+  as ren's guest workspace (`X-Ron-Workspace`, kept in SQLite on the VM) or signed in with Supabase (email and
+  password; ren's social sign-in says it runs in the desktop app). The build needs `VITE_SUPABASE_URL` and
+  `VITE_SUPABASE_ANON_KEY` in `android/web/.env.local` (gitignored; the values are ren desktop's `.env`). Seven of
+  ren's files come from ren desktop's fixes on top of `b112adf` (`ImRonAI/TheBrowser` PR #5, see `src/ren/SOURCE.txt`): ren desktop's nine `tsc` errors are fixed there, so
+  the pages type-check with none. Build's live preview (an iframe) and ren's voice and teaching WebSockets can't
+  carry the workspace token, so the VM refuses them.
 - **Default browser** (2026-11-13): `MainActivity` takes `VIEW` `http`/`https` links (BROWSABLE, DEFAULT) and
   `APP_BROWSER`, so Android offers Ren for the browser role; a link from another app opens in a new tab in front.
   Onboarding's step 4 and Settings › What Ren can use › Default browser ask for the role
@@ -66,11 +71,13 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   `src/pages/SearchResultsPage.tsx` and everything it imports from ren desktop at `b112adf`, unmodified (hashes in
   `SHA256SUMS`, `npm run check:ren`), with ren desktop's Tailwind config and `index.css`. `src/search/` mounts it:
   the query and level come from the address, Dark follows the phone, a result opens in a new tab (`window.open`, which
-  the browser turns into a tab), and `host.ts` adds the workspace token to the page's requests. The page gets the
+  the browser turns into a tab), and `host.ts` adds the workspace token to the page's requests (as `X-Ren-Token`,
+  since ren's Projects requests carry Supabase's bearer in `Authorization`). The page gets the
   token from the `RenHost` web message listener, which answers only the app's bundled origin
-  (`https://appassets.androidplatform.net`). The backend is ren desktop's own search and Discover routers on the VM
-  (`deploy/vm/search`, image built from `ImRonAI/TheBrowser` at `b112adf`), at `https://rivet.ron-ai.dev/search/*` and
-  `/discover/*` behind the same token. "Add search to Ren context" and "Search deeper" need ren desktop's context
+  (`https://appassets.androidplatform.net`). The backend is ren desktop's own backend on the VM, run as ren
+  runs it (`python agent/api/main.py`; `deploy/vm/ren`, image built from `ImRonAI/TheBrowser` at `b112adf`, keys in
+  `search.env` and Supabase's in `ren.env`), at `https://rivet.ron-ai.dev/` behind the same token (Caddy sends every
+  path the other services don't take to it, except ren's A2A endpoint). "Add search to Ren context" and "Search deeper" need ren desktop's context
   store and Electron, so the first fails on the phone and the second is not shown.
 - **Ren's hub** (`deploy/vm/hub/app.py`, FastMCP 3.4.0 and mcp 1.26.0, the versions ren desktop pins; the `hub`
   container at `https://rivet.ron-ai.dev/hub/` behind `EMRYS_GEMINI_TOKEN`): the one place the phone, ren desktop and
@@ -358,7 +365,7 @@ android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent 
              src/cato (Cato, unmodified), src/robot (ren's robot), src/ren (ren desktop's search page and agent panel
              components, unmodified), src/search (the phone's mount of the page), src/panel (the agent panel's chat)
 deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Strands
-           agents), hub/ (Ren's hub), search/ (ren desktop's search routers), laptop/ (OpenCode config, workspace AGENTS.md)
+           agents), hub/ (Ren's hub), ren/ (ren desktop's backend), laptop/ (OpenCode config, workspace AGENTS.md)
 docs/      design/ (REN_DESIGN.md: Ink & Volt on the phone; ren-logotype.json)
 .github/   CI: android.yml (tests, lint, release build)
 ```
@@ -430,9 +437,10 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
    simplified Settings), CloudFS, and triggers and webhooks.
 7. **The Strands agents** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL): they run on the Gemini API (AI
    Studio, owner, 2026-11-06), NIM, Mistral, Telnyx and xAI. The `gemini` and `search` images are built on the VM
-   (`emrys-gemini:1.64.0`, `ren-search:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`
+   (`emrys-gemini:1.64.0`, `ren-api:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`
    (`GOOGLE_API_KEY`, `NVIDIA_NIM_API_KEY`, `MISTRAL_API_KEY`, `TELNYX_API_KEY`, `XAI_API_KEY`; without `TELNYX_MCP_AUTHORIZATION` oubliai-telnyx
-   doesn't load there) and `search.env` (`BRAVE_SEARCH_API_KEY`, `BRAVE_ANSWERS_API_KEY`, `NVIDIA_NIM_API_KEY`).
+   doesn't load there), `search.env` (`BRAVE_SEARCH_API_KEY`, `BRAVE_ANSWERS_API_KEY`, `NVIDIA_NIM_API_KEY`) and
+   `ren.env` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
    `EMRYS_GEMINI_TOKEN` is in `computer.env`, and the app's `geminiToken` (in `android/ren.local.properties`) is the
    same token. Live results are under "The Strands agents live" above; Gemini needs a billed key and NIM another
    model than its default. Next:

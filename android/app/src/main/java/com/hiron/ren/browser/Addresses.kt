@@ -18,13 +18,30 @@ enum class SearchLevel(val wire: String, val label: String) {
     }
 }
 
+/** ren desktop's destinations, as its sidebar lists them (`DESTINATIONS` in `Sidebar.tsx`); each is Ren's page at [address]. */
+enum class Destination {
+    Discover,
+    Execute,
+    Documents,
+    Calendar,
+    Vibe,
+    Build,
+    ;
+
+    val id = name.lowercase()
+    val address = "ren://$id"
+
+    companion object {
+        fun of(url: String): Destination? = entries.firstOrNull { it.address == url }
+    }
+}
+
 /**
  * What the address bar does with what was typed, the way ren desktop's does (its `UrlBar.tsx` and
  * `navigable-url.ts`): an address loads, anything else is a search, and Ren's own pages are `ren://` addresses.
  */
 object Addresses {
     const val HOME = "ren://home"
-    const val DISCOVER = "ren://discover"
     private const val SEARCH = "ren://search"
 
     private val HAS_SCHEME = Regex("^[a-z][a-z\\d+.-]*://", RegexOption.IGNORE_CASE)
@@ -81,7 +98,7 @@ object Addresses {
         val query = searchQuery(url)
         if (!query.isNullOrEmpty()) return query
         if (url == HOME) return ""
-        if (url == DISCOVER) return "Discover"
+        Destination.of(url)?.let { return it.name }
         if (!url.startsWith("https://")) return url
         val parsed = Uri.parse(url)
         val host = parsed.host?.removePrefix("www.") ?: return url

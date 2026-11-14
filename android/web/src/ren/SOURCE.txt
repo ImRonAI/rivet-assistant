@@ -3,13 +3,16 @@ desktop, unmodified: github.com/ImRonAI/TheBrowser at b112adf.
 
   pages/SearchResultsPage.tsx and everything it imports     src/ (the same paths, without the src/ prefix)
   pages/HomePage.tsx, pages/OnboardingPage.tsx and theirs   src/
+  pages/SignInPage.tsx, DocumentsPage.tsx, ProjectsIndexPage.tsx,
+  ProjectHomePage.tsx, layouts/AuthPageLayout.tsx and theirs src/
   the agent panel's components (below) and their imports    src/
   index.css, vite-env.d.ts, pages/types/electron.ts         src/
   data/*.json (Discover's bundled stories)                  ../data (src/data, with its own SHA256SUMS)
   tailwind.config.ts                                        the repository root
 
 These files are never edited here (SHA256SUMS holds their hashes; `npm run check:ren` verifies them). The file list is
-the import closure of src/pages/SearchResultsPage.tsx, src/pages/HomePage.tsx, src/pages/OnboardingPage.tsx and of the
+the import closure of src/pages/SearchResultsPage.tsx, src/pages/HomePage.tsx, src/pages/OnboardingPage.tsx, the pages
+App.tsx's MainContent draws for Projects and Documents, its sign-in page and of the
 components ren desktop's agent panel (src/components/agent-panel/AgentPanel.tsx) draws a conversation with:
 ai-elements/conversation, message, response, chain-of-thought, tool and shimmer:
 
@@ -18,12 +21,14 @@ ai-elements/conversation, message, response, chain-of-thought, tool and shimmer:
 plus the files those import for their types only (found by `tsc -b`), which are checked but never bundled. ren desktop's
 `@catalyst` alias is in vite.config.ts and tsconfig.ren.json.
 
-Four files come from ren desktop's fixes on top of b112adf (github.com/ImRonAI/TheBrowser pull 5, commit 4823b33): the
-nine `tsc` errors ren desktop had at b112adf are fixed in components/agent-panel/ContextPicker.tsx,
-components/build/CodeEditor.tsx and components/build/studio/CodePane.tsx, so the pages type-check with none, and
-components/home/FavoriteLinks.tsx keeps Discover's Add form off the screen's edge.
+Seven files come from ren desktop's fixes on top of b112adf (github.com/ImRonAI/TheBrowser pull 5, commit 96ff0d6):
+components/agent-panel/ContextPicker.tsx, components/build/CodeEditor.tsx and components/build/studio/CodePane.tsx fix
+the nine `tsc` errors ren desktop had at b112adf, so the pages type-check with none; components/home/FavoriteLinks.tsx
+keeps Discover's Add form off the screen's edge; and pages/ExecutePage.tsx, pages/ProjectsIndexPage.tsx and
+components/projects/CanonicalIssueWorkspace.tsx open ren's own pages through its tab store where Electron isn't.
 
 The phone's search page (src/search/) mounts SearchResultsPage as it is and supplies what Electron supplies on the
-desktop. Discover (src/discover/) mounts HomePage on its Discover tab: a story opens in the browser's tab, and the
-favorites are the app's (src/host.ts). The agent panel's chat (src/panel/) draws the conversation with those components
+desktop. The destinations page (src/destinations/) mounts HomePage on the tab its address names (Discover, Execute,
+Documents, Calendar, Vibe, Build) and, as App.tsx's MainContent does, the Projects and Documents pages its tab store
+opens, with SignInPage behind #signin: a story opens in the browser's tab, and the favorites are the app's (src/host.ts). The agent panel's chat (src/panel/) draws the conversation with those components
 the way AgentPanel.tsx does.

@@ -80,9 +80,14 @@ class FavoritesTest {
     }
 
     @Test
-    fun discoverIsOneOfRensPages() {
-        assertEquals("https://appassets.androidplatform.net/assets/ren/web/discover/index.html", Browser.internal(Addresses.DISCOVER))
-        assertEquals(Addresses.DISCOVER, Browser.display("https://appassets.androidplatform.net/assets/ren/web/discover/index.html"))
-        assertEquals("Discover", Addresses.resting(Addresses.DISCOVER))
+    fun renDesktopsDestinationsAreRensPages() {
+        val page = "https://appassets.androidplatform.net/assets/ren/web/destinations/index.html"
+        for (destination in Destination.entries) {
+            assertEquals("$page?tab=${destination.id}", Browser.internal(destination.address))
+            assertEquals(destination.address, Browser.display("$page?tab=${destination.id}#signin"))
+            assertEquals(destination.name, Addresses.resting(destination.address))
+        }
+        assertEquals("ren://execute", Destination.Execute.address)
+        assertNull(Browser.internal("ren://projects"))
     }
 }

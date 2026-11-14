@@ -5,7 +5,7 @@ import tailwindcss from "tailwindcss"
 import { defineConfig } from "vite"
 
 // Ren's pages for the app's WebViews. Each is its own page under assets/ren/, loaded through WebViewAssetLoader, with
-// its chunks beside it (the robot's bloom pass loads only on wide screens). The search page, Discover and the agent panel's chat
+// its chunks beside it (the robot's bloom pass loads only on wide screens). The search page, ren desktop's destinations and the agent panel's chat
 // are ren desktop's own pages and components (src/ren, which its files import as "@"), styled by its Tailwind config.
 // https://vite.dev/config/
 export default defineConfig({
@@ -25,7 +25,7 @@ export default defineConfig({
       input: {
         robot: path.resolve(__dirname, "src/robot/index.html"),
         search: path.resolve(__dirname, "src/search/index.html"),
-        discover: path.resolve(__dirname, "src/discover/index.html"),
+        destinations: path.resolve(__dirname, "src/destinations/index.html"),
         panel: path.resolve(__dirname, "src/panel/index.html"),
       },
     },

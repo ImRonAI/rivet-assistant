@@ -76,9 +76,9 @@ data class DownloadRequest(val url: String, val name: String, val host: String, 
  * do to them. All of it runs on the main thread, as WebView requires.
  *
  * A tab opened from home keeps home under its first page, so Back from that page returns to it. Ren's own pages
- * (`ren://search`, `ren://discover`) are the app's bundled pages, loaded from its assets; only they can talk to the
- * app, and what they can ask for is [token], the workspace VM's bearer token their requests to Ren's backend carry,
- * and the [favorites], which Discover shows and changes as the home page does.
+ * (`ren://search` and ren desktop's destinations, [Destination]) are the app's bundled pages, loaded from its assets;
+ * only they can talk to the app, and what they can ask for is [token], the workspace VM's token their requests to Ren's
+ * backend carry, and the [favorites], which Discover shows and changes as the home page does.
  */
 class Browser(private val context: Context, private val store: BrowserStore, private val favorites: Favorites, private val token: () -> String) {
     private val _state = MutableStateFlow(BrowserState())
@@ -412,14 +412,14 @@ class Browser(private val context: Context, private val store: BrowserStore, pri
         /** The bundled page behind one of Ren's `ren://` addresses; null for a web address. */
         internal fun internal(url: String): String? = when {
             Addresses.searchQuery(url) != null -> "$PAGES/search/index.html?${Uri.parse(url).encodedQuery.orEmpty()}"
-            url == Addresses.DISCOVER -> "$PAGES/discover/index.html"
-            else -> null
+            else -> Destination.of(url)?.let { "$PAGES/destinations/index.html?tab=${it.id}" }
         }
 
         /** The address the bar shows for a loaded URL: Ren's pages by their `ren://` names. */
         internal fun display(url: String): String = when {
             url.startsWith("$PAGES/search/index.html") -> "ren://search?${Uri.parse(url).encodedQuery.orEmpty()}"
-            url.startsWith("$PAGES/discover/index.html") -> Addresses.DISCOVER
+            url.startsWith("$PAGES/destinations/index.html") ->
+                Destination.entries.firstOrNull { it.id == Uri.parse(url).getQueryParameter("tab") }?.address ?: url
             else -> url
         }
     }

@@ -27,24 +27,27 @@ rivet.ron-ai.dev {
 		}
 		respond 401
 	}
-	# Ren's search and Discover for the phone, on the paths ren desktop's own pages call. The bundled search page calls
-	# them from another origin, so the browser's preflight, which carries no token, goes straight to the app, which
-	# answers it for that origin only.
-	@ren path /search/* /discover/*
-	handle @ren {
+	# ren desktop's backend for ren's pages in the app (search, Discover, Projects, Build, chat and the rest), on the
+	# paths ren's pages call. ren's own code sends Authorization (a ren account's Supabase session), so the app's token
+	# comes in X-Ren-Token. The bundled pages call from another origin, so the browser's preflight, which carries no
+	# token, goes straight to the backend, which answers it for that origin only. /a2a stays loopback-only, as ren
+	# desktop keeps it.
+	handle /a2a* {
+		respond 404
+	}
+	handle {
 		@preflight method OPTIONS
 		handle @preflight {
-			reverse_proxy search:8200
+			reverse_proxy ren:8765
 		}
-		@token header Authorization "Bearer {$EMRYS_GEMINI_TOKEN}"
+		@token header X-Ren-Token {$EMRYS_GEMINI_TOKEN}
 		handle @token {
-			reverse_proxy search:8200 {
+			reverse_proxy ren:8765 {
 				flush_interval -1
 			}
 		}
 		respond 401
 	}
-	respond 404
 }
 
 desktop.rivet.ron-ai.dev {
