@@ -8,7 +8,10 @@ WORKDIR /opt/ren
 RUN git clone --filter=blob:none --no-checkout https://github.com/ImRonAI/TheBrowser.git . \
     && git sparse-checkout set agent deploy \
     && git checkout --detach "$REN_COMMIT"
-RUN bash deploy/prepare-strands.sh && pip install --no-cache-dir -r agent/api/requirements.txt
+# The second install is ren's own pin for the MCP packages (deploy/vps-install.sh); electron-playwright-mcp, which it
+# installs next, drives ren's Electron browser and isn't here.
+RUN bash deploy/prepare-strands.sh && pip install --no-cache-dir -r agent/api/requirements.txt \
+    && pip install --no-cache-dir 'fastmcp[apps]==3.4.0' 'mcp==1.26.0' 'pyyaml>=6.0.3' 'httpx>=0.28.1'
 RUN useradd --create-home --uid 1000 ren && install -d -o ren -g ren /home/ren/data
 USER 1000:1000
 ENV PYTHONPATH=/opt/ren PYTHONUNBUFFERED=1 API_HOST=0.0.0.0 API_PORT=8765
