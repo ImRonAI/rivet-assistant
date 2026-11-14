@@ -33,8 +33,22 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   opens on it. Tabs are real WebViews, made on a tab's first navigation; an address bar that loads addresses and
   searches phrases (ported from ren desktop's `navigable-url.ts` and `UrlBar.tsx`); back, forward, reload, stop; a tabs
   sheet; downloads, uploads and fullscreen video; new windows become tabs; page permissions are refused. Home is
-  `ren://home` with the logotype, a search box and the five search levels. **Ask Ren** slides the agent panel
-  (`HomeScreen.kt` under a header) over the browser.
+  `ren://home`: a Search/Discover switcher, the logotype, a search box ("Ask me anything. I dare you.", sized to fit
+  the width), the five search levels and the favorite links. **Ask Ren** slides the agent panel (`HomeScreen.kt` under
+  a header) over the browser.
+- **Favorites** (2026-11-13, `browser/Favorites.kt`): one list, kept by the app (`Settings.favorites`), starting with
+  ren desktop's `DEFAULT_FAVORITES` and added and normalized as its `favoritesStore.ts` does. Home shows them under
+  the search box (long-press removes, Add opens a dialog); Discover shows the same list through ren's own store, which
+  the page reads from and writes back to the app over `RenHost` (`{"type":"favorites"}`). An addition on either side
+  shows on the other.
+- **Discover** (2026-11-13, `ren://discover`): ren desktop's `HomePage.tsx` on its Discover tab, with `OnboardingPage`
+  for Personalize, unmodified in `src/ren` (and its bundled stories in `src/data`); `src/discover/` mounts it with a
+  Search/Discover switcher. Its feed is the VM's `/discover/*` (ren's own router), with the workspace token. A story
+  opens in the same tab (the mount follows ren's tab store, where Electron would open `ron://read`), and Back returns
+  to Discover. ren desktop's other environments (Execute, Documents, Calendar, Vibe, Build) are in the same page but
+  not reachable on the phone: they need ren's Projects and chat backend (`agent/api/core/projects.py`), which signs
+  in with Supabase, and the VM serves only search and Discover. ren desktop's own `tsc` has nine errors at `b112adf`
+  (`scripts/ren-tsc-known.txt`; `scripts/tsc.mjs` passes only on exactly those).
 - **Default browser** (2026-11-13): `MainActivity` takes `VIEW` `http`/`https` links (BROWSABLE, DEFAULT) and
   `APP_BROWSER`, so Android offers Ren for the browser role; a link from another app opens in a new tab in front.
   Onboarding's step 4 and Settings › What Ren can use › Default browser ask for the role

@@ -24,6 +24,7 @@ enum class SearchLevel(val wire: String, val label: String) {
  */
 object Addresses {
     const val HOME = "ren://home"
+    const val DISCOVER = "ren://discover"
     private const val SEARCH = "ren://search"
 
     private val HAS_SCHEME = Regex("^[a-z][a-z\\d+.-]*://", RegexOption.IGNORE_CASE)
@@ -80,6 +81,7 @@ object Addresses {
         val query = searchQuery(url)
         if (!query.isNullOrEmpty()) return query
         if (url == HOME) return ""
+        if (url == DISCOVER) return "Discover"
         if (!url.startsWith("https://")) return url
         val parsed = Uri.parse(url)
         val host = parsed.host?.removePrefix("www.") ?: return url
