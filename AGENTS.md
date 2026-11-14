@@ -364,7 +364,8 @@ android/   Kotlin/Compose app (minSdk 29, targetSdk 36): the browser, the agent 
   web/       the app's bundled pages, built by Vite into assets/ren/web by Gradle (webInstall, webBuild; needs Node):
              src/cato (Cato, unmodified), src/robot (ren's robot), src/ren (ren desktop's search page and agent panel
              components, unmodified), src/search (the phone's mount of the page), src/panel (the agent panel's chat)
-deploy/vm/ the workspace VM: compose.yaml, Caddyfile, computer/ (Desktop Commander over HTTP), gemini/ (the Strands
+deploy/vm/ the workspace VM: compose.yaml, Caddyfile, docker/daemon.json (/etc/docker/daemon.json: Docker's build-cache
+           garbage collection, kept to 5 GB on the 50 GB disk), computer/ (Desktop Commander over HTTP), gemini/ (the Strands
            agents), hub/ (Ren's hub), ren/ (ren desktop's backend), laptop/ (OpenCode config, workspace AGENTS.md)
 docs/      design/ (REN_DESIGN.md: Ink & Volt on the phone; ren-logotype.json)
 .github/   CI: android.yml (tests, lint, release build)
