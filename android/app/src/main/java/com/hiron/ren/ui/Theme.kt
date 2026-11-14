@@ -135,6 +135,10 @@ private fun jetBrainsMono(weight: Int) =
 val Display = FontFamily(bricolage(700, 100f, 24f), bricolage(800, 100f, 24f))
 /** The poster cut of the display face (`.ren-display`): 800 at 86% width, for heroes. */
 val Poster = FontFamily(bricolage(800, 86f, 40f))
+/** The logotype's cut of the display face (ren desktop's docs/brand.md § Logo): 800 at 92% width, opsz 96. */
+val Logo = FontFamily(bricolage(800, 92f, 96f))
+/** The logo's volt (`blurple-600`, the tile of RenMark), the same in Light and Dark. */
+val LogoVolt = Color(0xFF5543FF)
 /** Inter: every piece of interface text. */
 val Sans = FontFamily(inter(400), inter(500), inter(600))
 /** JetBrains Mono: code, numbers in data and tag labels. */
