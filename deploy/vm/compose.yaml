@@ -111,18 +111,32 @@ services:
     restart: unless-stopped
     mem_limit: 1g
 
-  # Ren's search and Discover (ren desktop's own backend code) for the phone, at https://rivet.ron-ai.dev/search/ and /discover/.
-  search:
-    build: ./search
-    image: ren-search:b112adf
+  # ren desktop's backend (its agent/api/main.py, as ren desktop runs it) for ren's pages in the app: search, Discover,
+  # Projects, Documents, Calendar, Vibe and Build, at https://rivet.ron-ai.dev/.
+  ren:
+    build: ./ren
+    image: ren-api:b112adf
     restart: unless-stopped
-    env_file: search.env
-    mem_limit: 2g
+    env_file:
+      # The Brave keys and NIM's key.
+      - search.env
+      # SUPABASE_URL and SUPABASE_ANON_KEY (ren's publishable key), for Projects signed in to a ren account.
+      - ren.env
+    environment:
+      # The app's bundled pages (androidx.webkit's WebViewAssetLoader) are the one origin that calls it.
+      CORS_ORIGINS: https://appassets.androidplatform.net
+      # Sessions, run journals and memory on the volume (ren's `local` storage).
+      PANEL_STORAGE: local
+      PANEL_STORAGE_DIR: /home/ren/data/storage
+      # Search sessions and the guest Projects database (projects.sqlite3).
+      SESSION_STORAGE_DIR: /home/ren/data
+      NIM_MODEL: minimaxai/minimax-m3.1-flash
+    mem_limit: 4g
     volumes:
-      - search_sessions:/home/ren/sessions
+      - ren_data:/home/ren/data
 
 volumes:
-  search_sessions:
+  ren_data:
   caddy_data:
   caddy_config:
   laptop_home:

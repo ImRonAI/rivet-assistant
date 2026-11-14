@@ -1,9 +1,10 @@
 /*
  * What Electron supplies to ren's pages on the desktop, supplied by the app on the phone.
  *
- * ren desktop reaches its backend on loopback. The phone reaches the same backend on the workspace VM, behind a bearer
- * token the app holds: the page asks for it through the RenHost web message listener (browser/Browser.kt, which
- * answers only the app's bundled pages) and adds it to its requests to that backend. The same listener carries the
+ * ren desktop reaches its backend on loopback. The phone reaches the same backend on the workspace VM, behind a token
+ * the app holds: the page asks for it through the RenHost web message listener (browser/Browser.kt, which answers only
+ * the app's bundled pages) and adds it to its requests to that backend as X-Ren-Token, which leaves Authorization to
+ * ren's own code (a ren account's session). The same listener carries the
  * favorite links, which the app keeps for its home page and Discover alike.
  */
 import { API_BASE_URL } from "@/lib/api-base"
@@ -68,7 +69,7 @@ export function saveFavorites(list: Favorite[]) {
   host?.postMessage(JSON.stringify({ type: "favorites", favorites: list }))
 }
 
-/** The app's bearer token for the backend, asked for once; null outside the app, where there is none to add. */
+/** The app's token for the backend, asked for once; null outside the app, where there is none to add. */
 const token = ask("token").then((answer) => (answer?.type === "token" ? answer.token : null))
 
 const send = window.fetch.bind(window)
@@ -76,7 +77,7 @@ const send = window.fetch.bind(window)
 window.fetch = async (input, init) => {
   const request = new Request(input, init)
   if (new URL(request.url).origin !== API_BASE_URL) return send(request)
-  const bearer = await token
-  if (bearer !== null) request.headers.set("Authorization", `Bearer ${bearer}`)
+  const key = await token
+  if (key !== null) request.headers.set("X-Ren-Token", key)
   return send(request)
 }

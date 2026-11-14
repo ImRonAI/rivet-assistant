@@ -37,9 +37,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -78,7 +83,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.hiron.ren.browser.Addresses
+import com.hiron.ren.browser.Destination
 import com.hiron.ren.browser.Favorite
 import com.hiron.ren.browser.Favorites
 import com.hiron.ren.browser.SearchLevel
@@ -90,7 +95,7 @@ const val HOME_DISCOVER_TAG = "home-discover"
 const val HOME_ADD_FAVORITE_TAG = "home-add-favorite"
 
 /**
- * Ren's home page, the page a new tab opens on: where to go (Search, here, and Discover), the logotype over a spray
+ * Ren's home page, the page a new tab opens on: where to go (Search, here, and ren desktop's destinations), the logotype over a spray
  * of volt, the search box with how hard the search should work, and the favorite links. What is typed goes where the
  * address bar would take it; a favorite opens in this tab.
  */
@@ -104,7 +109,7 @@ internal fun BrowserHome(runtime: RenRuntime, onGo: (String) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(16.dp))
-        Environments(onDiscover = { onGo(Addresses.DISCOVER) })
+        Environments(onGo)
         Spacer(Modifier.height(64.dp))
         // The spray halo: a soft volt bloom behind the mark, the one street detail on this page.
         Box(
@@ -133,19 +138,36 @@ internal fun BrowserHome(runtime: RenRuntime, onGo: (String) -> Unit) {
     }
 }
 
-/** Search (this page) and Discover side by side, as ren desktop's sidebar lists its destinations. */
+/** Search (this page) and ren desktop's destinations side by side, as its sidebar lists them; the row scrolls. */
 @Composable
-private fun Environments(onDiscover: () -> Unit) {
+private fun Environments(onGo: (String) -> Unit) {
     val p = LocalPalette.current
     val shape = RoundedCornerShape(Radius.card)
-    Row(Modifier.clip(shape).background(p.tile).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Destination(Icons.Outlined.Search, "Search", current = true, onClick = {})
-        Destination(Icons.Outlined.Explore, "Discover", current = false, onClick = onDiscover, modifier = Modifier.testTag(HOME_DISCOVER_TAG))
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).clip(shape).background(p.tile).padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        DestinationTab(Icons.Outlined.Search, "Search", current = true, onClick = {})
+        Destination.entries.forEach { destination ->
+            val tag = if (destination == Destination.Discover) Modifier.testTag(HOME_DISCOVER_TAG) else Modifier
+            DestinationTab(destination.icon, destination.name, current = false, onClick = { onGo(destination.address) }, modifier = tag)
+        }
     }
 }
 
+/** The icon ren desktop's sidebar draws for a destination (lucide's Compass, Columns3, FileText, Calendar, Music2, Hammer). */
+private val Destination.icon: ImageVector
+    get() = when (this) {
+        Destination.Discover -> Icons.Outlined.Explore
+        Destination.Execute -> Icons.Outlined.ViewWeek
+        Destination.Documents -> Icons.Outlined.Description
+        Destination.Calendar -> Icons.Outlined.CalendarToday
+        Destination.Vibe -> Icons.Outlined.MusicNote
+        Destination.Build -> Icons.Outlined.Build
+    }
+
 @Composable
-private fun Destination(icon: ImageVector, label: String, current: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun DestinationTab(icon: ImageVector, label: String, current: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val shape = RoundedCornerShape(Radius.control)
     Row(

@@ -12,3 +12,5 @@ dist/
 build/
 .env
 .DS_Store
+# ren desktop's Build components, copied as they are (android/web/src/ren/SOURCE.txt).
+!android/web/src/ren/components/build/

@@ -1,9 +1,0 @@
-components/agent-panel/ContextPicker.tsx(359,24): error TS2741: Property 'id' is missing in type '{ key: string; item: ContextItem; label: string | undefined; selected: boolean; active: boolean; onPick: () => void; onHover: () => void; }' but required in type '{ id: string; item: ContextItem; selected: boolean; active: boolean; label?: string | undefined; onPick: () => void; onHover: () => void; }'.
-components/agent-panel/ContextPicker.tsx(403,10): error TS2741: Property 'id' is missing in type '{ key: string; item: ContextItem; label: string; active: boolean; selected: boolean; onPick: () => void; onHover: () => void; }' but required in type '{ id: string; item: ContextItem; selected: boolean; active: boolean; label?: string | undefined; onPick: () => void; onHover: () => void; }'.
-components/build/studio/CodePane.tsx(10,1): error TS6133: 'openResult' is declared but its value is never read.
-components/build/studio/CodePane.tsx(12,1): error TS6133: 'API_BASE_URL' is declared but its value is never read.
-components/build/studio/CodePane.tsx(13,53): error TS6133: 'buildFileUrl' is declared but its value is never read.
-components/build/studio/CodePane.tsx(17,71): error TS6133: 'pillButton' is declared but its value is never read.
-components/build/studio/CodePane.tsx(63,10): error TS6133: 'loadId' is declared but its value is never read.
-components/build/studio/CodePane.tsx(64,10): error TS6133: 'focusEditor' is declared but its value is never read.
-components/build/studio/CodePane.tsx(74,9): error TS6133: 'editorWidth' is declared but its value is never read.
