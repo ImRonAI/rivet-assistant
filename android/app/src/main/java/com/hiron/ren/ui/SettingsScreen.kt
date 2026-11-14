@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -39,13 +41,17 @@ import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneInTalk
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -123,13 +129,7 @@ fun SettingsScreen(runtime: RenRuntime) {
 
         Section(3, "Call answering") { CallAnswering(runtime, refresh) }
 
-        Section(4, "What Ren can use") {
-            Permissions(context, refresh) { refresh++ }
-            InfoStrip(
-                "On Android 13 and later, first allow restricted settings for Ren: App info › ⋮ › Allow restricted " +
-                    "settings. Then turn on Notification access and the App operator.",
-            )
-        }
+        Section(4, "What Ren can use") { Permissions(context, refresh) { refresh++ } }
 
         Section(5, "Remote tools") { RemoteTools(runtime, refresh) }
 
@@ -418,14 +418,7 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
             val granted = remember(refresh) { perms.all { ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED } }
             PermissionRow(access, granted) { request.launch(perms.toTypedArray()) }
         }
-        val listener = remember(refresh) { notificationAccess(context) || RenNotificationListener.connected }
-        PermissionRow(Access(Icons.Outlined.NotificationsActive, "Notification access", "Read and reply to messages in any app"), listener) {
-            context.openNotificationAccess()
-        }
-        val operator = remember(refresh) { ScreenOperator.connected }
-        PermissionRow(Access(Icons.Outlined.TouchApp, "App operator", "Let Ren tap and type in other apps (accessibility)"), operator) {
-            context.startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
+        ScreenAccessRows(context, refresh)
         val roles = context.getSystemService(RoleManager::class.java)
         val browser = remember(refresh) { context.holdsBrowserRole() }
         PermissionRow(Access(Icons.Outlined.Language, "Default browser", "Open links from every app in Ren"), browser) {
@@ -448,6 +441,48 @@ private fun Permissions(context: Context, refresh: Int, onChanged: () -> Unit) {
             Keycap("Open Ren's app info", {
                 context.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
             })
+        }
+    }
+}
+
+/**
+ * What Ren needs to read the screen and the notifications, in the order Android lets them be turned on: restricted
+ * settings first (Android 13 and later, for an app installed outside an app store, both switches below stay greyed out
+ * until it is allowed), then Notification access and the App operator, each with whether it is connected.
+ */
+@Composable
+internal fun ScreenAccessRows(context: Context, refresh: Int) {
+    val listener = remember(refresh) { notificationAccess(context) || RenNotificationListener.connected }
+    val operator = remember(refresh) { ScreenOperator.connected }
+    if (Build.VERSION.SDK_INT >= 33 && !(listener && operator)) {
+        PermissionRow(Access(Icons.Outlined.Lock, "Restricted settings", "First, in Ren's app info: ⋮ › Allow restricted settings"), false) {
+            context.startActivity(Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+        }
+    }
+    PermissionRow(Access(Icons.Outlined.NotificationsActive, "Notification access", "Read and reply to messages in any app"), listener) {
+        context.openNotificationAccess()
+    }
+    PermissionRow(Access(Icons.Outlined.TouchApp, "App operator", "Let Ren read the screen and tap and type in other apps: Accessibility › Ren app operator"), operator) {
+        context.startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+}
+
+/** [ScreenAccessRows] as a sheet, opened from the agent panel while Ren can't see the screen. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ScreenAccessSheet(onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    var refresh by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        refresh++
+        onPauseOrDispose { }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = p.raised, contentColor = p.ink) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Eyebrow("Let Ren see your screen")
+            Text("Android keeps these off until you turn them on, top to bottom. Each one opens its own Android page.", style = Type.cardBody, color = p.ink2)
+            RenCard(padding = PaddingValues(0.dp)) { ScreenAccessRows(context, refresh) }
         }
     }
 }

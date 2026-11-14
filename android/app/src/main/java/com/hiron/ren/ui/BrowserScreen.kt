@@ -71,6 +71,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -82,12 +83,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hiron.ren.R
@@ -301,20 +305,22 @@ private fun AddressField(tab: BrowserTab, onGo: (String) -> Unit, modifier: Modi
     )
 }
 
-/** Ask Ren: the volt key that opens the agent panel, with a count when actions wait on the user. */
+/**
+ * Ask Ren, as ren desktop draws it (`ArticleAgentActions`): a pill in the logo's volt with white type, in every theme,
+ * the name set in the logotype's face. It opens the agent panel and counts the actions waiting on the user.
+ */
 @Composable
 private fun AskRen(waiting: Int, onClick: () -> Unit) {
-    val p = LocalPalette.current
-    val shape = RoundedCornerShape(Radius.control)
     Row(
-        Modifier.height(36.dp).clip(shape).background(p.accent).clickable(role = Role.Button, onClick = onClick).testTag(ASK_REN_TAG).padding(start = 8.dp, end = 12.dp),
+        Modifier.height(32.dp).clip(CircleShape).background(LogoVolt).clickable(role = Role.Button, onClick = onClick).testTag(ASK_REN_TAG)
+            .padding(start = 10.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(painterResource(R.drawable.ic_ren), contentDescription = null, tint = p.accentInk, modifier = Modifier.size(16.dp))
-        Text("Ask Ren", style = Type.labelLg.copy(fontWeight = Type.key.fontWeight), color = p.accentInk, maxLines = 1)
+        Icon(painterResource(R.drawable.ic_ren), contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text("Ask Ren", style = TextStyle(fontFamily = Logo, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, lineHeight = 16.sp), color = Color.White, maxLines = 1)
         if (waiting > 0) {
-            Box(Modifier.heightIn(min = 16.dp).clip(CircleShape).background(p.amb).padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.heightIn(min = 16.dp).clip(CircleShape).background(LocalPalette.current.amb).padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
                 Text("$waiting", style = Type.labelSm.copy(fontFeatureSettings = "tnum"), color = LightPalette.ink, maxLines = 1)
             }
         }

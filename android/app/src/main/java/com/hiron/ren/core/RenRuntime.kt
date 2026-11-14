@@ -5,8 +5,6 @@ import com.hiron.ren.browser.BrowserStore
 import com.hiron.ren.browser.Favorites
 import android.app.Application
 import android.content.Context
-import android.content.Intent
-import androidx.core.content.ContextCompat
 import com.hiron.ren.BuildConfig
 import com.hiron.ren.device.DeviceTools
 import com.hiron.ren.device.RenCallScreening
@@ -15,7 +13,6 @@ import com.hiron.ren.device.ReminderStoreFile
 import com.hiron.ren.device.Reminders
 import com.hiron.ren.mcp.HubLink
 import com.hiron.ren.mcp.PhoneMcpServer
-import com.hiron.ren.mcp.HubService
 import com.hiron.ren.service.Notifications
 import com.hiron.ren.ui.ImageLoader
 import com.hiron.ren.voice.AgentTools
@@ -47,7 +44,6 @@ class RenApp : Application() {
         super.onCreate()
         Notifications.createChannels(this)
         runtime = RenRuntime(this)
-        if (runtime.settings.hubEnabled) ContextCompat.startForegroundService(this, Intent(this, HubService::class.java))
         RenWidgets.follow(this, runtime)
     }
 }
