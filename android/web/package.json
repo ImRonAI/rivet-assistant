@@ -7,7 +7,7 @@
     "gen:robot": "node scripts/gen-ren-robot.mjs",
     "check:robot": "node scripts/gen-ren-robot.mjs --check",
     "check:ren": "node scripts/check-ren.mjs",
-    "build": "npm run check:robot && npm run check:ren && node scripts/tsc.mjs && vite build",
+    "build": "npm run check:robot && npm run check:ren && tsc -b && vite build",
     "test": "playwright test --trace off"
   },
   "dependencies": {

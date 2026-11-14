@@ -18,9 +18,10 @@ ai-elements/conversation, message, response, chain-of-thought, tool and shimmer:
 plus the files those import for their types only (found by `tsc -b`), which are checked but never bundled. ren desktop's
 `@catalyst` alias is in vite.config.ts and tsconfig.ren.json.
 
-At b112adf ren desktop's own `tsc` reports nine errors, in components/agent-panel/ContextPicker.tsx and
-components/build/studio/CodePane.tsx; they are listed in scripts/ren-tsc-known.txt, and scripts/tsc.mjs fails on any
-other error and on any of them going away. The fix belongs in ren desktop.
+Four files come from ren desktop's fixes on top of b112adf (github.com/ImRonAI/TheBrowser pull 5, commit 4823b33): the
+nine `tsc` errors ren desktop had at b112adf are fixed in components/agent-panel/ContextPicker.tsx,
+components/build/CodeEditor.tsx and components/build/studio/CodePane.tsx, so the pages type-check with none, and
+components/home/FavoriteLinks.tsx keeps Discover's Add form off the screen's edge.
 
 The phone's search page (src/search/) mounts SearchResultsPage as it is and supplies what Electron supplies on the
 desktop. Discover (src/discover/) mounts HomePage on its Discover tab: a story opens in the browser's tab, and the
