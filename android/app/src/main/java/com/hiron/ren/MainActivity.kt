@@ -23,10 +23,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -38,12 +40,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hiron.ren.core.RenRuntime
 import com.hiron.ren.core.RenState
+import com.hiron.ren.core.ToolStep
 import com.hiron.ren.core.ren
 import com.hiron.ren.ui.ActivityScreen
 import com.hiron.ren.ui.ApprovalSheet
@@ -63,6 +67,7 @@ class MainActivity : FragmentActivity() {
     private var listenRequests by mutableIntStateOf(0)
     private var focusRequests by mutableIntStateOf(0)
     private var homeRequests by mutableIntStateOf(0)
+    private var linkRequests by mutableIntStateOf(0)
 
     // Asked for from the assistant overlay, which has no activity to show the permission dialog itself.
     private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -81,7 +86,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         // A recreated activity (rotation, theme change) must not replay the request that first opened it.
         if (savedInstanceState == null) handle(intent)
-        setContent { RenTheme { CompositionLocalProvider(LocalImages provides ren.images) { RenAppUi(ren, listenRequests, focusRequests, homeRequests) } } }
+        setContent { RenTheme { CompositionLocalProvider(LocalImages provides ren.images) { RenAppUi(ren, listenRequests, focusRequests, homeRequests, linkRequests) } } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -103,8 +108,8 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Opened as the assistant (long-press Home/Power), from a widget, a launcher shortcut or the assistant
-     * overlay: talk, type, run a quick key, or allow the overlay's microphone. A quick key carries only its fixed
+     * Opened as the assistant (long-press Home/Power), from a widget, a launcher shortcut, the assistant overlay or
+     * another app's web link: talk, type, run a quick key, allow the overlay's microphone, or open the link in a tab. A quick key carries only its fixed
      * name, so another app can at most ask Ren one of those read-only questions.
      */
     private fun handle(intent: Intent?) {
@@ -116,6 +121,11 @@ class MainActivity : FragmentActivity() {
                 ren.ask(it.prompt)
                 homeRequests++
             }
+            // A web link from another app, with Ren as the browser: it opens in a new tab, in front.
+            Intent.ACTION_VIEW -> intent.data?.takeIf { it.scheme == "http" || it.scheme == "https" }?.let {
+                ren.browser.open(it.toString())
+                linkRequests++
+            }
             else -> if (intent?.getBooleanExtra(LISTEN, false) == true) listenRequests++
         }
     }
@@ -126,7 +136,7 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int) {
+private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: Int, homeRequests: Int, linkRequests: Int) {
     val state by runtime.state.collectAsStateWithLifecycle()
     var panel by rememberSaveable { mutableStateOf(false) }
     var page by rememberSaveable { mutableStateOf<Page?>(null) }
@@ -155,6 +165,13 @@ private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: In
     LaunchedEffect(focusRequests, homeRequests) {
         if (focusRequests > 0 || homeRequests > 0) panel = true
     }
+    // An opened link shows its tab: the panel and any page over the browser close.
+    LaunchedEffect(linkRequests) {
+        if (linkRequests > 0) {
+            panel = false
+            page = null
+        }
+    }
     LaunchedEffect(listenRequests) {
         if (listenRequests > 0) {
             panel = true
@@ -170,8 +187,12 @@ private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: In
     Box(Modifier.fillMaxSize()) {
         if (onboarded) {
             BrowserScreen(runtime, waiting = state.approvals.size, onAskRen = { panel = true }, onOpen = { page = it })
+            // While Ren drives the browser in this turn, the panel takes the lower half, so the page it works on stays in view.
+            val browsing = state.messages.lastOrNull()?.takeIf { !it.fromUser }?.parts.orEmpty().any { it is ToolStep && it.name.startsWith(BROWSER_TOOLS) }
+            val height by animateFloatAsState(if (browsing) BROWSING_HEIGHT else 1f, tween(Motion.BASE, easing = Motion.Standard), label = "panel height")
             AnimatedVisibility(
                 panel,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxHeight(height),
                 enter = slideInVertically(tween(Motion.BASE, easing = Motion.Standard)) { it } + fadeIn(tween(Motion.QUICK)),
                 exit = slideOutVertically(tween(Motion.BASE, easing = Motion.Standard)) { it } + fadeOut(tween(Motion.QUICK)),
             ) {
@@ -193,6 +214,8 @@ private fun RenAppUi(runtime: RenRuntime, listenRequests: Int, focusRequests: In
 }
 
 const val PANEL_TAG = "agent-panel"
+private const val BROWSER_TOOLS = "browser_"
+private const val BROWSING_HEIGHT = 0.5f
 
 /** The agent panel: Ren over the browser, full height, with its stage, the conversation and the composer. */
 @Composable

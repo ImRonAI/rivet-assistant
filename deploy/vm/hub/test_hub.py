@@ -124,7 +124,7 @@ async def test_the_agents_endpoint_serves_the_phones_browser_and_the_desktop_onl
 
 
 @pytest.mark.anyio
-async def test_a_side_that_attaches_again_replaces_its_earlier_session(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_side_that_attaches_again_replaces_its_earlier_session_until_it_goes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(hub_app, "PING_SECONDS", 0.1)
     async with running_hub() as port:
         async with attached(port, "phone", phone()):
@@ -148,6 +148,11 @@ async def test_a_side_that_attaches_again_replaces_its_earlier_session(monkeypat
                         await anyio.sleep(0.02)
                 assert await names(port) == {"hub_peers", "sms_list"}
                 tasks.cancel_scope.cancel()
+            # The newer session gone, the hub goes back to the one still open rather than to nothing.
+            with anyio.fail_after(5):
+                while hub_app.attached.get("phone") is not first:
+                    await anyio.sleep(0.02)
+            assert "sms_list" not in await names(port)
 
 
 @pytest.mark.anyio

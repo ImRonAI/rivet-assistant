@@ -38,6 +38,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+    // The APK is sideloaded, so nothing compresses it on the way: the WebRTC library and the dex files go in compressed.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+        dex { useLegacyPackaging = true }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

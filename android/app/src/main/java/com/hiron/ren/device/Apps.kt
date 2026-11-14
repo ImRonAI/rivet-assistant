@@ -21,7 +21,7 @@ class Apps(private val context: Context, private val isVisible: () -> Boolean) {
         val needle = query?.lowercase()
         val apps = launcherApps().filter { needle == null || it.label.lowercase().contains(needle) || it.pkg.contains(needle) }
         return ToolResult.ok(
-            JSONObject().put("apps", JSONArray(apps.take(200).map { JSONObject().put("name", it.label).put("package", it.pkg) })),
+            JSONObject().put("apps", JSONArray(apps.map { JSONObject().put("name", it.label).put("package", it.pkg) })),
         )
     }
 

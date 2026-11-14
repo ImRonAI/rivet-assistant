@@ -2,6 +2,7 @@ package com.hiron.ren.core
 
 import com.hiron.ren.browser.Browser
 import com.hiron.ren.browser.BrowserStore
+import com.hiron.ren.browser.Favorites
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -95,7 +96,8 @@ class RenRuntime(private val app: Context) {
     val search = BraveSearch(http, settings::braveSearchKey, settings::braveAnswersKey)
 
     /** The browser's tabs. */
-    val browser = Browser(app, BrowserStore({ settings.browserTabs }, { settings.browserTabs = it })) { settings.geminiToken }
+    val favorites = Favorites({ settings.favorites }, { settings.favorites = it })
+    val browser = Browser(app, BrowserStore({ settings.browserTabs }, { settings.browserTabs = it }), favorites) { settings.geminiToken }
 
     /** Result thumbnails and images, cached in memory only. */
     val images = ImageLoader(http)

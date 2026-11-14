@@ -46,6 +46,13 @@ class OnboardingTest {
 
     private fun shot(name: String) = shot(compose, compose.activity, name)
 
+    /** Past the browser step: Skip where Android offers the browser role, Continue where it doesn't. */
+    private fun pastBrowser() {
+        compose.onNodeWithText("Default browser.").assertIsDisplayed()
+        val skip = compose.onAllNodesWithText("Skip for now").fetchSemanticsNodes().isNotEmpty()
+        tap(if (skip) "Skip for now" else "Continue")
+    }
+
     @Test
     fun walksThroughEveryStep() {
         show()
@@ -66,14 +73,18 @@ class OnboardingTest {
         shot("00c-onboarding-assistant")
 
         tap("Skip for now")
+        compose.onNodeWithText("Default browser.").assertIsDisplayed()
+        shot("00d-onboarding-browser")
+
+        pastBrowser()
         compose.onNodeWithText("System access.").assertIsDisplayed()
         compose.onNodeWithText("Complete setup").assertIsDisplayed()
-        shot("00d-onboarding-access")
+        shot("00e-onboarding-access")
 
         // Back walks one step back, not out of the app.
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
-        compose.onNodeWithText("Default assistant.").assertIsDisplayed()
+        compose.onNodeWithText("Default browser.").assertIsDisplayed()
         assertEquals(0, finished)
     }
 
@@ -92,8 +103,11 @@ class OnboardingTest {
         compose.onNodeWithText("Default assistant.").assertIsDisplayed()
         shot("00cn-onboarding-assistant-narrow")
         tap("Skip for now")
+        compose.onNodeWithText("Default browser.").assertIsDisplayed()
+        shot("00dn-onboarding-browser-narrow")
+        pastBrowser()
         compose.onNodeWithText("System access.").assertIsDisplayed()
-        shot("00dn-onboarding-access-narrow")
+        shot("00en-onboarding-access-narrow")
     }
 
     @Test
@@ -124,7 +138,7 @@ class OnboardingTest {
         tap("Save & continue")
         tap("Open assistant settings")
         assertEquals(AndroidSettings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS, shadowOf(compose.activity).nextStartedActivity.action)
-        compose.onNodeWithText("System access.").assertIsDisplayed()
+        compose.onNodeWithText("Default browser.").assertIsDisplayed()
     }
 
     @Test
@@ -136,6 +150,7 @@ class OnboardingTest {
         tap("Set up")
         tap("Save & continue")
         tap("Skip for now")
+        pastBrowser()
         compose.onNode(isToggleable() and hasText("Messages & actions")).assertIsOn()
         compose.onNode(isToggleable() and hasText("Screen context")).assertIsOn()
         tap("Complete setup")
@@ -149,6 +164,7 @@ class OnboardingTest {
         tap("Set up")
         tap("Save & continue")
         tap("Skip for now")
+        pastBrowser()
         compose.onNode(isToggleable() and hasText("Screen context")).performClick()
         compose.waitForIdle()
         compose.onNode(isToggleable() and hasText("Screen context")).assertIsOff()

@@ -75,6 +75,9 @@ hub: FastMCP[None] = FastMCP(
 
 #: The live session of each attached side.
 attached: dict[Peer, Client[Attached]] = {}
+#: Every open session of each side, oldest first. Two devices can attach as the same side (the owner's phone and a test
+#: emulator); the newest is used, and when it goes the hub falls back to the one still open instead of to nothing.
+open_sessions: dict[Peer, list[Client[Attached]]] = {peer: [] for peer in PEERS}
 
 #: What a side that isn't attached serves: nothing.
 ABSENT: dict[Peer, FastMCP[None]] = {peer: FastMCP(f"ren-{peer} (not attached)") for peer in PEERS}
@@ -134,13 +137,18 @@ async def attach(websocket: WebSocket) -> None:
         client = Client(Attached(read, write))
         async with client:
             # A side that attaches again (the app restarted) replaces its earlier session.
+            open_sessions[peer].append(client)
             attached[peer] = client
             try:
                 while await client.ping():
                     await anyio.sleep(PING_SECONDS)
             finally:
+                open_sessions[peer].remove(client)
                 if attached.get(peer) is client:
-                    del attached[peer]
+                    if open_sessions[peer]:
+                        attached[peer] = open_sessions[peer][-1]
+                    else:
+                        del attached[peer]
 
 
 mcp_app = hub.http_app(path="/mcp")

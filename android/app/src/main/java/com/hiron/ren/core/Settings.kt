@@ -41,6 +41,11 @@ class Settings(context: Context) {
         get() = prefs.getString("browser_tabs", null)
         set(value) = prefs.edit().putString("browser_tabs", value).apply()
 
+    /** The favorite links, as [com.hiron.ren.browser.Favorites] writes them. */
+    var favorites: String?
+        get() = prefs.getString("favorites", null)
+        set(value) = prefs.edit().putString("favorites", value).apply()
+
     /** How hard a search from the address bar works. */
     var searchLevel: SearchLevel
         get() = SearchLevel.of(prefs.getString("search_level", null)) ?: SearchLevel.Default

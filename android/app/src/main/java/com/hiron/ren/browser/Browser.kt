@@ -76,10 +76,11 @@ data class DownloadRequest(val url: String, val name: String, val host: String, 
  * do to them. All of it runs on the main thread, as WebView requires.
  *
  * A tab opened from home keeps home under its first page, so Back from that page returns to it. Ren's own pages
- * (`ren://search`) are the app's bundled pages, loaded from its assets; only they can talk to the app, and what they
- * can ask for is [token], the workspace VM's bearer token their requests to Ren's search carry.
+ * (`ren://search`, `ren://discover`) are the app's bundled pages, loaded from its assets; only they can talk to the
+ * app, and what they can ask for is [token], the workspace VM's bearer token their requests to Ren's backend carry,
+ * and the [favorites], which Discover shows and changes as the home page does.
  */
-class Browser(private val context: Context, private val store: BrowserStore, private val token: () -> String) {
+class Browser(private val context: Context, private val store: BrowserStore, private val favorites: Favorites, private val token: () -> String) {
     private val _state = MutableStateFlow(BrowserState())
     val state: StateFlow<BrowserState> = _state.asStateFlow()
 
@@ -288,9 +289,17 @@ class Browser(private val context: Context, private val store: BrowserStore, pri
         webViewClient = Pages(id)
         webChromeClient = Chrome(id)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            // Ren's search page asks for the workspace token its requests carry; no other origin reaches this listener.
+            // Ren's pages ask for the workspace token their requests carry and for the favorites, and give back the
+            // favorites Discover changed; no other origin reaches this listener.
             WebViewCompat.addWebMessageListener(this, "RenHost", setOf("https://$ORIGIN_HOST")) { _, message, _, isMainFrame, reply ->
-                if (isMainFrame && message.data == "token") reply.postMessage(token())
+                val asked = message.data?.let { runCatching { JSONObject(it) }.getOrNull() }
+                if (isMainFrame && asked != null) {
+                    when (asked.optString("type")) {
+                        "token" -> reply.postMessage(JSONObject().put("type", "token").put("token", token()).toString())
+                        "favorites" -> asked.optJSONArray("favorites")?.let { favorites.replace(Favorites.parse(it)) }
+                            ?: reply.postMessage(JSONObject().put("type", "favorites").put("favorites", JSONArray(Favorites.json(favorites.list.value))).toString())
+                    }
+                }
             }
         }
         setDownloadListener { url, userAgent, disposition, mime, bytes ->
@@ -401,12 +410,18 @@ class Browser(private val context: Context, private val store: BrowserStore, pri
         private const val PAGES = "https://$ORIGIN_HOST/assets/ren/web"
 
         /** The bundled page behind one of Ren's `ren://` addresses; null for a web address. */
-        internal fun internal(url: String): String? =
-            if (Addresses.searchQuery(url) != null) "$PAGES/search/index.html?${Uri.parse(url).encodedQuery.orEmpty()}" else null
+        internal fun internal(url: String): String? = when {
+            Addresses.searchQuery(url) != null -> "$PAGES/search/index.html?${Uri.parse(url).encodedQuery.orEmpty()}"
+            url == Addresses.DISCOVER -> "$PAGES/discover/index.html"
+            else -> null
+        }
 
         /** The address the bar shows for a loaded URL: Ren's pages by their `ren://` names. */
-        internal fun display(url: String): String =
-            if (url.startsWith("$PAGES/search/index.html")) "ren://search?${Uri.parse(url).encodedQuery.orEmpty()}" else url
+        internal fun display(url: String): String = when {
+            url.startsWith("$PAGES/search/index.html") -> "ren://search?${Uri.parse(url).encodedQuery.orEmpty()}"
+            url.startsWith("$PAGES/discover/index.html") -> Addresses.DISCOVER
+            else -> url
+        }
     }
 }
 

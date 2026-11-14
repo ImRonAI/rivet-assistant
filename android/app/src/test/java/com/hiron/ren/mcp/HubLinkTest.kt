@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.hiron.ren.browser.Browser
 import com.hiron.ren.browser.BrowserStore
+import com.hiron.ren.browser.Favorites
 import com.hiron.ren.browser.SearchLevel
 import com.hiron.ren.device.ToolResult
 import com.hiron.ren.voice.AgentTools
@@ -81,9 +82,10 @@ class HubLinkTest {
     private fun attach(withToken: String = token) {
         val context = ApplicationProvider.getApplicationContext<Context>()
         var saved: String? = null
+        var favorites: String? = null
         val server = PhoneMcpServer(
             "test",
-            Browser(context, BrowserStore({ saved }, { saved = it })) { withToken },
+            Browser(context, BrowserStore({ saved }, { saved = it }), Favorites({ favorites }, { favorites = it })) { withToken },
             level = { SearchLevel.Default },
             approve = { input ->
                 calls += "request_approval" to input.toString()

@@ -3,6 +3,7 @@ package com.hiron.ren.ui
 import android.Manifest
 import android.app.role.RoleManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -103,6 +104,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.hiron.ren.R
 import com.hiron.ren.core.RenRuntime
+import com.hiron.ren.device.RenNotificationListener
 import com.hiron.ren.device.ScreenOperator
 
 /**
@@ -142,15 +144,15 @@ val ACCESS_GROUPS = listOf(
     ),
 )
 
-private const val STEPS = 4
+private const val STEPS = 5
 
 /** The steps' display headline: the greeting size, shrinking (never below [HEADLINE_MIN]) to stay on one line. */
 private val Headline = Type.greeting
 private val HEADLINE_MIN = 28.sp
 
 /**
- * Ren's first run, in four steps around one robot stage: meet Ren, its voice and text models, the default
- * assistant, and what it may use. Each step's display headline sits over the stage and its list and keys under it; the
+ * Ren's first run, in five steps around one robot stage: meet Ren, its voice and text models, the default
+ * assistant, the default browser, and what it may use. Each step's display headline sits over the stage and its list and keys under it; the
  * stage is hoisted so the robot page is never rebuilt between steps.
  */
 @Composable
@@ -185,6 +187,7 @@ fun Onboarding(runtime: RenRuntime, onFinish: () -> Unit) {
                 1 -> MeetStep(next = { step = 2 }, onFinish = onFinish)
                 2 -> ModelsStep(runtime, next = { step = 3 })
                 3 -> AssistantStep(next = { step = 4 })
+                4 -> BrowserStep(next = { step = 5 })
                 else -> AccessStep(onFinish)
             }
         }
@@ -210,6 +213,7 @@ private fun stepCopy(step: Int): Pair<AnnotatedString, String> = when (step) {
     } to "An AI assistant you can see, with an honest heart."
     2 -> headline("Talk or type") to "Ren's ElevenLabs agents answer you, out loud or in text."
     3 -> headline("Default assistant") to "Set Ren as your phone's assistant so it's always one press away."
+    4 -> headline("Default browser") to "Open links from every app in Ren, with Ren one tap away on any page."
     else -> headline("System access") to "Strictly opt-in. Revocable anytime in Android Settings."
 }
 
@@ -421,6 +425,32 @@ private fun AssistantStep(next: () -> Unit) {
     }
 }
 
+/** Android's own browser-role prompt; the step moves on whatever the answer. */
+@Composable
+private fun BrowserStep(next: () -> Unit) {
+    val context = LocalContext.current
+    val held = remember { context.holdsBrowserRole() }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { next() }
+    StepScaffold(
+        keys = {
+            val prompt = if (held) null else context.browserRoleIntent()
+            if (prompt == null) {
+                StepKey("Continue", next)
+            } else {
+                StepKey("Make Ren my browser") { ask.launch(prompt) }
+                FooterLink("Skip for now", next)
+            }
+        },
+    ) {
+        val strip = Modifier.enter(0)
+        if (held) {
+            InfoStrip("Ren is already your browser.", strip, icon = Icons.Outlined.CheckCircle, tone = Tone.Green)
+        } else {
+            InfoStrip("Tapping below asks Android to make Ren your default browser. Links from other apps then open in Ren.", strip)
+        }
+    }
+}
+
 @Composable
 private fun AccessStep(onFinish: () -> Unit) {
     val context = LocalContext.current
@@ -506,6 +536,31 @@ private fun Context.has(group: AccessGroup): Boolean =
 internal fun Context.holdsAssistantRole(): Boolean {
     val roles = getSystemService(RoleManager::class.java) ?: return false
     return roles.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && roles.isRoleHeld(RoleManager.ROLE_ASSISTANT)
+}
+
+internal fun Context.holdsBrowserRole(): Boolean {
+    val roles = getSystemService(RoleManager::class.java) ?: return false
+    return roles.isRoleAvailable(RoleManager.ROLE_BROWSER) && roles.isRoleHeld(RoleManager.ROLE_BROWSER)
+}
+
+/** Android's own prompt to make Ren the default browser, or null where the phone has no browser role. */
+internal fun Context.browserRoleIntent(): Intent? {
+    val roles = getSystemService(RoleManager::class.java) ?: return null
+    return if (roles.isRoleAvailable(RoleManager.ROLE_BROWSER)) roles.createRequestRoleIntent(RoleManager.ROLE_BROWSER) else null
+}
+
+/** Ren's own switch in Notification access (Android 11 and later), else the Notification access list. */
+internal fun Context.openNotificationAccess() {
+    if (Build.VERSION.SDK_INT >= 30) {
+        val detail = Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+            .putExtra(AndroidSettings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(this, RenNotificationListener::class.java).flattenToString())
+        try {
+            startActivity(detail)
+            return
+        } catch (_: ActivityNotFoundException) {
+        }
+    }
+    openFirst(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
 }
 
 /** Opens the first of [actions] this phone has a screen for. */

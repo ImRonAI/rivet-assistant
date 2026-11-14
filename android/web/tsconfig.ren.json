@@ -10,7 +10,9 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.ren.tsbuildinfo",
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    /* ren desktop names ES2022, and its program also loads ESNext through type-fest's types (src/components/ai-elements
+       uses ES2023's toReversed); the phone's program doesn't load type-fest, so ESNext is named here. */
+    "lib": ["ES2022", "ESNext", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "types": ["node"],
     "skipLibCheck": true,
@@ -26,7 +28,7 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": { "@/*": ["./src/ren/*"] }
+    "paths": { "@/*": ["./src/ren/*"], "@catalyst/*": ["./src/ren/components/catalyst/*"] }
   },
-  "include": ["src/ren"]
+  "include": ["src/ren", "src/data/*.json"]
 }

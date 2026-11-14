@@ -8,8 +8,8 @@ OpenAI-compatible API (`providers.py`);
 Voice is always Gemini Live; its helpers run on the chosen text model.
 
 Text: the phone opens `/gemini/text` with the conversation's id, the provider, text model and effort, `user_id` and the
-eight `perm_*` as query parameters, then sends each message as text. Every message runs the harness's `stream_async`; the phone gets the text as
-it streams (`{"data": …}`), each finished message (`{"message": …}`), and how the turn ended (`{"stop_reason": …,
+eight `perm_*` as query parameters, then sends each message as text. Every message runs the harness's `stream_async`; the phone gets the
+model's reasoning as it streams (`{"reasoning": …}`, Gemini's thoughts included), the text as it streams (`{"data": …}`), each finished message (`{"message": …}`), and how the turn ended (`{"stop_reason": …,
 "interrupts": […]}`). The reply after a `handoff_to_user` goes back as its `interruptResponse`.
 
 Voice: the phone opens `/gemini/voice` with the same parameters and streams its microphone as 16 kHz PCM frames; it
@@ -155,10 +155,13 @@ class Phone(OutputStream):
 
 
 def text_model(provider: ProviderName, model: str, effort: str) -> Model:
-    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral, Telnyx and xAI as `providers.py` does."""
+    """The text model the phone chose: Gemini as Strands builds it, NIM, Mistral, Telnyx and xAI as `providers.py` does.
+
+    A level the model doesn't list (one the phone kept from an earlier model) runs on Auto.
+    """
     if provider == "gemini":
         return GeminiModel(model_id=model)
-    return build_model(provider, model, None if effort == "auto" else effort)
+    return build_model(provider, model, effort if effort in reasoning_efforts(provider, model) else None)
 
 
 def harness_effort(effort: str) -> Effort:
@@ -232,6 +235,12 @@ async def text(
         session={"id": conversation, "dir": f"{HOME}/sessions"},
         memory={"dir": f"{HOME}/memory"},
     )
+    if isinstance(agent.model, GeminiModel):
+        # Gemini thinks either way but sends its thoughts only when asked to, which the harness doesn't ask.
+        config = agent.model.get_config()
+        params = config.get("params", {})
+        thinking = params.get("thinking_config", {})
+        agent.model.update_config(model_id=config["model_id"], params={**params, "thinking_config": {**thinking, "include_thoughts": True}})
     if provider == "xai":
         # As ren adds it: strands_xai appends the whole encrypted protobuf history to every assistant turn and
         # only ever reads the newest copy; keep one so history/snapshots/token estimates stay linear.
@@ -248,7 +257,9 @@ async def text(
                 )
                 try:
                     async for event in agent.stream_async(prompt):
-                        if "data" in event:
+                        if "reasoningText" in event:
+                            await websocket.send_json({"reasoning": event["reasoningText"]})
+                        elif "data" in event:
                             await websocket.send_json({"data": event["data"]})
                         elif "message" in event:
                             await websocket.send_json({"message": to_jsonable_python(event["message"], bytes_mode="base64")})

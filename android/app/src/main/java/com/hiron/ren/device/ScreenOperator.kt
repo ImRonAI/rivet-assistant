@@ -302,7 +302,7 @@ class ScreenOperator : AccessibilityService() {
             if (stopped) ToolResult.error("The user pressed Stop. Don't operate apps again until they ask you to.") else null
 
         private fun notConnected() = ToolResult.error(
-            "Ren can't operate apps yet. Ask the user to open Ren › Settings › Permissions › App operator and turn on " +
+            "Ren can't operate apps yet. Ask the user to open Ren › Settings › What Ren can use › App operator and turn on " +
                 "Ren's accessibility service.",
         )
     }

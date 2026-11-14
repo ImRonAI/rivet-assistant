@@ -3,6 +3,7 @@ package com.hiron.ren.voice
 import com.hiron.ren.core.Activity
 import com.hiron.ren.core.ChatMessage
 import com.hiron.ren.core.ChatPart
+import com.hiron.ren.core.Reasoning
 import com.hiron.ren.core.RenState
 import com.hiron.ren.core.RenStore
 import com.hiron.ren.core.Reply
@@ -14,7 +15,7 @@ import java.util.UUID
 
 /**
  * Builds the chat from the Strands events the Gemini service sends (`deploy/vm/gemini/app.py`), in the order they
- * arrive. Text: the reply as it streams (`data`), each finished message (`message`, a Strands `Message`: the reply's
+ * arrive. Text: the model's reasoning as it streams (`reasoning`), the reply as it streams (`data`), each finished message (`message`, a Strands `Message`: the reply's
  * text and tool uses, then the tool results), and how the turn ended (`stop_reason`, with the `handoff_to_user`
  * messages as `interrupts`). Voice: Strands' bidi events, whose transcripts are what the user and Ren said, plus
  * the same tool result `message`. It makes the same chat changes as [ChatEvents].
@@ -27,11 +28,12 @@ object GeminiEvents {
     private val PHONE = AgentTools.NAMES.toSet() + AgentTools.REQUEST_APPROVAL + SearchTools.NAMES.keys
 
     /** [state] after [event]; events the chat doesn't show leave it unchanged. */
-    fun apply(state: RenState, event: JSONObject): RenState = when {
+    fun apply(state: RenState, event: JSONObject, now: Long = System.currentTimeMillis()): RenState = when {
         event.has("type") -> bidi(state, event)
-        event.has("data") -> streamed(state, event.optString("data"))
-        event.has("message") -> message(state, event.optJSONObject("message") ?: return state)
-        event.has("stop_reason") -> ended(state, event.optJSONArray("interrupts"))
+        event.has("reasoning") -> thought(state, event.optString("reasoning"), now)
+        event.has("data") -> streamed(settled(state, now), event.optString("data"))
+        event.has("message") -> message(settled(state, now), event.optJSONObject("message") ?: return state)
+        event.has("stop_reason") -> ended(settled(state, now), event.optJSONArray("interrupts"))
         event.has("error") -> state.copy(lastError = TURN_FAILED + event.optString("error"), activity = Activity.Failed)
         else -> state
     }
@@ -43,6 +45,23 @@ object GeminiEvents {
             "bidi_transcript_block" -> if (user) heard(state, event.optString("transcript")) else spoken(state, event.optString("transcript"))
             "bidi_tool_use_blocks" -> event.optJSONArray("tool_uses")?.let { uses -> (0 until uses.length()).mapNotNull(uses::optJSONObject).fold(state, ::used) } ?: state
             else -> state
+        }
+    }
+
+    /** Reasoning adds to the turn's one reasoning block; a segment after a reply or a tool call starts a paragraph. */
+    private fun thought(state: RenState, text: String, now: Long): RenState = if (text.isEmpty()) state else RenStore.turn(state.copy(activity = Activity.Thinking)) { m ->
+        val r = m.reasoning ?: Reasoning("")
+        val gap = if (r.streaming || r.text.isBlank() || r.text.endsWith("\n\n")) "" else "\n\n"
+        m.copy(reasoning = r.copy(text = r.text + gap + text, openedAt = r.openedAt ?: now))
+    }
+
+    /** The reasoning segment that was streaming ends when the model writes its reply, calls a tool or stops. */
+    private fun settled(state: RenState, now: Long): RenState {
+        val last = state.messages.lastOrNull() ?: return state
+        val opened = last.reasoning?.openedAt ?: return state
+        return RenStore.turn(state) { m ->
+            val r = m.reasoning ?: return@turn m
+            m.copy(reasoning = r.copy(spentMs = r.spentMs + (now - opened).coerceAtLeast(0), openedAt = null))
         }
     }
 

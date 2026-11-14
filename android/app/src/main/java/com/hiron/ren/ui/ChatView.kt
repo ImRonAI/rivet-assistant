@@ -64,8 +64,9 @@ object ChatPage {
 
     private val BUSY = setOf(Activity.Thinking, Activity.Searching, Activity.Working, Activity.Texting, Activity.Emailing, Activity.Waiting)
 
-    /** The user's message is in and nothing of Ren's reply has arrived yet. */
-    fun working(state: RenState): Boolean = state.messages.lastOrNull()?.fromUser == true && state.activity in BUSY
+    /** The user's message is in and nothing of Ren's reply has arrived yet, or only its reasoning, still streaming. */
+    fun working(state: RenState): Boolean = state.activity in BUSY &&
+        state.messages.lastOrNull()?.let { it.fromUser || (it.parts.isEmpty() && it.reasoning?.streaming == true) } == true
 
     /** `window.renChat.show`'s argument. */
     fun payload(state: RenState): String = JSONObject()

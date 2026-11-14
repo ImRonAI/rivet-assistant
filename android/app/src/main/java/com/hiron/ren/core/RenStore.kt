@@ -26,7 +26,7 @@ data class ChatMessage(
     val system: Boolean = false,
     /** Ren's turn in the order it happened: what it said ([Reply]) and the tools it used ([ToolStep]). */
     val parts: List<ChatPart> = emptyList(),
-    /** The turn's reasoning summary, every segment in one; only the text agent sends it. */
+    /** The turn's reasoning, every segment in one: the ElevenLabs text agent's summary or a Strands text model's thinking. */
     val reasoning: Reasoning? = null,
 )
 

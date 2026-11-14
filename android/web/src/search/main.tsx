@@ -2,7 +2,7 @@
  * ren://search on the phone: ren desktop's search results page, mounted as it is. The tab's address carries the query
  * and the level, as it does on the desktop.
  */
-import "./host"
+import "../host"
 import "../page.css"
 import "@/index.css"
 import { StrictMode } from "react"

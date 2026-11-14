@@ -33,8 +33,35 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   opens on it. Tabs are real WebViews, made on a tab's first navigation; an address bar that loads addresses and
   searches phrases (ported from ren desktop's `navigable-url.ts` and `UrlBar.tsx`); back, forward, reload, stop; a tabs
   sheet; downloads, uploads and fullscreen video; new windows become tabs; page permissions are refused. Home is
-  `ren://home` with the logotype, a search box and the five search levels. **Ask Ren** slides the agent panel
-  (`HomeScreen.kt` under a header) over the browser.
+  `ren://home`: a Search/Discover switcher, the logotype, a search box ("Ask me anything. I dare you.", sized to fit
+  the width), the five search levels and the favorite links. **Ask Ren** slides the agent panel (`HomeScreen.kt` under
+  a header) over the browser.
+- **Favorites** (2026-11-13, `browser/Favorites.kt`): one list, kept by the app (`Settings.favorites`), starting with
+  ren desktop's `DEFAULT_FAVORITES` and added and normalized as its `favoritesStore.ts` does. Home shows them under
+  the search box (long-press removes, Add opens a dialog); Discover shows the same list through ren's own store, which
+  the page reads from and writes back to the app over `RenHost` (`{"type":"favorites"}`). An addition on either side
+  shows on the other.
+- **Discover** (2026-11-13, `ren://discover`): ren desktop's `HomePage.tsx` on its Discover tab, with `OnboardingPage`
+  for Personalize, unmodified in `src/ren` (and its bundled stories in `src/data`); `src/discover/` mounts it with a
+  Search/Discover switcher. Its feed is the VM's `/discover/*` (ren's own router), with the workspace token. A story
+  opens in the same tab (the mount follows ren's tab store, where Electron would open `ron://read`), and Back returns
+  to Discover. ren desktop's other environments (Execute, Documents, Calendar, Vibe, Build) are in the same page but
+  not reachable on the phone: they need ren's Projects and chat backend (`agent/api/core/projects.py`), which signs
+  in with Supabase, and the VM serves only search and Discover. ren desktop's own `tsc` has nine errors at `b112adf`
+  (`scripts/ren-tsc-known.txt`; `scripts/tsc.mjs` passes only on exactly those).
+- **Default browser** (2026-11-13): `MainActivity` takes `VIEW` `http`/`https` links (BROWSABLE, DEFAULT) and
+  `APP_BROWSER`, so Android offers Ren for the browser role; a link from another app opens in a new tab in front.
+  Onboarding's step 4 and Settings › What Ren can use › Default browser ask for the role
+  (`RoleManager.createRequestRoleIntent(ROLE_BROWSER)`); on the emulator Ren took the role and a link opened in it.
+- **Ren drives the browser in view**: while a turn uses a `browser_*` tool, the agent panel takes the lower half of
+  the screen, so the page Ren works on stays visible above it, as ren desktop's panel sits beside its browser.
+- **Reasoning**: the VM's `/gemini/text` sends Strands' `reasoningText` stream events as `{"reasoning": …}`, and
+  asks Gemini for its thoughts (`include_thoughts`), which the harness doesn't; the panel adds them to the turn's
+  chain of thought (`GeminiEvents`), as it does the ElevenLabs text agent's `agent_reasoning_response_part`.
+- **One phone on the hub**: two devices can attach as `phone` (the owner's phone and a test emulator). The newest
+  is used, and when it goes the hub falls back to the one still open. On 2026-11-13 the emulator's link made the
+  agents read the emulator's 21 apps instead of the owner's phone; keep Remote tools off on test devices while the
+  owner is using his phone.
 - **Search**: `ren://search?q=…&level=…` is ren desktop's own results page. `android/web/src/ren/` holds
   `src/pages/SearchResultsPage.tsx` and everything it imports from ren desktop at `b112adf`, unmodified (hashes in
   `SHA256SUMS`, `npm run check:ren`), with ren desktop's Tailwind config and `index.css`. `src/search/` mounts it:
@@ -69,6 +96,12 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   and Ren's agent as `ask_ren`, `ren_threads`, `ren_thread` and `ren_cancel`. With `REN_HUB_URL` and `REN_HUB_TOKEN`
   set the backend attaches to the hub, and the panel agent's tool catalog gains the server `phone` (the hub's tools,
   prefixed `phone_`).
+- **The agents on the laptop's desktop** (2026-11-13): the laptop's X server (Xvfb `:1`, run with `-ac` and MIT-SHM)
+  is shared with the `computer` and `gemini` containers through the `x11` volume at `/tmp/.X11-unix`, the laptop's IPC
+  namespace and its process namespace, with `DISPLAY=:1`. The computer image has the desktop tools the workspace's
+  `AGENTS.md` names (`xdotool`, `xfce4-screenshooter`, `x11-utils`, Chromium and linuxserver's `wrapped-chromium`), so
+  the Strands agents' shell and Desktop Commander drive the owner's desktop: from the `gemini` container,
+  `wrapped-chromium https://example.com` opened on the laptop's screen and `xfce4-screenshooter` captured it.
 - **The Strands agents on the hub** (`deploy/vm/gemini/app.py`): the server `ren-hub` (`http://hub:8300/mcp`,
   unprefixed) replaces the phone's Tailscale address, so Gemini, NIM and Mistral reach the phone and ren desktop
   whichever is attached.
@@ -239,7 +272,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
   - NIM and Mistral are ren's (`ImRonAI/TheBrowser` at `0c973a6`; `b112adf`'s reordering of tool results is not copied,
     because Strands 1.64.0's formatter already puts them first), copied into `providers.py`, `mistral_model.py`,
     `media_capabilities.py` and `context_windows.py`: NIM is Strands' `OpenAIModel` on `integrate.api.nvidia.com/v1`
-    (ren's default `z-ai/glm-5.3-flash`; the VM's `NIM_MODEL` is `minimaxai/minimax-m3.1-flash`), Mistral is ren's `RonMistralModel` (default `mistral-large-latest`), each passed to
+    (ren's default `z-ai/glm-5.3-flash`; the VM's `NIM_MODEL` is `minimaxai/minimax-m3.1-flash`), Mistral is ren's `RonMistralModel` (owner, 2026-11-13: Strands' own `MistralModel` groups a streamed tool call's pieces by id, and only the first piece carries one, so every Mistral tool ran with `{}`; ren's subclass groups them by index; default `mistral-large-latest`), each passed to
     `create_harness(model=<Model>)`, with ren's per-model reasoning tables. `providers.py`'s header lists what the copies
     change for mypy and for Strands 1.64.0. Keys: `NVIDIA_NIM_API_KEY` and `MISTRAL_API_KEY` in `gemini.env`.
   - Telnyx (2026-11-13) is built the way ren builds NIM, since ren has no Telnyx provider: Telnyx Inference serves its
@@ -285,7 +318,7 @@ answers their client tools on the phone. Nothing sits in between: no backend, no
 
 | Area | State |
 |---|---|
-| App | **0.5.0** (versionCode 13, `com.hiron.emrys`). Everything is on `main` (PRs #5 to #8). The release build ships arm64-v8a only (19.2 MB; the WebRTC library in the SDK is about 12 MB per ABI). |
+| App | **0.5.0** (versionCode 13, `com.hiron.emrys`). Everything is on `main` (PRs #5 to #8). The release build ships arm64-v8a only, with the WebRTC library (about 12 MB per ABI) and the dex files compressed (`useLegacyPackaging`), since a sideloaded APK isn't compressed on the way: 15.3 MB on 2026-11-13, under the project folder's 20 MB limit. |
 | Verified | 109 unit and screen tests pass, Kotlin compiles with warnings as errors, lint has 0 errors. On the Android 15 emulator (2026-10-31) a typed question opened a session straight to the text agent (`conv_2801m68vtz0te2natfxrg5cyc6gp`): `user_id` and all eight `perm_*` arrived, the agent called `device_status`, the phone returned real data and the agent answered with the battery level. The arm64-only release APK, with the keep rule and the tag filter, installed on the emulator and opened a voice session with the voice agent ("Listening"; the agent's greeting appeared without its audio tags). |
 | Not verified | Talking to the voice agent through a real microphone (the emulator runs without audio, so only the connection and the agent's greeting were checked); `request_approval` from a live agent (the handler is registered, but on 2026-10-31 the tool was not attached to either agent — attaching it is the owner's call); anything on a physical phone. |
 | Attachments | Images and PDFs are not built: SDK 0.13.0 has no way to send files (`OutgoingEvent` has no multimodal message). The WebSocket protocol's `multimodal_message` with `file_input` exists only in the JS SDK and raw API. |
@@ -336,7 +369,7 @@ cd android && python3 tools/build_icon.py --check
 JAVA_HOME=<JDK 21> ./gradlew testDebugUnitTest lintDebug assembleRelease   # builds android/web first (npm ci, npm run build)
 cd android/web && npm run build && npm test   # the pages alone: hash checks, tsc, Vite, then Playwright on the robot
 uvx --python 3.12 --with fastmcp==4.1.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/computer/mypy.ini   # the VM's Python
-uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.3.4 --with mistralai==2.10.1 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
+uvx --python 3.12 --with "strands-agents[bidi,bidi-google,gemini,mistral,openai,web-fetch]==1.64.0" --with strands-harness==0.4.0 --with mistralai==2.10.1 --with openai==2.50.0 --with fastapi==0.162.0 --with uvicorn==0.54.0 --with elevenlabs==2.75.0 mypy --config-file deploy/vm/gemini/mypy.ini
 uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 mypy --config-file deploy/vm/hub/mypy.ini
 cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 --with uvicorn==0.54.0 --with websockets==15.0.1 --with pytest --with anyio pytest test_hub.py
 ```
@@ -394,7 +427,7 @@ cd deploy/vm/hub && uvx --python 3.12 --with fastmcp==3.4.0 --with mcp==1.26.0 -
 5. **A stated result no tool returned:** on a phone call the voice agent called a phone tool that can't run there and
    then reported a result anyway (see Calls Emrys places). The prompt is the owner's.
 6. **Owner's backlog** (from the approved plan): the ElevenLabs UI chat rebuild (threads, Orb, music players,
-   simplified Settings), CloudFS, triggers and webhooks, and sharing the computer container's X display.
+   simplified Settings), CloudFS, and triggers and webhooks.
 7. **The Strands agents** (plan https://claude.ai/artifact/Ri9R22DZiVUhd2x2oW6CeL): they run on the Gemini API (AI
    Studio, owner, 2026-11-06), NIM, Mistral, Telnyx and xAI. The `gemini` and `search` images are built on the VM
    (`emrys-gemini:1.64.0`, `ren-search:b112adf`) and start once their env files are in `/opt/emrys`: `gemini.env`
