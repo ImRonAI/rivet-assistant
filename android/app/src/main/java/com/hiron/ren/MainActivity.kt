@@ -49,6 +49,7 @@ import com.hiron.ren.core.RenRuntime
 import com.hiron.ren.core.RenState
 import com.hiron.ren.core.ToolStep
 import com.hiron.ren.core.ren
+import com.hiron.ren.mcp.HubService
 import com.hiron.ren.ui.ActivityScreen
 import com.hiron.ren.ui.ApprovalSheet
 import com.hiron.ren.ui.HomeScreen
@@ -98,6 +99,7 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         ren.visible = true
         ren.browser.visible(true)
+        HubService.start(this)
     }
 
     override fun onStop() {

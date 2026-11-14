@@ -58,10 +58,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.hiron.ren.device.ScreenOperator
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -149,6 +152,15 @@ fun HomeScreen(
     val chatting = state.messages.isNotEmpty()
     val voice = runtime.settings.voiceModel
     var stage by rememberSaveable { mutableStateOf(false) }
+    // Whether Ren's App operator is connected, read again whenever Ren comes back from Android's settings.
+    var resumed by remember { mutableIntStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        resumed++
+        onPauseOrDispose { }
+    }
+    val blind = remember(resumed) { !ScreenOperator.connected }
+    var setup by rememberSaveable { mutableStateOf(false) }
+    if (setup) ScreenAccessSheet(onDismiss = { setup = false })
     Column(Modifier.fillMaxSize().background(p.bg)) {
         if (chatting) {
             ChatBar(stage, onStage = { stage = !stage }, onNewChat = if (state.voice) null else runtime::newChat)
@@ -172,7 +184,11 @@ fun HomeScreen(
             }
         }
         AnimatedVisibility(state.approvals.isNotEmpty()) {
-            ApprovalBanner(state.approvals.size, onReviewApprovals)
+            val count = state.approvals.size
+            Banner(if (count == 1) "Ren is waiting on 1 action" else "Ren is waiting on $count actions", "Review", onReviewApprovals)
+        }
+        AnimatedVisibility(blind && state.approvals.isEmpty()) {
+            Banner("Ren can't see your screen", "Set up") { setup = true }
         }
         if (chatting) {
             ChatView(state, Modifier.weight(1f).fillMaxWidth())
@@ -303,9 +319,9 @@ private fun Greeting(state: RenState, voice: Boolean) {
     }
 }
 
-/** Approvals waiting: a live signal dot and a sentence on a card, and the Review pill. */
+/** Something that needs the user: a live signal dot and a sentence on a card, and the [key] pill. */
 @Composable
-private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
+private fun Banner(text: String, key: String, onClick: () -> Unit) {
     val p = LocalPalette.current
     val shape = RoundedCornerShape(20.dp)
     Row(
@@ -317,12 +333,9 @@ private fun ApprovalBanner(count: Int, onClick: () -> Unit) {
     ) {
         SignalDot(p.amb, live = true)
         Spacer(Modifier.width(14.dp))
-        Text(
-            if (count == 1) "Ren is waiting on 1 action" else "Ren is waiting on $count actions",
-            style = Type.title, color = p.ink, modifier = Modifier.weight(1f),
-        )
+        Text(text, style = Type.title, color = p.ink, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(14.dp))
-        Keycap("Review", onClick, tone = KeyTone.Accent)
+        Keycap(key, onClick, tone = KeyTone.Accent)
     }
 }
 

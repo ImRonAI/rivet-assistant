@@ -67,6 +67,17 @@ What the overhaul added, on the branch `claude/project-thread-tnj6xo` (PR #14) a
   is used, and when it goes the hub falls back to the one still open. On 2026-11-13 the emulator's link made the
   agents read the emulator's 21 apps instead of the owner's phone; keep Remote tools off on test devices while the
   owner is using his phone.
+- **Screen access** (2026-11-14): Android starts Ren's process in the background to bind the App operator
+  (`ScreenOperator`) and the notification listener, after a reboot, an update or a reclaim. Starting `HubService` from
+  `RenApp.onCreate` there threw `ForegroundServiceStartNotAllowedException` (Android 12+, "Background started FGS:
+  Disallowed … uidState: CEM"), so the process died before the operator connected: Android listed it as enabled, not
+  bound, and `device_status` said `app_operator: false` on the owner's phone (2026-11-13 21:20 and 11-14 08:00 UTC).
+  `HubService` starts from `MainActivity.onStart` and from `HubService.Starter` (BOOT_COMPLETED, MY_PACKAGE_REPLACED);
+  on the emulator an update and a reboot left the operator bound and the hub link running. Force-stopping Ren turns its
+  accessibility service off in Android (seen on the emulator: `am force-stop` cleared `enabled_accessibility_services`).
+  The agent panel shows "Ren can't see your screen" while the operator isn't connected, and its Set up opens
+  `ScreenAccessSheet` (restricted settings on Android 13+, Notification access, App operator). The agents' hints point
+  to Settings › What Ren can use; Settings › Permissions holds the agents' approval switches, not Android's.
 - **Search**: `ren://search?q=…&level=…` is ren desktop's own results page. `android/web/src/ren/` holds
   `src/pages/SearchResultsPage.tsx` and everything it imports from ren desktop at `b112adf`, unmodified (hashes in
   `SHA256SUMS`, `npm run check:ren`), with ren desktop's Tailwind config and `index.css`. `src/search/` mounts it:

@@ -70,7 +70,7 @@ class DeviceTools(
         if (missing.isNotEmpty()) {
             return ToolResult.error(
                 "Ren doesn't have permission for this on the phone (${missing.joinToString { it.substringAfterLast('.') }}). " +
-                    "Ask the user to open Ren › Settings › Permissions and allow it.",
+                    "Ask the user to open Ren › Settings › What Ren can use and allow it.",
             )
         }
         return try {
